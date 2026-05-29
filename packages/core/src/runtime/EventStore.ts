@@ -40,6 +40,8 @@ export class EventStore {
       // Remove old version if exists
       if (existing) {
         this.eventsById.delete(existing.id);
+        this.eventsByKind.get(existing.kind)?.delete(existing.id);
+        this.eventsByAuthor.get(existing.pubkey)?.delete(existing.id);
       }
       this.eventsByDTag.set(addr, event);
     }
@@ -161,6 +163,16 @@ export class EventStore {
       const idx = this.subscriptions.indexOf(sub);
       if (idx !== -1) this.subscriptions.splice(idx, 1);
     };
+  }
+
+  /** Wipe all cached events, indexes, deletions, and reactive subscriptions. */
+  clear(): void {
+    this.eventsById.clear();
+    this.eventsByKind.clear();
+    this.eventsByAuthor.clear();
+    this.eventsByDTag.clear();
+    this.deletedIds.clear();
+    this.subscriptions = [];
   }
 
   get size(): number {

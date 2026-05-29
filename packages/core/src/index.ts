@@ -8,6 +8,7 @@ export {
   NIP07Signer,
   DeferredSigner,
   createDriveSignerAdapter,
+  SignerUnavailableError,
 } from "./signer";
 export type {
   NostrSigner,
@@ -22,7 +23,13 @@ export { NostrRuntime, nostrRuntime, EventStore, SubscriptionManager } from "./r
 export type { SubscriptionHandle } from "./runtime";
 
 // Relay
-export { RelayManager, relayManager, OutboxService, outboxService } from "./relay";
+export {
+  RelayManager,
+  relayManager,
+  OutboxService,
+  outboxService,
+  MODULE_DEFAULT_RELAYS,
+} from "./relay";
 export type { RelayConfig } from "./relay";
 
 // Blossom

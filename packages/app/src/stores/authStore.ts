@@ -31,18 +31,12 @@ export const useAuthStore = create<AuthStore>((set) => {
     pubkey: null,
     method: null,
     isLoggedIn: false,
-    isLoading: true,
+    isLoading: false, // App renders instantly; identity restores in background.
 
     async init() {
-      set({ isLoading: true });
-      await signerManager.restoreFromStorage();
-      const state = signerManager.getState();
-      set({
-        pubkey: state.pubkey,
-        method: state.method,
-        isLoggedIn: state.pubkey !== null,
-        isLoading: false,
-      });
+      // Don't set isLoading: true — proposal requires instant render.
+      await signerManager.restore();
+      // onChange has already pushed state — no manual getState() needed.
     },
 
     async loginWithNsec(nsec: string) {

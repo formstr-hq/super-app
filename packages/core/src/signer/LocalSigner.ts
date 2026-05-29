@@ -47,4 +47,9 @@ export class LocalSigner implements NostrSigner {
   getSecretKey(): Uint8Array {
     return this.secretKey;
   }
+
+  /** Zero the in-memory secret key. Subsequent operations will fail. */
+  dispose(): void {
+    this.secretKey.fill(0);
+  }
 }

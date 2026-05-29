@@ -4,4 +4,5 @@ export { NIP07Signer } from "./NIP07Signer";
 export { DeferredSigner } from "./DeferredSigner";
 export { SignerManager, signerManager } from "./SignerManager";
 export { createDriveSignerAdapter } from "./DriveSignerAdapter";
+export { SignerUnavailableError } from "./errors";
 export type { DriveSignerAdapter } from "./DriveSignerAdapter";
