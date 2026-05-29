@@ -2,6 +2,7 @@ import {
   signerManager,
   nostrRuntime,
   relayManager,
+  nip44Encrypt,
   nip44SelfEncrypt,
   nip44SelfDecrypt,
   LocalSigner,
@@ -236,7 +237,8 @@ export async function fetchMyForms(): Promise<FormSummary[]> {
   if (listEvent?.content) {
     try {
       const decrypted = await nip44SelfDecrypt(signer, listEvent.content);
-      entries = JSON.parse(decrypted);
+      const parsed = JSON.parse(decrypted);
+      entries = Array.isArray(parsed) ? parsed : [];
     } catch {
       // Fallback to author-query below
     }
@@ -270,7 +272,7 @@ export async function fetchMyForms(): Promise<FormSummary[]> {
       const name = evt?.tags.find((t: string[]) => t[0] === "name")?.[1] ?? "Untitled";
       const hasEncTag = evt?.tags.some((t: string[]) => t[0] === "encryption");
       const hasFieldTags = evt?.tags.some((t: string[]) => t[0] === "field") ?? false;
-      const isEncrypted = hasEncTag ?? ((evt?.content?.length ?? 0) > 0 && !hasFieldTags);
+      const isEncrypted = hasEncTag || ((evt?.content?.length ?? 0) > 0 && !hasFieldTags);
 
       const keys = keySegment ? decodeFormKeys(keySegment) : undefined;
       const summary: FormSummary = {
@@ -313,7 +315,8 @@ async function appendToMyFormsList(
   if (existing?.content) {
     try {
       const decrypted = await nip44SelfDecrypt(signer, existing.content);
-      entries = JSON.parse(decrypted);
+      const parsed = JSON.parse(decrypted);
+      entries = Array.isArray(parsed) ? parsed : [];
     } catch {
       entries = [];
     }
