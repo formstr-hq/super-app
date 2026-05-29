@@ -12,7 +12,7 @@ import type { EventTemplate, Event, Filter } from "nostr-tools";
 import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
 import { bytesToHex } from "nostr-tools/utils";
 
-import { encodeFormKeys, decodeFormKeys } from "./keys";
+import { encodeFormKeys, decodeFormKeys, makeViewKeySigner, makeSigningKeySigner } from "./keys";
 import {
   FORM_KINDS,
   type FormField,
@@ -109,25 +109,26 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
 
 // ── Fetch Form ──────────────────────────────────────────
 
-export async function fetchForm(pubkey: string, formId: string): Promise<FormTemplate | null> {
+export async function fetchForm(
+  pubkey: string,
+  formId: string,
+  viewKey?: string,
+): Promise<FormTemplate | null> {
   const relays = relayManager.getRelaysForModule("forms");
-  const filter: Filter = {
+  const event = await nostrRuntime.fetchOne(relays, {
     kinds: [FORM_KINDS.template],
     authors: [pubkey],
     "#d": [formId],
     limit: 1,
-  };
-
-  const event = await nostrRuntime.fetchOne(relays, filter);
+  } as Filter);
   if (!event) return null;
 
   const template = parseFormEvent(event);
 
-  // Attempt to decrypt encrypted forms if we are the author
-  if (template.isEncrypted && event.content) {
+  if (template.isEncrypted && event.content && viewKey) {
     try {
-      const signer = await signerManager.getSigner();
-      const decrypted = await nip44SelfDecrypt(signer, event.content);
+      const viewSigner = makeViewKeySigner(viewKey);
+      const decrypted = await viewSigner.nip44Decrypt(pubkey, event.content);
       const fieldTags = JSON.parse(decrypted) as string[][];
       template.fields = fieldTags
         .filter((t) => t[0] === "field")
@@ -139,7 +140,7 @@ export async function fetchForm(pubkey: string, formId: string): Promise<FormTem
           required: t[5] ? JSON.parse(t[5])?.required : undefined,
         }));
     } catch {
-      // Decryption failed — user may not be the author, fields stay empty
+      // viewKey wrong or content malformed — leave fields empty
     }
   }
 
@@ -188,36 +189,73 @@ export function subscribeToResponses(
   formId: string,
   onResponse: (response: FormResponseEvent) => void,
   onEose?: () => void,
+  signingKey?: string,
 ): SubscriptionHandle {
   const relays = relayManager.getRelaysForModule("forms");
-  const filter: Filter = {
-    kinds: [FORM_KINDS.response],
-    "#a": [`${FORM_KINDS.template}:${formPubkey}:${formId}`],
-  };
+  const formSigner = signingKey ? makeSigningKeySigner(signingKey) : undefined;
 
-  return nostrRuntime.subscribe(relays, [filter], {
-    onEvent: (event: Event) => {
-      const parsed = parseResponseEvent(event);
-      if (parsed) onResponse(parsed);
+  return nostrRuntime.subscribe(
+    relays,
+    [{ kinds: [FORM_KINDS.response], "#a": [`${FORM_KINDS.template}:${formPubkey}:${formId}`] }],
+    {
+      onEvent: async (event: Event) => {
+        const parsed = parseResponseEvent(event);
+        if (!parsed) return;
+        if (parsed.wasEncrypted && formSigner && event.content) {
+          try {
+            const decrypted = await formSigner.nip44Decrypt(event.pubkey, event.content);
+            const tags = JSON.parse(decrypted) as string[][];
+            onResponse({
+              ...parsed,
+              responses: tags
+                .filter((t) => t[0] === "response")
+                .map((t) => ({ fieldId: t[1], answer: t[2], metadata: t[3] })),
+            });
+            return;
+          } catch {
+            /* fall through — send as-is with empty responses */
+          }
+        }
+        onResponse(parsed);
+      },
+      onEose,
     },
-    onEose,
-  });
+  );
 }
 
 export async function fetchResponses(
   formPubkey: string,
   formId: string,
+  signingKey?: string,
 ): Promise<FormResponseEvent[]> {
   const relays = relayManager.getRelaysForModule("forms");
-  const filter: Filter = {
+  const events = await nostrRuntime.querySync(relays, {
     kinds: [FORM_KINDS.response],
     "#a": [`${FORM_KINDS.template}:${formPubkey}:${formId}`],
-  };
+  } as Filter);
 
-  const events = await nostrRuntime.querySync(relays, filter);
-  return events
-    .map(parseResponseEvent)
-    .filter((r: FormResponseEvent | null): r is FormResponseEvent => r !== null);
+  const parsed = events.map(parseResponseEvent).filter((r): r is FormResponseEvent => r !== null);
+
+  if (!signingKey) return parsed;
+
+  const formSigner = makeSigningKeySigner(signingKey);
+  return Promise.all(
+    parsed.map(async (r) => {
+      if (!r.wasEncrypted || !r.event.content) return r;
+      try {
+        const decrypted = await formSigner.nip44Decrypt(r.event.pubkey, r.event.content);
+        const tags = JSON.parse(decrypted) as string[][];
+        return {
+          ...r,
+          responses: tags
+            .filter((t) => t[0] === "response")
+            .map((t) => ({ fieldId: t[1], answer: t[2], metadata: t[3] })),
+        };
+      } catch {
+        return r; // wasEncrypted=true, responses=[] — can't decrypt
+      }
+    }),
+  );
 }
 
 // ── My Forms List (kind 14083) ──────────────────────────
@@ -411,6 +449,7 @@ function parseFormEvent(event: Event): FormTemplate {
   const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
   const nameTag = event.tags.find((t) => t[0] === "name")?.[1] ?? "Untitled";
   const settingsTag = event.tags.find((t) => t[0] === "settings")?.[1];
+  const encTag = event.tags.find((t) => t[0] === "encryption")?.[1];
 
   const fields: FormField[] = event.tags
     .filter((t) => t[0] === "field")
@@ -422,6 +461,10 @@ function parseFormEvent(event: Event): FormTemplate {
       required: t[5] ? JSON.parse(t[5])?.required : undefined,
     }));
 
+  // Explicit tag takes precedence; fall back to heuristic for old events
+  const isEncrypted =
+    encTag != null ? encTag === "view-key" : event.content.length > 0 && fields.length === 0;
+
   return {
     id: dTag,
     name: nameTag,
@@ -429,7 +472,7 @@ function parseFormEvent(event: Event): FormTemplate {
     settings: settingsTag ? JSON.parse(settingsTag) : {},
     pubkey: event.pubkey,
     createdAt: event.created_at,
-    isEncrypted: event.content.length > 0 && fields.length === 0,
+    isEncrypted,
     event,
   };
 }
@@ -439,11 +482,14 @@ function parseResponseEvent(event: Event): FormResponseEvent | null {
     .filter((t) => t[0] === "response")
     .map((t) => ({ fieldId: t[1], answer: t[2], metadata: t[3] }));
 
+  const isEncrypted = event.content.length > 0 && responses.length === 0;
+
   return {
     id: event.id,
     pubkey: event.pubkey,
     responses,
     createdAt: event.created_at,
+    wasEncrypted: isEncrypted,
     event,
   };
 }
