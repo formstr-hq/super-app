@@ -2,14 +2,16 @@ import {
   signerManager,
   nostrRuntime,
   relayManager,
-  nip44Encrypt,
   nip44SelfEncrypt,
   nip44SelfDecrypt,
+  LocalSigner,
 } from "@formstr/core";
 import type { SubscriptionHandle } from "@formstr/core";
 import type { EventTemplate, Event, Filter } from "nostr-tools";
 import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
+import { bytesToHex } from "nostr-tools/utils";
 
+import { encodeFormKeys, decodeFormKeys } from "./keys";
 import {
   FORM_KINDS,
   type FormField,
@@ -38,84 +40,70 @@ export interface CreateFormResult {
 
 export async function createForm(params: CreateFormParams): Promise<CreateFormResult> {
   const signer = await signerManager.getSigner();
-  const pubkey = await signer.getPublicKey();
+  const userPubkey = await signer.getPublicKey();
   const formId = crypto.randomUUID().slice(0, 8);
+  const relays = relayManager.getRelaysForModule("forms");
 
-  // Build NIP-101 tag array
-  const tags: string[][] = [
+  const baseTags: string[][] = [
     ["d", formId],
     ["name", params.name],
   ];
-
-  if (params.settings) {
-    tags.push(["settings", JSON.stringify(params.settings)]);
-  }
-
+  if (params.settings) baseTags.push(["settings", JSON.stringify(params.settings)]);
   for (const field of params.fields) {
     const options = field.options
       ? JSON.stringify(field.options.map((o) => [o.id, o.label]))
       : "[]";
     const config = JSON.stringify({ required: field.required, placeholder: field.placeholder });
-    tags.push(["field", field.id, field.type, field.label, options, config]);
+    baseTags.push(["field", field.id, field.type, field.label, options, config]);
   }
-
-  if (params.settings?.publicForm) {
-    tags.push(["t", "public"]);
-  }
-
-  let content = "";
-  let signingKeyHex: string | undefined;
-  let viewKeyHex: string | undefined;
 
   if (params.encrypt) {
-    // Generate signing keypair for encrypted form
     const signingKey = generateSecretKey();
-    signingKeyHex = bytesToHex(signingKey);
+    const signingKeyHex = bytesToHex(signingKey);
     const signingPubkey = getPublicKey(signingKey);
 
-    // Generate view key for content encryption
     const viewKey = generateSecretKey();
-    viewKeyHex = bytesToHex(viewKey);
+    const viewKeyHex = bytesToHex(viewKey);
     const viewPubkey = getPublicKey(viewKey);
 
-    // Encrypt form spec with view key (NIP-44 to view pubkey)
-    content = await nip44Encrypt(
-      signer,
-      viewPubkey,
-      JSON.stringify(tags.filter((t) => t[0] === "field")),
-    );
+    // Encrypt fields: formSigner→viewPubkey so the view key can decrypt
+    const formSigner = new LocalSigner(signingKey);
+    const fieldTags = baseTags.filter((t) => t[0] === "field");
+    const content = await formSigner.nip44Encrypt(viewPubkey, JSON.stringify(fieldTags));
 
-    // Publish with signing key
     const event: EventTemplate = {
       kind: FORM_KINDS.template,
       created_at: Math.floor(Date.now() / 1000),
       tags: [
         ["d", formId],
         ["name", params.name],
+        ["encryption", "view-key"],
       ],
       content,
     };
-
     const signed = finalizeEvent(event, signingKey);
-    const relays = relayManager.getRelaysForModule("forms");
     await nostrRuntime.publish(relays, signed);
+
+    await appendToMyFormsList(signingPubkey, formId, relays[0] ?? "", signingKeyHex, viewKeyHex);
 
     return { formId, pubkey: signingPubkey, signingKey: signingKeyHex, viewKey: viewKeyHex };
   }
 
-  // Unencrypted form
+  // Public form — user signs with their own key
+  if (params.settings?.publicForm) baseTags.push(["t", "public"]);
   const event: EventTemplate = {
     kind: FORM_KINDS.template,
     created_at: Math.floor(Date.now() / 1000),
-    tags,
-    content,
+    tags: baseTags,
+    content: "",
   };
-
   const signed = await signer.signEvent(event);
-  const relays = relayManager.getRelaysForModule("forms");
   await nostrRuntime.publish(relays, signed);
 
-  return { formId, pubkey };
+  // Public form: store pubkey:formId in list (no key segment needed)
+  await appendToMyFormsList(userPubkey, formId, relays[0] ?? "", undefined, undefined);
+
+  return { formId, pubkey: userPubkey };
 }
 
 // ── Fetch Form ──────────────────────────────────────────
@@ -233,107 +221,141 @@ export async function fetchResponses(
 
 // ── My Forms List (kind 14083) ──────────────────────────
 
-/** Reference stored in the encrypted tag array */
-interface FormRef {
-  pubkey: string;
-  formId: string;
-  relay?: string;
-  secretKey?: string;
-  viewKey?: string;
+export async function fetchMyForms(): Promise<FormSummary[]> {
+  const signer = await signerManager.getSigner();
+  const userPubkey = await signer.getPublicKey();
+  const relays = relayManager.getRelaysForModule("forms");
+
+  const listEvent = await nostrRuntime.fetchOne(relays, {
+    kinds: [FORM_KINDS.myFormsList],
+    authors: [userPubkey],
+    limit: 1,
+  } as Filter);
+
+  let entries: string[][] = [];
+  if (listEvent?.content) {
+    try {
+      const decrypted = await nip44SelfDecrypt(signer, listEvent.content);
+      entries = JSON.parse(decrypted);
+    } catch {
+      // Fallback to author-query below
+    }
+  }
+
+  if (entries.length === 0) return fetchMyFormsByAuthor(userPubkey, relays);
+
+  // Batch-fetch form events to get names + metadata
+  const dTags = entries.map((e) => e[1]?.split(":")?.[1]).filter(Boolean);
+  const pubkeys = entries.map((e) => e[1]?.split(":")?.[0]).filter(Boolean);
+  const formEvents = await nostrRuntime.querySync(relays, {
+    kinds: [FORM_KINDS.template],
+    "#d": dTags,
+    authors: pubkeys,
+  } as Filter);
+
+  const eventMap = new Map<string, Event>();
+  for (const evt of formEvents) {
+    const d = evt.tags.find((t: string[]) => t[0] === "d")?.[1];
+    if (d) eventMap.set(`${evt.pubkey}:${d}`, evt);
+  }
+
+  return entries
+    .filter((e) => e[0] === "f" && e[1])
+    .map((entry) => {
+      const [, coordKey, , keySegment] = entry;
+      const [formPubkey, formId] = coordKey.split(":");
+      if (!formPubkey || !formId) return null;
+
+      const evt = eventMap.get(coordKey);
+      const name = evt?.tags.find((t: string[]) => t[0] === "name")?.[1] ?? "Untitled";
+      const hasEncTag = evt?.tags.some((t: string[]) => t[0] === "encryption");
+      const hasFieldTags = evt?.tags.some((t: string[]) => t[0] === "field") ?? false;
+      const isEncrypted = hasEncTag ?? ((evt?.content?.length ?? 0) > 0 && !hasFieldTags);
+
+      const keys = keySegment ? decodeFormKeys(keySegment) : undefined;
+      const summary: FormSummary = {
+        id: formId,
+        name,
+        pubkey: formPubkey,
+        createdAt: evt?.created_at ?? 0,
+        isEncrypted,
+        signingKey: keys?.signingKey,
+        viewKey: keys?.viewKey,
+      };
+      return summary;
+    })
+    .filter((s): s is FormSummary => s !== null);
 }
 
 /**
- * Fetch the user's form list.
- * The encrypted content is a JSON array of tag tuples:
- *   ["f", "pubkey:formId", relay, "secret:viewKey"]
+ * Internal: read-modify-write the user's kind-14083 list, appending one new entry.
+ * Format per entry: ["f", "formPubkey:formId", relay, "signingKeyHex:viewKeyHex"]
+ * Public forms omit the key segment.
  */
-export async function fetchMyForms(): Promise<FormSummary[]> {
+async function appendToMyFormsList(
+  formPubkey: string,
+  formId: string,
+  relay: string,
+  signingKeyHex?: string,
+  viewKeyHex?: string,
+): Promise<void> {
   const signer = await signerManager.getSigner();
-  const pubkey = await signer.getPublicKey();
+  const userPubkey = await signer.getPublicKey();
   const relays = relayManager.getRelaysForModule("forms");
 
-  const filter: Filter = {
+  const existing = await nostrRuntime.fetchOne(relays, {
     kinds: [FORM_KINDS.myFormsList],
-    authors: [pubkey],
+    authors: [userPubkey],
     limit: 1,
+  } as Filter);
+
+  let entries: string[][] = [];
+  if (existing?.content) {
+    try {
+      const decrypted = await nip44SelfDecrypt(signer, existing.content);
+      entries = JSON.parse(decrypted);
+    } catch {
+      entries = [];
+    }
+  }
+
+  const coordKey = `${formPubkey}:${formId}`;
+  if (!entries.some((e) => e[1] === coordKey)) {
+    const entry: string[] = ["f", coordKey, relay];
+    if (signingKeyHex) entry.push(encodeFormKeys(signingKeyHex, viewKeyHex));
+    entries.push(entry);
+  }
+
+  const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(entries));
+  const listEvent: EventTemplate = {
+    kind: FORM_KINDS.myFormsList,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [],
+    content: encrypted,
   };
-
-  const event = await nostrRuntime.fetchOne(relays, filter);
-  if (!event || !event.content) {
-    // Fallback: query kind 30168 by author to discover forms
-    return fetchMyFormsByAuthor(pubkey, relays);
-  }
-
-  try {
-    const decrypted = await nip44SelfDecrypt(signer, event.content);
-    const raw = JSON.parse(decrypted) as unknown;
-
-    // Already structured objects (from our own saveToMyForms)
-    if (
-      Array.isArray(raw) &&
-      raw.length > 0 &&
-      typeof raw[0] === "object" &&
-      !Array.isArray(raw[0])
-    ) {
-      return raw as FormSummary[];
-    }
-
-    // Tag-tuple format from the original formstr app
-    const tags = raw as string[][];
-    const refs: FormRef[] = tags
-      .filter((t) => t[0] === "f" && t[1])
-      .map((t) => {
-        const [refPubkey, formId] = t[1].split(":");
-        const keys = t[3]?.split(":") ?? [];
-        return { pubkey: refPubkey, formId, relay: t[2], secretKey: keys[0], viewKey: keys[1] };
-      });
-
-    if (refs.length === 0) return [];
-
-    // Batch-fetch form events to get names + metadata
-    const formFilter: Filter = {
-      kinds: [FORM_KINDS.template],
-      authors: refs.map((r) => r.pubkey),
-    };
-    const formEvents = await nostrRuntime.querySync(relays, formFilter);
-
-    const eventMap = new Map<string, Event>();
-    for (const e of formEvents) {
-      const dTag = e.tags.find((t: string[]) => t[0] === "d")?.[1];
-      if (dTag) eventMap.set(`${e.pubkey}:${dTag}`, e);
-    }
-
-    return refs.map((ref) => {
-      const evt = eventMap.get(`${ref.pubkey}:${ref.formId}`);
-      const name = evt?.tags.find((t: string[]) => t[0] === "name")?.[1] ?? "Untitled";
-      return {
-        id: ref.formId,
-        name,
-        pubkey: ref.pubkey,
-        createdAt: evt?.created_at ?? 0,
-        isEncrypted:
-          (evt?.content?.length ?? 0) > 0 &&
-          (evt?.tags.filter((t: string[]) => t[0] === "field").length ?? 0) === 0,
-      };
-    });
-  } catch {
-    return [];
-  }
+  const signed = await signer.signEvent(listEvent);
+  await nostrRuntime.publish(relays, signed);
 }
 
-export async function saveToMyForms(forms: FormSummary[]): Promise<void> {
+/** Public API: overwrite the user's kind-14083 list with the given summaries. */
+export async function saveToMyForms(summaries: FormSummary[]): Promise<void> {
   const signer = await signerManager.getSigner();
-  const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(forms));
+  const relays = relayManager.getRelaysForModule("forms");
 
+  const entries: string[][] = summaries.map((s) => {
+    const entry: string[] = ["f", `${s.pubkey}:${s.id}`, ""];
+    if (s.signingKey) entry.push(encodeFormKeys(s.signingKey, s.viewKey));
+    return entry;
+  });
+
+  const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(entries));
   const event: EventTemplate = {
     kind: FORM_KINDS.myFormsList,
     created_at: Math.floor(Date.now() / 1000),
     tags: [],
     content: encrypted,
   };
-
   const signed = await signer.signEvent(event);
-  const relays = relayManager.getRelaysForModule("forms");
   await nostrRuntime.publish(relays, signed);
 }
 
@@ -431,10 +453,4 @@ function safeParseOptions(json: string): FormTemplate["fields"][0]["options"] {
   } catch {
     return undefined;
   }
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
