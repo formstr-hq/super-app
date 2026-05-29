@@ -1,7 +1,14 @@
 import { nip19 } from "nostr-tools";
 import { describe, expect, it } from "vitest";
 
-import { createRef, createTagRef, MODULE_ROUTES, parseRef, parseTagRef } from "./linking";
+import {
+  createRef,
+  createTagRef,
+  MODULE_ROUTES,
+  parseRef,
+  parseTagRef,
+  resolveRef,
+} from "./linking";
 
 describe("linking parseRef", () => {
   it("parses a forms naddr", () => {
@@ -44,6 +51,27 @@ describe("linking parseRef", () => {
     const ref = parseRef(naddr);
     expect(ref?.module).toBe("forms");
     expect(ref?.params.identifier).toBe("feedback");
+  });
+
+  it("parses an nprofile", () => {
+    const nprofile = nip19.nprofileEncode({
+      pubkey: "aa".repeat(32),
+      relays: ["wss://relay.damus.io"],
+    });
+    const ref = parseRef(nprofile);
+    expect(ref?.module).toBe("forms");
+    expect(ref?.params.pubkey).toBe("aa".repeat(32));
+    expect(ref?.route).toMatch(/^\/profile\//);
+  });
+
+  it("resolveRef returns a route string for valid input", () => {
+    const naddr = createRef("forms", 30168, "11".repeat(32), "abc", []);
+    const route = resolveRef(naddr);
+    expect(route).toMatch(/^\/forms\//);
+  });
+
+  it("resolveRef returns null for invalid input", () => {
+    expect(resolveRef("garbage")).toBeNull();
   });
 });
 
