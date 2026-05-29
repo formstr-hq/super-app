@@ -1,5 +1,7 @@
 import { relayManager } from "@formstr/core";
-import { useState, useEffect } from "react";
+import { Box, Drawer } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
 
@@ -10,12 +12,7 @@ import { hexToBytes } from "../services/forms/keys";
 import { useAuthStore, useSettingsStore, useFormsKeyStore } from "../stores";
 
 import { Header } from "./Header";
-import { Sidebar } from "./Sidebar";
-
-import { Sheet, SheetContent } from "@/components/ui/sheet";
-
-export const SIDEBAR_WIDTH = 240;
-export const SIDEBAR_COLLAPSED_WIDTH = 56;
+import { Sidebar, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from "./Sidebar";
 
 export function AppShell() {
   const { sidebarOpen, sidebarCollapsed, aiPanelOpen, setSidebarOpen } = useSettingsStore();
@@ -25,28 +22,24 @@ export function AppShell() {
   const [isTablet, setIsTablet] = useState(false);
   useCommandPaletteHotkey(paletteOpen, setPaletteOpen);
 
+  const theme = useTheme();
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const pubkey = useAuthStore((s) => s.pubkey);
   const startFormsKeyStore = useFormsKeyStore((s) => s.start);
   const stopFormsKeyStore = useFormsKeyStore((s) => s.stop);
   const rememberViewKey = useFormsKeyStore((s) => s.remember);
 
-  // Boot the NIP-59 view-key inbox once per authenticated session so
-  // collaborators of view-key encrypted forms hydrate their secrets.
   useEffect(() => {
     if (!isLoggedIn) return;
     startFormsKeyStore();
     return () => stopFormsKeyStore();
   }, [isLoggedIn, startFormsKeyStore, stopFormsKeyStore]);
 
-  // Fire-and-forget NIP-65 relay fetch once the user is authenticated.
   useEffect(() => {
     if (!pubkey) return;
     void relayManager.fetchUserRelays(pubkey);
   }, [pubkey]);
 
-  // Upstream nostr-forms shares view keys via the URL hash `#view-key=<coord>:<hex>`.
-  // Stash any matching fragment into the key store, then strip it so reloads stay clean.
   useEffect(() => {
     const hash = window.location.hash;
     if (!hash.startsWith("#view-key=")) return;
@@ -62,58 +55,84 @@ export function AppShell() {
       rememberViewKey(coord, hexToBytes(hex));
       history.replaceState(null, "", window.location.pathname + window.location.search);
     } catch {
-      /* malformed hash, ignore */
+      /* malformed hash */
     }
   }, [rememberViewKey]);
 
   useEffect(() => {
-    const checkBreakpoints = () => {
+    const check = () => {
       setIsMobile(window.innerWidth < 640);
       setIsTablet(window.innerWidth >= 640 && window.innerWidth < 1024);
     };
-    checkBreakpoints();
-    window.addEventListener("resize", checkBreakpoints);
-    return () => window.removeEventListener("resize", checkBreakpoints);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
   const showDesktopSidebar = !isMobile && !isTablet;
-  const showOverlaySidebar = (isMobile || isTablet) && sidebarOpen;
-
   const sidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
 
+  const sidebarContent = (
+    <Sidebar
+      collapsed={showDesktopSidebar ? sidebarCollapsed : false}
+      onLoginClick={() => {
+        setLoginOpen(true);
+        setSidebarOpen(false);
+      }}
+    />
+  );
+
   return (
-    <div className="flex min-h-screen bg-background">
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
       {/* Desktop persistent sidebar */}
       {showDesktopSidebar && (
-        <aside
-          className="fixed inset-y-0 left-0 z-40 shrink-0 border-r border-border bg-muted transition-all duration-200"
-          style={{ width: sidebarWidth }}
+        <Box
+          component="aside"
+          sx={{
+            width: sidebarWidth,
+            flexShrink: 0,
+            position: "fixed",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            zIndex: theme.zIndex.drawer,
+            bgcolor: "background.paper",
+            borderRight: `1px solid ${theme.palette.divider}`,
+            transition: "width 200ms ease",
+            overflow: "hidden",
+          }}
         >
-          <Sidebar collapsed={sidebarCollapsed} onLoginClick={() => setLoginOpen(true)} />
-        </aside>
+          {sidebarContent}
+        </Box>
       )}
 
-      {/* Tablet/Mobile overlay sidebar via Sheet */}
+      {/* Mobile / tablet overlay sidebar */}
       {(isMobile || isTablet) && (
-        <Sheet open={showOverlaySidebar} onOpenChange={setSidebarOpen}>
-          <SheetContent side="left" className="w-60 p-0 border-r border-border bg-muted">
-            <Sidebar
-              collapsed={false}
-              onLoginClick={() => {
-                setLoginOpen(true);
-                setSidebarOpen(false);
-              }}
-            />
-          </SheetContent>
-        </Sheet>
+        <Drawer
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          sx={{
+            "& .MuiDrawer-paper": {
+              width: SIDEBAR_WIDTH,
+              bgcolor: "background.paper",
+              borderRight: `1px solid ${theme.palette.divider}`,
+            },
+          }}
+        >
+          {sidebarContent}
+        </Drawer>
       )}
 
-      {/* Main content area */}
-      <div
-        className="flex flex-col flex-1 min-w-0 transition-all duration-200"
-        style={{
-          marginLeft: showDesktopSidebar ? sidebarWidth : 0,
-          marginRight: !isMobile && !isTablet && aiPanelOpen ? 380 : 0,
+      {/* Main content */}
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minWidth: 0,
+          ml: showDesktopSidebar ? `${sidebarWidth}px` : 0,
+          mr: !isMobile && !isTablet && aiPanelOpen ? "380px" : 0,
+          transition: "margin 200ms ease",
         }}
       >
         <Header
@@ -121,37 +140,41 @@ export function AppShell() {
           onOpenCommandPalette={() => setPaletteOpen(true)}
           isMobile={isMobile || isTablet}
         />
-
-        <main className="flex-1 overflow-auto">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+        <Box component="main" sx={{ flex: 1, overflow: "auto" }}>
+          <Box sx={{ mx: "auto", maxWidth: "1280px", px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
             <Outlet />
-          </div>
-        </main>
-      </div>
+          </Box>
+        </Box>
+      </Box>
 
       {/* AI Chat Panel — desktop docked right */}
       {!isMobile && !isTablet && (
-        <div className="fixed inset-y-0 right-0 z-40">
+        <Box sx={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: theme.zIndex.drawer }}>
           <AIChatPanel />
-        </div>
+        </Box>
       )}
 
-      {/* AI Chat Panel — mobile/tablet full-screen overlay */}
+      {/* AI Chat Panel — mobile full-screen overlay */}
       {(isMobile || isTablet) && aiPanelOpen && (
-        <div className="fixed inset-0 z-50 bg-background">
+        <Box
+          sx={{
+            position: "fixed",
+            inset: 0,
+            zIndex: theme.zIndex.modal,
+            bgcolor: "background.default",
+          }}
+        >
           <AIChatPanel />
-        </div>
+        </Box>
       )}
 
       <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} />
-
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         onLoginClick={() => setLoginOpen(true)}
       />
-
       <Toaster position="bottom-right" richColors closeButton toastOptions={{ duration: 6000 }} />
-    </div>
+    </Box>
   );
 }
