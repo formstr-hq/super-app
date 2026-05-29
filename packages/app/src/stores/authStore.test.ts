@@ -3,7 +3,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mock @formstr/core before importing the store.
 vi.mock("@formstr/core", () => {
   const observers: Array<(state: unknown) => void> = [];
-  const state = { signer: null, pubkey: null, method: null, ready: false };
+  const state: { signer: null; pubkey: string | null; method: string | null; ready: boolean } = {
+    signer: null,
+    pubkey: null,
+    method: null,
+    ready: false,
+  };
   return {
     signerManager: {
       restore: vi.fn(async () => {
