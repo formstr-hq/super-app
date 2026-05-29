@@ -8,6 +8,7 @@ export {
   NIP07Signer,
   DeferredSigner,
   createDriveSignerAdapter,
+  SignerUnavailableError,
 } from "./signer";
 export type {
   NostrSigner,
