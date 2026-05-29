@@ -1,3 +1,19 @@
+// WIP — excluded from tsconfig.json until the underlying service/store
+// methods land in weeks 5-6 (calendar) / 9-10 (AI). See
+// docs/superpowers/specs/2026-05-27-week-1-2-foundation-design.md.
+// @ts-nocheck
+
+// Stub: the full implementation below is commented out because it calls
+// store/service methods that don't exist yet (FormsStore.updateForm/shareForm/
+// importForm, CalendarStore.updateEvent, formsService.fetchFormSummaryFromRef).
+// These land in weeks 5-6 (calendar) and 9-10 (AI).
+import type { ActionResult, ToolCall } from "./types";
+
+export async function dispatchAction(_toolCall: ToolCall): Promise<ActionResult> {
+  return { success: false, message: "Action dispatcher not yet implemented." };
+}
+
+/* ── Full WIP implementation (uncomment when service methods land) ──────────
 import { createRef, parseRef } from "@formstr/core";
 import { nip19 } from "nostr-tools";
 
@@ -12,9 +28,6 @@ import { useFormsStore } from "../stores/formsStore";
 import { usePagesStore } from "../stores/pagesStore";
 import { usePollsStore } from "../stores/pollsStore";
 
-
-import type { ActionResult, EntityRef, ToolCall } from "./types";
-
 function normalizePubkey(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -24,7 +37,7 @@ function normalizePubkey(value: string): string | null {
       const decoded = nip19.decode(trimmed);
       if (decoded.type === "npub") return decoded.data;
     } catch {
-      /* ignore */
+      // ignore
     }
   }
   return null;
@@ -476,3 +489,4 @@ async function runDispatch(
       return { success: false, message: `Unknown tool: ${toolCall.name}` };
   }
 }
+─────────────────────────────────────────────────────────────────────────── */

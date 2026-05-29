@@ -5,7 +5,15 @@ import importPlugin from "eslint-plugin-import";
 import globals from "globals";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/node_modules/**", "upstream/**", "**/coverage/**", "**/*.tsbuildinfo"] },
+  {
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      "upstream/**",
+      "**/coverage/**",
+      "**/*.tsbuildinfo",
+    ],
+  },
   ...tseslint.configs.recommended,
   {
     files: ["**/*.{ts,tsx}"],
@@ -42,5 +50,14 @@ export default tseslint.config(
   {
     files: ["**/*.test.ts", "**/*.test.tsx"],
     rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
+  // WIP files use @ts-nocheck pending their module implementations
+  // (calendar invitations: weeks 5-6; AI action dispatcher: weeks 9-10).
+  {
+    files: [
+      "packages/app/src/ai/actionDispatcher.ts",
+      "packages/app/src/stores/invitationsStore.ts",
+    ],
+    rules: { "@typescript-eslint/ban-ts-comment": "off" },
   },
 );
