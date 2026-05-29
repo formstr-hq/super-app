@@ -1,8 +1,10 @@
 import { create } from "zustand";
-import type { Message, LLMProvider, ActionResult, EntityRef } from "../ai/types";
+
 import { createLLMProvider, ConversationContext, IntentRouter } from "../ai";
-import { useSettingsStore } from "./settingsStore";
+import type { Message, LLMProvider, ActionResult, EntityRef } from "../ai/types";
+
 import { useAuthStore } from "./authStore";
+import { useSettingsStore } from "./settingsStore";
 
 // ── LocalStorage persistence helpers ────────────────────
 

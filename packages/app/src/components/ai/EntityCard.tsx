@@ -1,6 +1,7 @@
-import { useNavigate } from "react-router-dom";
-import { FileText, Calendar, Vote, FolderOpen, ClipboardList } from "lucide-react";
 import { resolveRef } from "@formstr/core";
+import { FileText, Calendar, Vote, FolderOpen, ClipboardList } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
 import type { EntityRef } from "../../ai/types";
 
 const moduleIcons: Record<string, typeof FileText> = {

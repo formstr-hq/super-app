@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+
 import { EntityPill } from "../components/EntityPill";
 
 // Matches bech32 naddr1…, nevent1…, note1… tokens (common ref formats)

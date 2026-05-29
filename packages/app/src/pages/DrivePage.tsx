@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import {
   FolderOpen,
   File,
@@ -9,12 +8,16 @@ import {
   ChevronRight,
   Loader2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useRef, useState } from "react";
+
+import { AIPendingRow } from "../components/ai/AIPendingRow";
+import { useDriveStore } from "../stores";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useDriveStore } from "../stores";
-import { AIPendingRow } from "../components/ai/AIPendingRow";
+
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";

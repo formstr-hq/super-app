@@ -1,9 +1,16 @@
-import { useEffect, useState } from "react";
-import { Plus, BarChart3, Eye, Link2, Vote, X } from "lucide-react";
 import { createRef } from "@formstr/core";
+import { Plus, BarChart3, Eye, Link2, Vote, X } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { AIPendingRow } from "../components/ai/AIPendingRow";
+import type { PollType, PollDraft, PollOption } from "../services/polls";
 import { POLLS_KINDS } from "../services/polls/types";
+import { usePollsStore } from "../stores";
+
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -14,17 +21,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { usePollsStore } from "../stores";
-import type { PollType, PollDraft, PollOption } from "../services/polls";
-import { AIPendingRow } from "../components/ai/AIPendingRow";
+
 
 export function PollsPage() {
   const {

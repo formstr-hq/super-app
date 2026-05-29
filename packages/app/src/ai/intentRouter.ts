@@ -1,7 +1,7 @@
-import type { LLMProvider, ActionResult, Message, StreamCallbacks, ToolCall } from "./types";
-import { toolDefinitions } from "./tools";
-import { ConversationContext } from "./context";
 import { dispatchAction } from "./actionDispatcher";
+import type { ConversationContext } from "./context";
+import { toolDefinitions } from "./tools";
+import type { LLMProvider, ActionResult, Message, StreamCallbacks, ToolCall } from "./types";
 
 function msg(role: Message["role"], content: string, toolCallId?: string): Message {
   return { id: crypto.randomUUID(), role, content, timestamp: Date.now(), toolCallId };

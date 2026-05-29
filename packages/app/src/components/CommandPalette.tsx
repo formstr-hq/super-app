@@ -1,5 +1,3 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Calendar,
   ClipboardList,
@@ -14,6 +12,11 @@ import {
   Sun,
   Vote,
 } from "lucide-react";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+
+import { useAuthStore, useSettingsStore } from "../stores";
+
 import {
   CommandDialog,
   CommandEmpty,
@@ -24,7 +27,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
-import { useAuthStore, useSettingsStore } from "../stores";
+
 
 interface CommandPaletteProps {
   open: boolean;

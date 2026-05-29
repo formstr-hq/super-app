@@ -1,4 +1,5 @@
 import type { EventTemplate, VerifiedEvent } from "nostr-tools";
+
 import type { NostrSigner } from "./types";
 
 type QueuedOperation<T> = {

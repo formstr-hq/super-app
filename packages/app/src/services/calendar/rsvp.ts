@@ -1,6 +1,8 @@
-import type { EventTemplate, Filter } from "nostr-tools";
 import { signerManager, nostrRuntime, relayManager, wrapEvent, unwrapEvent } from "@formstr/core";
-import { CALENDAR_KINDS, RSVPStatus, type RSVPResponse } from "./types";
+import type { Event as NostrEvent, EventTemplate, Filter } from "nostr-tools";
+
+import type { RSVPStatus} from "./types";
+import { CALENDAR_KINDS, type RSVPResponse } from "./types";
 
 // ── Publish an RSVP ─────────────────────────────────────
 /**
@@ -101,7 +103,7 @@ export interface InvitationRumor {
  * a calendar-rumor pointer, return the referenced addressable coordinate.
  */
 export async function extractInvitationFromWrap(
-  wrap: import("nostr-tools").Event,
+  wrap: NostrEvent,
 ): Promise<InvitationRumor | null> {
   try {
     const signer = await signerManager.getSigner();

@@ -1,5 +1,7 @@
-import { nostrRuntime } from "../runtime/NostrRuntime";
 import type { Filter } from "nostr-tools";
+
+import { nostrRuntime } from "../runtime/NostrRuntime";
+
 import { relayManager } from "./RelayManager";
 
 interface RelayCache {

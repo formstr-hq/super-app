@@ -1,5 +1,3 @@
-import type { EventTemplate, Event, Filter } from "nostr-tools";
-import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
 import {
   signerManager,
   nostrRuntime,
@@ -9,6 +7,9 @@ import {
   nip44SelfDecrypt,
   encodeNKeys,
 } from "@formstr/core";
+import type { EventTemplate, Event, Filter } from "nostr-tools";
+import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
+
 import {
   PAGES_KINDS,
   type PageDocument,

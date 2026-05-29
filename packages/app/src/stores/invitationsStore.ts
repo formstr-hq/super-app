@@ -1,9 +1,11 @@
-import { create } from "zustand";
-import type { Filter } from "nostr-tools";
 import { signerManager, nostrRuntime, relayManager, type SubscriptionHandle } from "@formstr/core";
+import type { Filter } from "nostr-tools";
+import { create } from "zustand";
+
 import { extractInvitationFromWrap, type InvitationRumor } from "../services/calendar/rsvp";
 import { fetchCalendarEventByCoordinate } from "../services/calendar/service";
 import { CALENDAR_KINDS, type CalendarEvent } from "../services/calendar/types";
+
 import { useCalendarStore } from "./calendarStore";
 
 export interface InvitationEntry extends InvitationRumor {

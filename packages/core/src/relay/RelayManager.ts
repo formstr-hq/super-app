@@ -1,5 +1,6 @@
-import { nostrRuntime } from "../runtime/NostrRuntime";
 import type { Event, Filter } from "nostr-tools";
+
+import { nostrRuntime } from "../runtime/NostrRuntime";
 
 export interface RelayConfig {
   url: string;

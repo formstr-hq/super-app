@@ -1,11 +1,13 @@
-import { useState } from "react";
 import { Key, Puzzle, UserRound, Eye, EyeOff, Radio } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useState } from "react";
+
+import { useAuthStore } from "../stores";
+
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useAuthStore } from "../stores";
 import { cn } from "@/lib/utils";
 
 interface LoginDialogProps {

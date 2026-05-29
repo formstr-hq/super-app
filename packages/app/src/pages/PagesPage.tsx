@@ -1,5 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { createRef } from "@formstr/core";
 import { Plus, FileEdit, Trash2, Share2, Edit, Link2, Lock, Tag } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+
+import { AIPendingRow } from "../components/ai/AIPendingRow";
+import { RichEditor } from "../components/pages/RichEditor";
+import { PAGES_KINDS, type PageSummary } from "../services/pages/types";
+import { usePagesStore } from "../stores";
+
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,15 +18,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { createRef } from "@formstr/core";
-import { usePagesStore } from "../stores";
-import { PAGES_KINDS, type PageSummary } from "../services/pages/types";
-import { RichEditor } from "../components/pages/RichEditor";
-import { AIPendingRow } from "../components/ai/AIPendingRow";
+
+
 
 export function PagesPage() {
   const {

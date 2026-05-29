@@ -1,4 +1,3 @@
-import type { EventTemplate, Filter } from "nostr-tools";
 import {
   signerManager,
   nostrRuntime,
@@ -11,6 +10,8 @@ import {
   aesGcmEncrypt,
   aesGcmDecrypt,
 } from "@formstr/core";
+import type { EventTemplate, Filter } from "nostr-tools";
+
 import { DRIVE_KINDS, DEFAULT_BLOSSOM_SERVERS, type FileMetadata } from "./types";
 
 // ── Upload File ─────────────────────────────────────────

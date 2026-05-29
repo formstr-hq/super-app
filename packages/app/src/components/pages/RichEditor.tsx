@@ -1,20 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { Editor, Range } from "@tiptap/core";
 import { Extension } from "@tiptap/core";
+import Link from "@tiptap/extension-link";
+import Placeholder from "@tiptap/extension-placeholder";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
+import { PluginKey } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import Link from "@tiptap/extension-link";
-import TaskList from "@tiptap/extension-task-list";
-import TaskItem from "@tiptap/extension-task-item";
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from "@tiptap/suggestion";
-import { PluginKey } from "@tiptap/pm/state";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+import { MentionPicker, type MentionItem } from "../MentionPicker";
+
+import { htmlToMarkdown, markdownToHtml } from "./markdownBridge";
+import { SLASH_COMMANDS, filterSlashCommands, type SlashCommandItem } from "./slashCommands";
 
 import { cn } from "@/lib/utils";
-import { SLASH_COMMANDS, filterSlashCommands, type SlashCommandItem } from "./slashCommands";
-import { htmlToMarkdown, markdownToHtml } from "./markdownBridge";
-import { MentionPicker, type MentionItem } from "../MentionPicker";
 
 // ═══════════════════════════════════════════════════════════
 // Slash command extension (uses @tiptap/suggestion)
@@ -356,7 +358,7 @@ export function RichEditor({
         handleMentionKeyDown,
       ),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [placeholder],
   );
 

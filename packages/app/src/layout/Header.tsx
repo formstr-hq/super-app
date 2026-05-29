@@ -1,7 +1,9 @@
 import { Menu, LogOut, User, Settings, ChevronDown, Sparkles, Search } from "lucide-react";
 import { useLocation } from "react-router-dom";
-import { useAuthStore, useSettingsStore } from "../stores";
+
 import { ThemeToggle } from "../components/ThemeToggle";
+import { useAuthStore, useSettingsStore } from "../stores";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

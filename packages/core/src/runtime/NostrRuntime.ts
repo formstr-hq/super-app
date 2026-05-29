@@ -1,5 +1,6 @@
 import { SimplePool } from "nostr-tools";
 import type { Event, Filter } from "nostr-tools";
+
 import { EventStore } from "./EventStore";
 import { SubscriptionManager, type SubscriptionHandle } from "./SubscriptionManager";
 

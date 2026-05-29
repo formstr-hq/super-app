@@ -1,6 +1,8 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
+
 import { AppShell } from "./layout";
+
 import { Skeleton } from "@/components/ui/skeleton";
 
 const FormsPage = lazy(() => import("./pages/FormsPage").then((m) => ({ default: m.FormsPage })));

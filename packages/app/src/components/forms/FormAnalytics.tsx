@@ -1,3 +1,4 @@
+import { BarChart3, CheckCircle2, Clock, MessageSquare, Users } from "lucide-react";
 import { useMemo } from "react";
 import {
   BarChart,
@@ -9,8 +10,7 @@ import {
   Cell,
   CartesianGrid,
 } from "recharts";
-import { BarChart3, CheckCircle2, Clock, MessageSquare, Users } from "lucide-react";
-import { AnswerType, type FormResponseEvent, type FormTemplate } from "../../services/forms/types";
+
 import {
   computeFieldBreakdown,
   computeSummaryStats,
@@ -18,6 +18,8 @@ import {
   formatPercent,
   type FieldBreakdown,
 } from "../../lib/analytics";
+import { AnswerType, type FormResponseEvent, type FormTemplate } from "../../services/forms/types";
+
 import { cn } from "@/lib/utils";
 
 // A small curated palette that adapts to theme via HSL vars

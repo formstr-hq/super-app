@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, ClipboardList, FileText, FolderOpen, Vote } from "lucide-react";
 import { createRef as createNostrRef, type ModuleType } from "@formstr/core";
-import { cn } from "@/lib/utils";
-import { useFormsStore } from "../stores/formsStore";
-import { useCalendarStore } from "../stores/calendarStore";
-import { usePagesStore } from "../stores/pagesStore";
-import { usePollsStore } from "../stores/pollsStore";
-import { FORM_KINDS } from "../services/forms/types";
+import { Calendar, ClipboardList, FileText, FolderOpen, Vote } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+
 import { CALENDAR_KINDS } from "../services/calendar/types";
+import { FORM_KINDS } from "../services/forms/types";
 import { PAGES_KINDS } from "../services/pages/types";
 import { POLLS_KINDS } from "../services/polls/types";
+import { useCalendarStore } from "../stores/calendarStore";
+import { useFormsStore } from "../stores/formsStore";
+import { usePagesStore } from "../stores/pagesStore";
+import { usePollsStore } from "../stores/pollsStore";
+
+import { cn } from "@/lib/utils";
 
 export interface MentionItem {
   module: ModuleType;

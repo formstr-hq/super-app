@@ -1,5 +1,6 @@
 import type { Message } from "../../ai/types";
 import { renderRefs } from "../../lib/renderRefs";
+
 import { ToolCallChip } from "./ToolCallChip";
 
 interface MessageBubbleProps {

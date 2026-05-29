@@ -1,4 +1,7 @@
 import { useCallback, useMemo } from "react";
+
+import { buildRRuleString, type RRuleFreq, type RRuleParts } from "../../lib/rrule";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -8,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { buildRRuleString, type RRuleFreq, type RRuleParts } from "../../lib/rrule";
 
 const DAYS: Array<RRuleParts["byDay"] extends (infer U)[] | undefined ? U : never> = [
   "MO",

@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
 import { Check, Inbox, Loader2, X, CircleHelp } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { useInvitationsStore, type InvitationEntry } from "../../stores/invitationsStore";
+
 import { rsvpToEvent } from "../../services/calendar/rsvp";
+import { useInvitationsStore, type InvitationEntry } from "../../stores/invitationsStore";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 function formatDate(ms?: number) {
   if (!ms) return "";

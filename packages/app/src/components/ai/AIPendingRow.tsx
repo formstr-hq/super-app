@@ -1,7 +1,10 @@
-import { useMemo } from "react";
 import { Sparkles } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useMemo } from "react";
+
 import { useAIPendingStore, type AIModule } from "../../stores/aiPendingStore";
+
+import { Skeleton } from "@/components/ui/skeleton";
+
 
 interface AIPendingRowProps {
   module: AIModule;

@@ -1,5 +1,3 @@
-import type { EventTemplate, Event, Filter } from "nostr-tools";
-import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
 import {
   signerManager,
   nostrRuntime,
@@ -9,6 +7,9 @@ import {
   nip44SelfDecrypt,
 } from "@formstr/core";
 import type { SubscriptionHandle } from "@formstr/core";
+import type { EventTemplate, Event, Filter } from "nostr-tools";
+import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
+
 import {
   FORM_KINDS,
   type FormField,

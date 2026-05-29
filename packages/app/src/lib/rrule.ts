@@ -1,4 +1,6 @@
-import { RRule, RRuleSet, rrulestr, Weekday } from "rrule";
+import type { Weekday } from "rrule";
+import { RRule, RRuleSet, rrulestr } from "rrule";
+
 import type { CalendarEvent } from "../services/calendar/types";
 
 function asRRule(x: unknown): RRule | null {

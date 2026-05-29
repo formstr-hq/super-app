@@ -1,6 +1,7 @@
 import { generateSecretKey, finalizeEvent } from "nostr-tools";
-import * as nip44 from "nostr-tools/nip44";
 import type { EventTemplate, Event, VerifiedEvent } from "nostr-tools";
+import * as nip44 from "nostr-tools/nip44";
+
 import type { NostrSigner } from "../signer/types";
 
 type UnsignedEvent = Omit<Event, "sig">;

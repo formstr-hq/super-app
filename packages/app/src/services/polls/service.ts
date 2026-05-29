@@ -1,6 +1,7 @@
-import type { EventTemplate, Event, Filter } from "nostr-tools";
 import { signerManager, nostrRuntime, relayManager } from "@formstr/core";
 import type { SubscriptionHandle } from "@formstr/core";
+import type { EventTemplate, Event, Filter } from "nostr-tools";
+
 import {
   POLLS_KINDS,
   type Poll,

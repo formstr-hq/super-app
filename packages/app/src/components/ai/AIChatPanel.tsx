@@ -1,8 +1,10 @@
-import { useRef, useEffect, useState, useCallback, type KeyboardEvent } from "react";
 import { X, Send, Trash2, Sparkles, Loader2, AlertCircle } from "lucide-react";
+import { useRef, useEffect, useState, useCallback, type KeyboardEvent } from "react";
+
 import { useAIStore, useSettingsStore } from "../../stores";
-import { MessageBubble } from "./MessageBubble";
+
 import { EntityCard } from "./EntityCard";
+import { MessageBubble } from "./MessageBubble";
 
 export function AIChatPanel() {
   const {

@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
-import { Sidebar } from "./Sidebar";
-import { Header } from "./Header";
-import { LoginDialog } from "../components/LoginDialog";
+
 import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
-import { useAuthStore, useSettingsStore, useFormsKeyStore } from "../stores";
+import { LoginDialog } from "../components/LoginDialog";
 import { hexToBytes } from "../services/forms/keys";
+import { useAuthStore, useSettingsStore, useFormsKeyStore } from "../stores";
+
+import { Header } from "./Header";
+import { Sidebar } from "./Sidebar";
+
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 export const SIDEBAR_WIDTH = 240;

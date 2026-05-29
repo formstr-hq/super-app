@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { signerManager, createBlossomAuthEvent, BlossomClient } from "@formstr/core";
 import { Upload, X, Eraser, Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { DEFAULT_BLOSSOM_SERVERS } from "../../services/drive/types";
+import { AnswerType, type FormField } from "../../services/forms/types";
+
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
@@ -13,9 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { AnswerType, type FormField } from "../../services/forms/types";
-import { signerManager, createBlossomAuthEvent, BlossomClient } from "@formstr/core";
-import { DEFAULT_BLOSSOM_SERVERS } from "../../services/drive/types";
+
 
 /**
  * Single-field renderer. Each branch handles its own data shape so the form

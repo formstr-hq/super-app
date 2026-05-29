@@ -1,8 +1,9 @@
 import { decode as decodeNsec } from "nostr-tools/nip19";
-import type { NostrSigner, SignerMethod, SignerState, SignerObserver } from "./types";
+
+import { DeferredSigner } from "./DeferredSigner";
 import { LocalSigner } from "./LocalSigner";
 import { NIP07Signer } from "./NIP07Signer";
-import { DeferredSigner } from "./DeferredSigner";
+import type { NostrSigner, SignerMethod, SignerState, SignerObserver } from "./types";
 
 const STORAGE_PREFIX = "formstr:";
 const KEY_METHOD = `${STORAGE_PREFIX}signer-method`;

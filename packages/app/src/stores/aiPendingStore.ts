@@ -1,4 +1,5 @@
 import { create } from "zustand";
+
 import type { EntityRef } from "../ai/types";
 
 export type AIModule = EntityRef["module"];
