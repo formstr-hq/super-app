@@ -5,7 +5,7 @@ import {
   unwrapEvent,
   type SubscriptionHandle,
 } from "@formstr/core";
-import type { Filter } from "nostr-tools";
+import type { Event, Filter } from "nostr-tools";
 import { create } from "zustand";
 
 import { FORM_VIEW_KEY_RUMOR_KIND, FORM_VIEW_KEY_TAG, hexToBytes } from "../services/forms/keys";
@@ -51,12 +51,12 @@ export const useFormsKeyStore = create<FormsKeyStore>((set, get) => ({
       const filters: Filter[] = [{ kinds: [FORM_KINDS.giftWrap], "#p": [pubkey] }];
 
       const handle = nostrRuntime.subscribe(relays, filters, {
-        onEvent: async (wrap) => {
+        onEvent: async (wrap: Event) => {
           try {
             const unwrapped = await unwrapEvent(wrap, signer);
             if (!unwrapped || unwrapped.kind !== FORM_VIEW_KEY_RUMOR_KIND) return;
-            const coord = unwrapped.tags.find((t) => t[0] === "a")?.[1];
-            const hex = unwrapped.tags.find((t) => t[0] === FORM_VIEW_KEY_TAG)?.[1];
+            const coord = unwrapped.tags.find((t: string[]) => t[0] === "a")?.[1];
+            const hex = unwrapped.tags.find((t: string[]) => t[0] === FORM_VIEW_KEY_TAG)?.[1];
             if (!coord || !hex) return;
             const secret = hexToBytes(hex);
             set((state) => ({

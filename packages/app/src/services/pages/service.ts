@@ -100,7 +100,7 @@ export async function fetchMyPages(): Promise<PageSummary[]> {
 
   const events = await nostrRuntime.querySync(relays, filter);
 
-  return events.map((event) => {
+  return events.map((event: Event) => {
     const dTag = event.tags.find((t: string[]) => t[0] === "d")?.[1] ?? "";
     const titleTag = event.tags.find((t: string[]) => t[0] === "title")?.[1];
     return {

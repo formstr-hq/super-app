@@ -123,7 +123,7 @@ export function subscribeToPollResults(
   };
 
   return nostrRuntime.subscribe(relays, [filter], {
-    onEvent: (event) => {
+    onEvent: (event: Event) => {
       const selected = event.tags
         .filter((t: string[]) => t[0] === "response")
         .map((t: string[]) => t[1]);
@@ -174,7 +174,7 @@ export async function fetchRecentPolls(limit = 20): Promise<Poll[]> {
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map(parsePollEvent).filter((p): p is Poll => p !== null);
+  return events.map(parsePollEvent).filter((p: Poll | null): p is Poll => p !== null);
 }
 
 export async function fetchMyPolls(): Promise<Poll[]> {
@@ -188,7 +188,7 @@ export async function fetchMyPolls(): Promise<Poll[]> {
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map(parsePollEvent).filter((p): p is Poll => p !== null);
+  return events.map(parsePollEvent).filter((p: Poll | null): p is Poll => p !== null);
 }
 
 // ── Helpers ─────────────────────────────────────────────
