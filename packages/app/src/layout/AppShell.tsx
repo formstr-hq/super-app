@@ -1,20 +1,16 @@
 import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
-import { Sidebar } from "./Sidebar";
-import { Header } from "./Header";
-import { LoginDialog } from "../components/LoginDialog";
+
 import { AIChatPanel } from "../components/ai/AIChatPanel";
-import {
-  CommandPalette,
-  useCommandPaletteHotkey,
-} from "../components/CommandPalette";
-import {
-  useAuthStore,
-  useSettingsStore,
-  useFormsKeyStore,
-} from "../stores";
+import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
+import { LoginDialog } from "../components/LoginDialog";
 import { hexToBytes } from "../services/forms/keys";
+import { useAuthStore, useSettingsStore, useFormsKeyStore } from "../stores";
+
+import { Header } from "./Header";
+import { Sidebar } from "./Sidebar";
+
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 export const SIDEBAR_WIDTH = 240;
@@ -93,7 +89,13 @@ export function AppShell() {
       {(isMobile || isTablet) && (
         <Sheet open={showOverlaySidebar} onOpenChange={setSidebarOpen}>
           <SheetContent side="left" className="w-60 p-0 border-r border-border bg-muted">
-            <Sidebar collapsed={false} onLoginClick={() => { setLoginOpen(true); setSidebarOpen(false); }} />
+            <Sidebar
+              collapsed={false}
+              onLoginClick={() => {
+                setLoginOpen(true);
+                setSidebarOpen(false);
+              }}
+            />
           </SheetContent>
         </Sheet>
       )}
@@ -141,13 +143,7 @@ export function AppShell() {
         onLoginClick={() => setLoginOpen(true)}
       />
 
-      <Toaster
-        position="bottom-right"
-        richColors
-        closeButton
-        toastOptions={{ duration: 6000 }}
-      />
+      <Toaster position="bottom-right" richColors closeButton toastOptions={{ duration: 6000 }} />
     </div>
   );
 }
-

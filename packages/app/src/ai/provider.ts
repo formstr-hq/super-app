@@ -1,4 +1,11 @@
-import type { Message, ToolDefinition, ToolCall, GenerateOptions, StreamCallbacks, LLMProvider } from "./types";
+import type {
+  Message,
+  ToolDefinition,
+  ToolCall,
+  GenerateOptions,
+  StreamCallbacks,
+  LLMProvider,
+} from "./types";
 
 // ── Ollama Provider ─────────────────────────────────────────
 
@@ -156,11 +163,7 @@ export class CloudLLMProvider implements LLMProvider {
   private baseUrl: string;
   private defaultModel: string;
 
-  constructor(
-    apiKey: string,
-    provider: "openai" | "anthropic" = "openai",
-    model?: string,
-  ) {
+  constructor(apiKey: string, provider: "openai" | "anthropic" = "openai", model?: string) {
     this.apiKey = apiKey;
     if (provider === "anthropic") {
       this.baseUrl = "https://api.anthropic.com/v1";
@@ -183,7 +186,11 @@ export class CloudLLMProvider implements LLMProvider {
       });
       if (!res.ok) return [this.defaultModel];
       const data = (await res.json()) as { data?: Array<{ id: string }> };
-      return data.data?.map((m) => m.id).filter((id) => id.includes("gpt") || id.includes("claude")) ?? [this.defaultModel];
+      return (
+        data.data?.map((m) => m.id).filter((id) => id.includes("gpt") || id.includes("claude")) ?? [
+          this.defaultModel,
+        ]
+      );
     } catch {
       return [this.defaultModel];
     }
@@ -355,7 +362,9 @@ export async function createLLMProvider(config: {
   const fallback = new OllamaProvider();
   if (await fallback.isAvailable()) return fallback;
 
-  throw new Error("No LLM provider available. Start Ollama or configure a cloud API key in settings.");
+  throw new Error(
+    "No LLM provider available. Start Ollama or configure a cloud API key in settings.",
+  );
 }
 
 // ── Internal helpers ────────────────────────────────────────

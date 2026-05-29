@@ -19,18 +19,18 @@ export interface ModuleRef {
 /** Map event kinds to modules */
 const KIND_MODULE_MAP: Record<number, ModuleType> = {
   // Forms
-  30168: "forms",  // Form template
+  30168: "forms", // Form template
   // Calendar
   31922: "calendar", // Date-based calendar event
   31923: "calendar", // Time-based calendar event
   31924: "calendar", // Calendar list
   // Pages
-  30023: "pages",    // Long-form content (NIP-23)
-  30024: "pages",    // Draft article
+  30023: "pages", // Long-form content (NIP-23)
+  30024: "pages", // Draft article
   // Drive
-  30563: "drive",    // Drive file tree
+  30563: "drive", // Drive file tree
   // Polls
-  1068: "polls",     // Poll event
+  1068: "polls", // Poll event
 };
 
 /**
@@ -93,9 +93,7 @@ export function parseRef(bech32: string): ModuleRef | null {
         route: `/profile/${bech32}`,
         params: {
           pubkey: decoded.data.pubkey,
-          ...(decoded.data.relays?.length
-            ? { relays: decoded.data.relays.join(",") }
-            : {}),
+          ...(decoded.data.relays?.length ? { relays: decoded.data.relays.join(",") } : {}),
         },
         raw: bech32,
       };

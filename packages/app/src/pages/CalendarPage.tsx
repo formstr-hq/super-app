@@ -1,7 +1,13 @@
-import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Lock, Plus, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+import type { CalendarEvent, CalendarEventDraft, CalendarList } from "../services/calendar";
+import { useCalendarStore, useAuthStore } from "../stores";
+
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -12,10 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -23,21 +26,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useCalendarStore, useAuthStore } from "../stores";
-import type { CalendarEvent, CalendarEventDraft, CalendarList } from "../services/calendar";
+
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 export function CalendarPage() {
   const {
-    events, calendars, isLoadingEvents, error, selectedDate,
-    setSelectedDate, fetchEvents, fetchCalendars, createEvent, createCalendar, deleteEvent,
+    events,
+    calendars,
+    isLoadingEvents,
+    error,
+    selectedDate,
+    setSelectedDate,
+    fetchEvents,
+    fetchCalendars,
+    createEvent,
+    createCalendar,
+    deleteEvent,
   } = useCalendarStore();
   const pubkey = useAuthStore((s) => s.pubkey);
   const pubkeyRef = useRef(pubkey);
@@ -47,9 +69,13 @@ export function CalendarPage() {
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<Set<string>>(new Set());
   const [showAllPublic, setShowAllPublic] = useState(false);
 
-  useEffect(() => { pubkeyRef.current = pubkey; }, [pubkey]);
+  useEffect(() => {
+    pubkeyRef.current = pubkey;
+  }, [pubkey]);
 
-  useEffect(() => { fetchCalendars(); }, [fetchCalendars]);
+  useEffect(() => {
+    fetchCalendars();
+  }, [fetchCalendars]);
 
   useEffect(() => {
     if (calendars.length > 0 && visibleCalendarIds.size === 0) {
@@ -80,7 +106,8 @@ export function CalendarPage() {
   const toggleCalendar = (calId: string) => {
     setVisibleCalendarIds((prev) => {
       const next = new Set(prev);
-      if (next.has(calId)) next.delete(calId); else next.add(calId);
+      if (next.has(calId)) next.delete(calId);
+      else next.add(calId);
       return next;
     });
   };
@@ -204,7 +231,10 @@ export function CalendarPage() {
             {/* Day headers */}
             <div className="grid grid-cols-7 border-b border-border bg-muted/40">
               {DAYS.map((day) => (
-                <div key={day} className="py-2 text-center text-xs font-medium text-muted-foreground">
+                <div
+                  key={day}
+                  className="py-2 text-center text-xs font-medium text-muted-foreground"
+                >
                   <span className="hidden sm:inline">{day}</span>
                   <span className="sm:hidden">{day[0]}</span>
                 </div>
@@ -215,7 +245,10 @@ export function CalendarPage() {
             <div className="grid grid-cols-7">
               {/* Empty cells */}
               {Array.from({ length: firstDay }, (_, i) => (
-                <div key={`pre-${i}`} className="min-h-18 border-b border-r border-border bg-muted/20" />
+                <div
+                  key={`pre-${i}`}
+                  className="min-h-18 border-b border-r border-border bg-muted/20"
+                />
               ))}
 
               {/* Day cells */}
@@ -227,7 +260,8 @@ export function CalendarPage() {
                   month === today.getMonth() &&
                   year === today.getFullYear();
                 const cellIndex = firstDay + i;
-                const isLastRow = Math.floor(cellIndex / 7) === Math.floor((firstDay + daysInMonth - 1) / 7);
+                const isLastRow =
+                  Math.floor(cellIndex / 7) === Math.floor((firstDay + daysInMonth - 1) / 7);
 
                 return (
                   <div
@@ -236,7 +270,7 @@ export function CalendarPage() {
                       "min-h-18 border-border p-1.5",
                       "border-r border-b last:border-r-0",
                       isLastRow && "border-b-0",
-                      (cellIndex + 1) % 7 === 0 && "border-r-0"
+                      (cellIndex + 1) % 7 === 0 && "border-r-0",
                     )}
                   >
                     <span
@@ -244,7 +278,7 @@ export function CalendarPage() {
                         "text-xs font-medium flex h-5 w-5 items-center justify-center rounded-full mb-1",
                         isToday
                           ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
                     >
                       {day}
@@ -258,17 +292,22 @@ export function CalendarPage() {
                           onClick={() => setDetailEvent(evt)}
                           style={{
                             backgroundColor: evt.calendarId
-                              ? (calendars.find((c) => c.id === evt.calendarId)?.color || "hsl(var(--primary))") + "22"
+                              ? (calendars.find((c) => c.id === evt.calendarId)?.color ||
+                                  "hsl(var(--primary))") + "22"
                               : "hsl(var(--primary) / 0.15)",
                             color: evt.calendarId
-                              ? (calendars.find((c) => c.id === evt.calendarId)?.color || "hsl(var(--primary))")
+                              ? calendars.find((c) => c.id === evt.calendarId)?.color ||
+                                "hsl(var(--primary))"
                               : "hsl(var(--primary))",
                           }}
                         >
                           {evt.isPrivate && <Lock className="h-2 w-2 shrink-0" />}
                           <span className="truncate flex-1">{evt.title}</span>
                           <button
-                            onClick={(e) => { e.stopPropagation(); deleteEvent(evt.eventId); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteEvent(evt.eventId);
+                            }}
                             className="opacity-0 group-hover/evt:opacity-100 transition-opacity shrink-0"
                             aria-label="Delete event"
                           >
@@ -295,11 +334,17 @@ export function CalendarPage() {
             <h3 className="text-sm font-semibold text-foreground mb-3">Upcoming Events</h3>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {upcomingEvents.map((evt) => (
-                <Card key={evt.eventId} className="border-border cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDetailEvent(evt)}>
+                <Card
+                  key={evt.eventId}
+                  className="border-border cursor-pointer hover:bg-accent/50 transition-colors"
+                  onClick={() => setDetailEvent(evt)}
+                >
                   <CardContent className="p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        {evt.isPrivate && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
+                        {evt.isPrivate && (
+                          <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
+                        )}
                         <p className="text-sm font-medium text-foreground truncate">{evt.title}</p>
                       </div>
                       {evt.isPrivate && (
@@ -340,7 +385,10 @@ export function CalendarPage() {
       <EventDetailDialog
         event={detailEvent}
         onClose={() => setDetailEvent(null)}
-        onDelete={(eventId) => { deleteEvent(eventId); setDetailEvent(null); }}
+        onDelete={(eventId) => {
+          deleteEvent(eventId);
+          setDetailEvent(null);
+        }}
       />
     </div>
   );
@@ -378,9 +426,17 @@ function CreateEventDialog({ open, onClose, onCreate, calendars }: CreateEventDi
         calendarId: calendarId === "none" ? undefined : calendarId,
         isPrivate,
       });
-      setTitle(""); setDescription(""); setBegin(""); setEnd(""); setLocation(""); setCalendarId("none"); setIsPrivate(false);
+      setTitle("");
+      setDescription("");
+      setBegin("");
+      setEnd("");
+      setLocation("");
+      setCalendarId("none");
+      setIsPrivate(false);
       onClose();
-    } catch { /* handled by store */ } finally {
+    } catch {
+      /* handled by store */
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -395,28 +451,62 @@ function CreateEventDialog({ open, onClose, onCreate, calendars }: CreateEventDi
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="evt-title" className="text-xs">Title</Label>
-            <Input id="evt-title" placeholder="Event title" value={title} onChange={(e) => setTitle(e.target.value)} className="h-9" />
+            <Label htmlFor="evt-title" className="text-xs">
+              Title
+            </Label>
+            <Input
+              id="evt-title"
+              placeholder="Event title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="h-9"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="evt-begin" className="text-xs">Start</Label>
-              <Input id="evt-begin" type="datetime-local" value={begin} onChange={(e) => setBegin(e.target.value)} className="h-9" />
+              <Label htmlFor="evt-begin" className="text-xs">
+                Start
+              </Label>
+              <Input
+                id="evt-begin"
+                type="datetime-local"
+                value={begin}
+                onChange={(e) => setBegin(e.target.value)}
+                className="h-9"
+              />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="evt-end" className="text-xs">End</Label>
-              <Input id="evt-end" type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="h-9" />
+              <Label htmlFor="evt-end" className="text-xs">
+                End
+              </Label>
+              <Input
+                id="evt-end"
+                type="datetime-local"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+                className="h-9"
+              />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="evt-location" className="text-xs">Location (optional)</Label>
-            <Input id="evt-location" placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} className="h-9" />
+            <Label htmlFor="evt-location" className="text-xs">
+              Location (optional)
+            </Label>
+            <Input
+              id="evt-location"
+              placeholder="Location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="h-9"
+            />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="evt-desc" className="text-xs">Description (optional)</Label>
+            <Label htmlFor="evt-desc" className="text-xs">
+              Description (optional)
+            </Label>
             <textarea
               id="evt-desc"
               rows={2}
@@ -437,7 +527,9 @@ function CreateEventDialog({ open, onClose, onCreate, calendars }: CreateEventDi
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   {calendars.map((cal) => (
-                    <SelectItem key={cal.id} value={cal.id}>{cal.title || "Untitled"}</SelectItem>
+                    <SelectItem key={cal.id} value={cal.id}>
+                      {cal.title || "Untitled"}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -458,8 +550,14 @@ function CreateEventDialog({ open, onClose, onCreate, calendars }: CreateEventDi
         </div>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
-          <Button size="sm" onClick={handleCreate} disabled={!title || !begin || !end || isSubmitting}>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleCreate}
+            disabled={!title || !begin || !end || isSubmitting}
+          >
             {isSubmitting ? "Creating…" : "Create"}
           </Button>
         </DialogFooter>
@@ -471,7 +569,9 @@ function CreateEventDialog({ open, onClose, onCreate, calendars }: CreateEventDi
 // ── Create Calendar Dialog ────────────────────────────────────
 
 function CreateCalendarDialog({
-  open, onClose, onCreate,
+  open,
+  onClose,
+  onCreate,
 }: {
   open: boolean;
   onClose: () => void;
@@ -486,9 +586,12 @@ function CreateCalendarDialog({
     setIsSubmitting(true);
     try {
       await onCreate(title, color);
-      setTitle(""); setColor("#334155");
+      setTitle("");
+      setColor("#334155");
       onClose();
-    } catch { /* handled by store */ } finally {
+    } catch {
+      /* handled by store */
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -502,11 +605,21 @@ function CreateCalendarDialog({
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="cal-name" className="text-xs">Calendar name</Label>
-            <Input id="cal-name" placeholder="My Calendar" value={title} onChange={(e) => setTitle(e.target.value)} className="h-9" />
+            <Label htmlFor="cal-name" className="text-xs">
+              Calendar name
+            </Label>
+            <Input
+              id="cal-name"
+              placeholder="My Calendar"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="h-9"
+            />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="cal-color" className="text-xs">Color</Label>
+            <Label htmlFor="cal-color" className="text-xs">
+              Color
+            </Label>
             <div className="flex items-center gap-2">
               <input
                 id="cal-color"
@@ -521,7 +634,9 @@ function CreateCalendarDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
           <Button size="sm" onClick={handleCreate} disabled={!title || isSubmitting}>
             {isSubmitting ? "Creating…" : "Create"}
           </Button>
@@ -562,9 +677,7 @@ function EventDetailDialog({
             {event.isPrivate && <Lock className="h-4 w-4 text-muted-foreground" />}
             {event.title}
           </DialogTitle>
-          {event.description && (
-            <DialogDescription>{event.description}</DialogDescription>
-          )}
+          {event.description && <DialogDescription>{event.description}</DialogDescription>}
         </DialogHeader>
 
         <div className="space-y-3 text-sm">
@@ -587,7 +700,9 @@ function EventDetailDialog({
               <span className="text-muted-foreground w-16 shrink-0">Tags</span>
               <div className="flex flex-wrap gap-1">
                 {event.categories.map((cat) => (
-                  <Badge key={cat} variant="secondary" className="text-xs">{cat}</Badge>
+                  <Badge key={cat} variant="secondary" className="text-xs">
+                    {cat}
+                  </Badge>
                 ))}
               </div>
             </div>

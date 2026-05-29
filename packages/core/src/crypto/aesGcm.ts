@@ -20,10 +20,7 @@ export async function generateFileKey(): Promise<string> {
 }
 
 /** Encrypt data with AES-256-GCM */
-export async function aesGcmEncrypt(
-  data: Uint8Array,
-  keyHex: string,
-): Promise<EncryptedPayload> {
+export async function aesGcmEncrypt(data: Uint8Array, keyHex: string): Promise<EncryptedPayload> {
   const keyBytes = hexToBytes(keyHex);
   const iv = crypto.getRandomValues(new Uint8Array(12));
 

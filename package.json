@@ -1,6 +1,7 @@
 {
   "name": "formstr-super-app",
   "private": true,
+  "type": "module",
   "version": "0.0.1",
   "description": "Formstr Super App — unified orchestration layer for Forms, Calendar, Pages, Drive, Polls",
   "scripts": {
@@ -8,13 +9,31 @@
     "build:core": "pnpm --filter @formstr/core build",
     "build:app": "pnpm --filter @formstr/app build",
     "dev": "pnpm --filter @formstr/app dev",
-    "lint": "pnpm -r lint",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
-    "clean": "pnpm -r clean"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "clean": "pnpm -r clean",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=20",
     "pnpm": ">=9"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.39.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
+    "prettier": "^3.8.3",
+    "typescript-eslint": "^8.60.0",
+    "vitest": "^3.2.4"
   }
 }

@@ -1,35 +1,3 @@
-import { useEffect, useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   BarChart3,
   Check,
@@ -42,8 +10,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useFormsStore } from "../stores";
+import { useEffect, useState, useCallback } from "react";
+
 import {
   AnswerType,
   type FormField,
@@ -53,6 +21,36 @@ import {
   type FormSummary,
 } from "../services/forms";
 import * as formsService from "../services/forms/service";
+import { useFormsStore } from "../stores";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
 
 // ── Answer type label map ────────────────────────────────
 
@@ -558,7 +556,12 @@ function CreateFormDialog({ open, onClose, onCreate }: CreateFormDialogProps) {
         {dialogError && <p className="text-xs text-destructive">{dialogError}</p>}
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="cursor-pointer" disabled={isSubmitting}>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="cursor-pointer"
+            disabled={isSubmitting}
+          >
             Cancel
           </Button>
           <Button onClick={handleCreate} disabled={!canSubmit} className="cursor-pointer">
@@ -622,7 +625,7 @@ function FormFillerDialog({
     // Validate required fields
     const missing = form.fields.filter((f) => {
       if (!f.required) return false;
-      if (f.type === AnswerType.checkboxes) return !(checkAnswers[f.id]?.size);
+      if (f.type === AnswerType.checkboxes) return !checkAnswers[f.id]?.size;
       return !answers[f.id]?.trim();
     });
     if (missing.length > 0) {
@@ -796,7 +799,10 @@ function FieldRenderer({
             {(field.options ?? []).map((opt) => (
               <div key={opt.id} className="flex items-center gap-2">
                 <RadioGroupItem value={opt.id} id={`r-${field.id}-${opt.id}`} />
-                <Label htmlFor={`r-${field.id}-${opt.id}`} className="text-sm cursor-pointer font-normal">
+                <Label
+                  htmlFor={`r-${field.id}-${opt.id}`}
+                  className="text-sm cursor-pointer font-normal"
+                >
                   {opt.label}
                 </Label>
               </div>
@@ -817,7 +823,10 @@ function FieldRenderer({
                   checked={checkedValues?.has(opt.id) ?? false}
                   onCheckedChange={() => onToggleCheck(opt.id)}
                 />
-                <Label htmlFor={`c-${field.id}-${opt.id}`} className="text-sm cursor-pointer font-normal">
+                <Label
+                  htmlFor={`c-${field.id}-${opt.id}`}
+                  className="text-sm cursor-pointer font-normal"
+                >
                   {opt.label}
                 </Label>
               </div>
@@ -926,9 +935,7 @@ function ResponsesDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>
-            Responses — {form?.name ?? formSummary?.name ?? "Loading…"}
-          </DialogTitle>
+          <DialogTitle>Responses — {form?.name ?? formSummary?.name ?? "Loading…"}</DialogTitle>
           <DialogDescription>
             {responses.length} response{responses.length !== 1 ? "s" : ""} received
           </DialogDescription>
@@ -972,9 +979,7 @@ function ResponsesDialog({
                     return (
                       <tr key={resp.id} className="border-b border-border/50 hover:bg-muted/30">
                         <td className="py-2 px-2 text-muted-foreground">{ri + 1}</td>
-                        <td className="py-2 px-2 font-mono text-xs">
-                          {resp.pubkey.slice(0, 8)}…
-                        </td>
+                        <td className="py-2 px-2 font-mono text-xs">{resp.pubkey.slice(0, 8)}…</td>
                         <td className="py-2 px-2 text-xs text-muted-foreground whitespace-nowrap">
                           {new Date(resp.createdAt * 1000).toLocaleString()}
                         </td>
@@ -985,9 +990,7 @@ function ResponsesDialog({
                           if (f.type === AnswerType.checkboxes && raw) {
                             try {
                               const ids = JSON.parse(raw) as string[];
-                              const optMap = new Map(
-                                (f.options ?? []).map((o) => [o.id, o.label]),
-                              );
+                              const optMap = new Map((f.options ?? []).map((o) => [o.id, o.label]));
                               display = ids.map((id) => optMap.get(id) ?? id).join(", ");
                             } catch {
                               /* keep raw */
@@ -995,8 +998,7 @@ function ResponsesDialog({
                           }
                           // For radio/dropdown, show label instead of ID
                           if (
-                            (f.type === AnswerType.radioButton ||
-                              f.type === AnswerType.dropdown) &&
+                            (f.type === AnswerType.radioButton || f.type === AnswerType.dropdown) &&
                             raw
                           ) {
                             const opt = (f.options ?? []).find((o) => o.id === raw);

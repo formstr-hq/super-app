@@ -1,4 +1,3 @@
-import type { EventTemplate, Event, Filter } from "nostr-tools";
 import {
   signerManager,
   nostrRuntime,
@@ -8,6 +7,8 @@ import {
   wrapEvent,
 } from "@formstr/core";
 import type { SubscriptionHandle } from "@formstr/core";
+import type { EventTemplate, Event, Filter } from "nostr-tools";
+
 import {
   CALENDAR_KINDS,
   type CalendarEvent,
@@ -162,7 +163,7 @@ export function subscribeToCalendarEvents(
   };
 
   return nostrRuntime.subscribe(relays, [filter], {
-    onEvent: async (event) => {
+    onEvent: async (event: Event) => {
       const parsed = await parseCalendarEvent(event);
       if (parsed) onEvent(parsed);
     },
@@ -184,7 +185,7 @@ export async function fetchCalendarEventsSync(
 
   const events = await nostrRuntime.querySync(relays, filter);
   const parsed = await Promise.all(events.map(parseCalendarEvent));
-  return parsed.filter((e): e is CalendarEvent => e !== null);
+  return parsed.filter((e: CalendarEvent | null): e is CalendarEvent => e !== null);
 }
 
 // ── Calendar List CRUD ──────────────────────────────────
@@ -224,9 +225,7 @@ export async function createCalendarList(
   return { ...calendarData, eventId: signed.id };
 }
 
-export async function updateCalendarList(
-  calendarList: CalendarList,
-): Promise<CalendarList> {
+export async function updateCalendarList(calendarList: CalendarList): Promise<CalendarList> {
   const signer = await signerManager.getSigner();
 
   const content = await nip44SelfEncrypt(signer, JSON.stringify(calendarList));
@@ -274,10 +273,7 @@ export async function fetchCalendarLists(): Promise<CalendarList[]> {
 
 // ── Delete Event ────────────────────────────────────────
 
-export async function deleteCalendarEvent(
-  eventId: string,
-  coordinate?: string,
-): Promise<void> {
+export async function deleteCalendarEvent(eventId: string, coordinate?: string): Promise<void> {
   const signer = await signerManager.getSigner();
 
   const tags: string[][] = [["k", String(CALENDAR_KINDS.publicEvent)]];
@@ -319,9 +315,8 @@ async function parseCalendarEvent(event: Event): Promise<CalendarEvent | null> {
     }
   }
 
-  const title = tags.find((t) => t[0] === "title")?.[1]
-    ?? tags.find((t) => t[0] === "name")?.[1]
-    ?? "Untitled";
+  const title =
+    tags.find((t) => t[0] === "title")?.[1] ?? tags.find((t) => t[0] === "name")?.[1] ?? "Untitled";
   const description = tags.find((t) => t[0] === "description")?.[1] ?? "";
   const start = tags.find((t) => t[0] === "start")?.[1];
   const end = tags.find((t) => t[0] === "end")?.[1];

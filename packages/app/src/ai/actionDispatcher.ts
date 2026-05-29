@@ -1,16 +1,32 @@
-import type { ActionResult, EntityRef, ToolCall } from "./types";
-import { useFormsStore } from "../stores/formsStore";
-import { useCalendarStore } from "../stores/calendarStore";
-import { usePagesStore } from "../stores/pagesStore";
-import { useDriveStore } from "../stores/driveStore";
-import { usePollsStore } from "../stores/pollsStore";
-import { useAIPendingStore, moduleForTool } from "../stores/aiPendingStore";
-import type { AnswerType, FormField } from "../services/forms/types";
-import { FORM_KINDS } from "../services/forms/types";
-import * as formsService from "../services/forms/service";
-import { rsvpToEvent } from "../services/calendar/rsvp";
+// WIP — excluded from tsconfig.json until the underlying service/store
+// methods land in weeks 5-6 (calendar) / 9-10 (AI). See
+// docs/superpowers/specs/2026-05-27-week-1-2-foundation-design.md.
+// @ts-nocheck
+
+// Stub: the full implementation below is commented out because it calls
+// store/service methods that don't exist yet (FormsStore.updateForm/shareForm/
+// importForm, CalendarStore.updateEvent, formsService.fetchFormSummaryFromRef).
+// These land in weeks 5-6 (calendar) and 9-10 (AI).
+import type { ActionResult, ToolCall } from "./types";
+
+export async function dispatchAction(_toolCall: ToolCall): Promise<ActionResult> {
+  return { success: false, message: "Action dispatcher not yet implemented." };
+}
+
+/* ── Full WIP implementation (uncomment when service methods land) ──────────
 import { createRef, parseRef } from "@formstr/core";
 import { nip19 } from "nostr-tools";
+
+import { rsvpToEvent } from "../services/calendar/rsvp";
+import * as formsService from "../services/forms/service";
+import type { AnswerType, FormField } from "../services/forms/types";
+import { FORM_KINDS } from "../services/forms/types";
+import { useAIPendingStore, moduleForTool } from "../stores/aiPendingStore";
+import { useCalendarStore } from "../stores/calendarStore";
+import { useDriveStore } from "../stores/driveStore";
+import { useFormsStore } from "../stores/formsStore";
+import { usePagesStore } from "../stores/pagesStore";
+import { usePollsStore } from "../stores/pollsStore";
 
 function normalizePubkey(value: string): string | null {
   const trimmed = value.trim();
@@ -21,7 +37,7 @@ function normalizePubkey(value: string): string | null {
       const decoded = nip19.decode(trimmed);
       if (decoded.type === "npub") return decoded.data;
     } catch {
-      /* ignore */
+      // ignore
     }
   }
   return null;
@@ -62,9 +78,7 @@ function normalizePubkeyList(values: unknown): string[] {
 export async function dispatchAction(toolCall: ToolCall): Promise<ActionResult> {
   const args = toolCall.arguments as Record<string, unknown>;
   const module = moduleForTool(toolCall.name);
-  const pendingId = module
-    ? useAIPendingStore.getState().begin(module, toolCall.name)
-    : null;
+  const pendingId = module ? useAIPendingStore.getState().begin(module, toolCall.name) : null;
   try {
     return await runDispatch(toolCall, args);
   } finally {
@@ -107,12 +121,7 @@ async function runDispatch(
         shareViewKey,
       });
 
-      const naddr = createRef(
-        "forms",
-        FORM_KINDS.template,
-        result.pubkey,
-        result.formId,
-      );
+      const naddr = createRef("forms", FORM_KINDS.template, result.pubkey, result.formId);
 
       const entity: EntityRef = {
         module: "forms",
@@ -210,12 +219,7 @@ async function runDispatch(
         return { success: false, message: "Form not found on configured relays." };
       }
       await useFormsStore.getState().importForm(summary);
-      const naddr = createRef(
-        "forms",
-        FORM_KINDS.template,
-        summary.pubkey,
-        summary.id,
-      );
+      const naddr = createRef("forms", FORM_KINDS.template, summary.pubkey, summary.id);
       return {
         success: true,
         message: `Imported form "${summary.name}".`,
@@ -231,22 +235,18 @@ async function runDispatch(
     case "submit_form_response": {
       const formAuthorPubkey = args.formAuthorPubkey as string;
       const formId = args.formId as string;
-      const answersArg = (args.answers as Array<{
-        fieldId: string;
-        answer: string;
-        metadata?: string;
-      }>) ?? [];
+      const answersArg =
+        (args.answers as Array<{
+          fieldId: string;
+          answer: string;
+          metadata?: string;
+        }>) ?? [];
       const responses = answersArg.map((a) => ({
         fieldId: a.fieldId,
         answer: a.answer,
         metadata: a.metadata,
       }));
-      await formsService.submitResponse(
-        formAuthorPubkey,
-        formId,
-        responses,
-        Boolean(args.encrypt),
-      );
+      await formsService.submitResponse(formAuthorPubkey, formId, responses, Boolean(args.encrypt));
       return {
         success: true,
         message: `Submitted ${responses.length} answer(s) to form ${formId}.`,
@@ -274,10 +274,9 @@ async function runDispatch(
     }
 
     case "fetch_form_responses": {
-      await useFormsStore.getState().loadResponses(
-        args.formAuthorPubkey as string,
-        args.formId as string,
-      );
+      await useFormsStore
+        .getState()
+        .loadResponses(args.formAuthorPubkey as string, args.formId as string);
       const responses = useFormsStore.getState().responses;
       return {
         success: true,
@@ -490,3 +489,4 @@ async function runDispatch(
       return { success: false, message: `Unknown tool: ${toolCall.name}` };
   }
 }
+─────────────────────────────────────────────────────────────────────────── */

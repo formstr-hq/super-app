@@ -33,18 +33,12 @@ export async function nip44Decrypt(
  * Used by Calendar (private events), Pages (documents),
  * Drive (file metadata), Forms (my forms list — kind 14083).
  */
-export async function nip44SelfEncrypt(
-  signer: NostrSigner,
-  plaintext: string,
-): Promise<string> {
+export async function nip44SelfEncrypt(signer: NostrSigner, plaintext: string): Promise<string> {
   const pubkey = await signer.getPublicKey();
   return nip44Encrypt(signer, pubkey, plaintext);
 }
 
-export async function nip44SelfDecrypt(
-  signer: NostrSigner,
-  ciphertext: string,
-): Promise<string> {
+export async function nip44SelfDecrypt(signer: NostrSigner, ciphertext: string): Promise<string> {
   const pubkey = await signer.getPublicKey();
   return nip44Decrypt(signer, pubkey, ciphertext);
 }

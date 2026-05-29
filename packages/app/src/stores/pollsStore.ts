@@ -1,4 +1,5 @@
 import { create } from "zustand";
+
 import type { Poll, PollDraft, PollResults } from "../services/polls";
 import * as pollsService from "../services/polls/service";
 
@@ -37,7 +38,10 @@ export const usePollsStore = create<PollsStore>((set) => ({
       const polls = await pollsService.fetchMyPolls();
       set({ myPolls: polls, isLoadingMine: false });
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Failed to fetch polls", isLoadingMine: false });
+      set({
+        error: e instanceof Error ? e.message : "Failed to fetch polls",
+        isLoadingMine: false,
+      });
     }
   },
 
@@ -47,7 +51,10 @@ export const usePollsStore = create<PollsStore>((set) => ({
       const polls = await pollsService.fetchRecentPolls();
       set({ recentPolls: polls, isLoadingRecent: false });
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Failed to fetch polls", isLoadingRecent: false });
+      set({
+        error: e instanceof Error ? e.message : "Failed to fetch polls",
+        isLoadingRecent: false,
+      });
     }
   },
 
@@ -57,7 +64,10 @@ export const usePollsStore = create<PollsStore>((set) => ({
       const poll = await pollsService.fetchPoll(eventId);
       set({ currentPoll: poll, isLoadingDetail: false });
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Failed to load poll", isLoadingDetail: false });
+      set({
+        error: e instanceof Error ? e.message : "Failed to load poll",
+        isLoadingDetail: false,
+      });
     }
   },
 

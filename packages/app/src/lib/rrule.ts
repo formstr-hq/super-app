@@ -1,4 +1,6 @@
-import { RRule, RRuleSet, rrulestr, Weekday } from "rrule";
+import type { Weekday } from "rrule";
+import { RRule, RRuleSet, rrulestr } from "rrule";
+
 import type { CalendarEvent } from "../services/calendar/types";
 
 function asRRule(x: unknown): RRule | null {
@@ -32,9 +34,10 @@ export function expandEvent(
   let rule: RRule | null = null;
   try {
     // Allow either "FREQ=...", "RRULE:FREQ=..." or full "DTSTART...;RRULE:..."
-    const normalized = rruleStr.startsWith("RRULE:") || rruleStr.startsWith("DTSTART")
-      ? rruleStr
-      : `RRULE:${rruleStr}`;
+    const normalized =
+      rruleStr.startsWith("RRULE:") || rruleStr.startsWith("DTSTART")
+        ? rruleStr
+        : `RRULE:${rruleStr}`;
     rule = asRRule(rrulestr(normalized, { dtstart }));
     if (!rule) return [event];
   } catch {
@@ -42,9 +45,7 @@ export function expandEvent(
   }
 
   // rrule's `.between` is inclusive on start
-  const occurrences = rule
-    .between(rangeStart, rangeEnd, true)
-    .slice(0, maxOccurrences);
+  const occurrences = rule.between(rangeStart, rangeEnd, true).slice(0, maxOccurrences);
 
   if (occurrences.length === 0) return [];
 
@@ -134,17 +135,17 @@ export function parseRRuleString(rruleStr: string | null | undefined): RRulePart
       opts.freq === RRule.DAILY
         ? "DAILY"
         : opts.freq === RRule.WEEKLY
-        ? "WEEKLY"
-        : opts.freq === RRule.MONTHLY
-        ? "MONTHLY"
-        : opts.freq === RRule.YEARLY
-        ? "YEARLY"
-        : null;
+          ? "WEEKLY"
+          : opts.freq === RRule.MONTHLY
+            ? "MONTHLY"
+            : opts.freq === RRule.YEARLY
+              ? "YEARLY"
+              : null;
     if (!freq) return null;
 
     const byDayShort: RRuleParts["byDay"] = opts.byweekday
       ? (opts.byweekday as unknown as Array<number | Weekday>).map((wd) => {
-          const num = typeof wd === "number" ? wd : (wd as Weekday).weekday ?? 0;
+          const num = typeof wd === "number" ? wd : ((wd as Weekday).weekday ?? 0);
           return (["MO", "TU", "WE", "TH", "FR", "SA", "SU"] as const)[num];
         })
       : undefined;

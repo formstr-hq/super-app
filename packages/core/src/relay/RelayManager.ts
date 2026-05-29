@@ -1,5 +1,6 @@
-import { nostrRuntime } from "../runtime/NostrRuntime";
 import type { Event, Filter } from "nostr-tools";
+
+import { nostrRuntime } from "../runtime/NostrRuntime";
 
 export interface RelayConfig {
   url: string;
@@ -20,23 +21,32 @@ const DEFAULT_RELAYS: string[] = [
 /** Module-specific relay subsets for backwards compatibility */
 const MODULE_RELAYS: Record<string, string[]> = {
   forms: [
-    "wss://relay.damus.io", "wss://relay.primal.net", "wss://relay.nos.lol",
-    "wss://relay.nostr.wirednet.jp", "wss://relay.yakinonne.com",
-    "wss://relay.snort.social", "wss://relay.nostr.band", "wss://relay.nostr21.com",
+    "wss://relay.damus.io",
+    "wss://relay.primal.net",
+    "wss://relay.nos.lol",
+    "wss://relay.nostr.wirednet.jp",
+    "wss://relay.yakinonne.com",
+    "wss://relay.snort.social",
+    "wss://relay.nostr.band",
+    "wss://relay.nostr21.com",
   ],
   calendar: [
-    "wss://relay.damus.io", "wss://relay.primal.net", "wss://relay.nos.lol",
-    "wss://nostr-pub.wellorder.net", "wss://nostr.mom", "wss://nos.lol",
+    "wss://relay.damus.io",
+    "wss://relay.primal.net",
+    "wss://relay.nos.lol",
+    "wss://nostr-pub.wellorder.net",
+    "wss://nostr.mom",
+    "wss://nos.lol",
   ],
-  pages: [
-    "wss://relay.damus.io", "wss://relay.primal.net", "wss://nos.lol",
-  ],
-  drive: [
-    "wss://relay.damus.io", "wss://relay.nostr.band", "wss://nos.lol",
-  ],
+  pages: ["wss://relay.damus.io", "wss://relay.primal.net", "wss://nos.lol"],
+  drive: ["wss://relay.damus.io", "wss://relay.nostr.band", "wss://nos.lol"],
   polls: [
-    "wss://relay.damus.io", "wss://relay.primal.net", "wss://nos.lol",
-    "wss://relay.nostr.wirednet.jp", "wss://nostr-01.yakihonne.com", "wss://nostr21.com",
+    "wss://relay.damus.io",
+    "wss://relay.primal.net",
+    "wss://nos.lol",
+    "wss://relay.nostr.wirednet.jp",
+    "wss://nostr-01.yakihonne.com",
+    "wss://nostr21.com",
   ],
 };
 

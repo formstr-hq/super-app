@@ -1,5 +1,3 @@
-import type { EventTemplate, Event, Filter } from "nostr-tools";
-import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
 import {
   signerManager,
   nostrRuntime,
@@ -9,6 +7,9 @@ import {
   nip44SelfDecrypt,
 } from "@formstr/core";
 import type { SubscriptionHandle } from "@formstr/core";
+import type { EventTemplate, Event, Filter } from "nostr-tools";
+import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
+
 import {
   FORM_KINDS,
   type FormField,
@@ -78,13 +79,20 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
     const viewPubkey = getPublicKey(viewKey);
 
     // Encrypt form spec with view key (NIP-44 to view pubkey)
-    content = await nip44Encrypt(signer, viewPubkey, JSON.stringify(tags.filter((t) => t[0] === "field")));
+    content = await nip44Encrypt(
+      signer,
+      viewPubkey,
+      JSON.stringify(tags.filter((t) => t[0] === "field")),
+    );
 
     // Publish with signing key
     const event: EventTemplate = {
       kind: FORM_KINDS.template,
       created_at: Math.floor(Date.now() / 1000),
-      tags: [["d", formId], ["name", params.name]],
+      tags: [
+        ["d", formId],
+        ["name", params.name],
+      ],
       content,
     };
 
@@ -112,10 +120,7 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
 
 // ── Fetch Form ──────────────────────────────────────────
 
-export async function fetchForm(
-  pubkey: string,
-  formId: string,
-): Promise<FormTemplate | null> {
+export async function fetchForm(pubkey: string, formId: string): Promise<FormTemplate | null> {
   const relays = relayManager.getRelaysForModule("forms");
   const filter: Filter = {
     kinds: [FORM_KINDS.template],
@@ -202,7 +207,7 @@ export function subscribeToResponses(
   };
 
   return nostrRuntime.subscribe(relays, [filter], {
-    onEvent: (event) => {
+    onEvent: (event: Event) => {
       const parsed = parseResponseEvent(event);
       if (parsed) onResponse(parsed);
     },
@@ -221,7 +226,9 @@ export async function fetchResponses(
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map(parseResponseEvent).filter((r): r is FormResponseEvent => r !== null);
+  return events
+    .map(parseResponseEvent)
+    .filter((r: FormResponseEvent | null): r is FormResponseEvent => r !== null);
 }
 
 // ── My Forms List (kind 14083) ──────────────────────────
@@ -262,7 +269,12 @@ export async function fetchMyForms(): Promise<FormSummary[]> {
     const raw = JSON.parse(decrypted) as unknown;
 
     // Already structured objects (from our own saveToMyForms)
-    if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "object" && !Array.isArray(raw[0])) {
+    if (
+      Array.isArray(raw) &&
+      raw.length > 0 &&
+      typeof raw[0] === "object" &&
+      !Array.isArray(raw[0])
+    ) {
       return raw as FormSummary[];
     }
 
@@ -299,7 +311,9 @@ export async function fetchMyForms(): Promise<FormSummary[]> {
         name,
         pubkey: ref.pubkey,
         createdAt: evt?.created_at ?? 0,
-        isEncrypted: (evt?.content?.length ?? 0) > 0 && (evt?.tags.filter((t: string[]) => t[0] === "field").length ?? 0) === 0,
+        isEncrypted:
+          (evt?.content?.length ?? 0) > 0 &&
+          (evt?.tags.filter((t: string[]) => t[0] === "field").length ?? 0) === 0,
       };
     });
   } catch {
@@ -331,7 +345,7 @@ async function fetchMyFormsByAuthor(pubkey: string, relays: string[]): Promise<F
     authors: [pubkey],
   };
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map((evt) => {
+  return events.map((evt: Event) => {
     const dTag = evt.tags.find((t: string[]) => t[0] === "d")?.[1] ?? "";
     const name = evt.tags.find((t: string[]) => t[0] === "name")?.[1] ?? "Untitled";
     const hasFieldTags = evt.tags.some((t: string[]) => t[0] === "field");
@@ -347,10 +361,7 @@ async function fetchMyFormsByAuthor(pubkey: string, relays: string[]): Promise<F
 
 // ── Delete Form ─────────────────────────────────────────
 
-export async function deleteForm(
-  formId: string,
-  formPubkey: string,
-): Promise<void> {
+export async function deleteForm(formId: string, formPubkey: string): Promise<void> {
   const signer = await signerManager.getSigner();
   const coordinate = `${FORM_KINDS.template}:${formPubkey}:${formId}`;
 

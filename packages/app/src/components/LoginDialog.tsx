@@ -1,16 +1,13 @@
-import { useState } from "react";
 import { Key, Puzzle, UserRound, Eye, EyeOff, Radio } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { useState } from "react";
+
+import { useAuthStore } from "../stores";
+
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useAuthStore } from "../stores";
 import { cn } from "@/lib/utils";
 
 interface LoginDialogProps {
@@ -70,7 +67,7 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
             className={cn(
               "w-full flex items-center gap-3 rounded-lg border-2 border-primary bg-primary/5 px-4 py-3",
               "hover:bg-primary/10 transition-colors duration-150 cursor-pointer disabled:opacity-50",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
             <Puzzle className="h-5 w-5 text-primary shrink-0" />
@@ -95,7 +92,7 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
                 "w-full flex items-center gap-3 rounded-lg border border-border px-4 py-3",
                 "hover:bg-accent transition-colors duration-150 cursor-pointer",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                nsecExpanded && "rounded-b-none border-b-0"
+                nsecExpanded && "rounded-b-none border-b-0",
               )}
             >
               <Key className="h-5 w-5 text-muted-foreground shrink-0" />
@@ -127,7 +124,11 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
                       aria-label={showNsec ? "Hide key" : "Show key"}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      {showNsec ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      {showNsec ? (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -159,4 +160,3 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
     </Dialog>
   );
 }
-

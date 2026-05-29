@@ -1,5 +1,4 @@
-import { SimplePool } from "nostr-tools";
-import type { Filter } from "nostr-tools";
+import type { Event as NostrEvent, Filter, SimplePool } from "nostr-tools";
 
 export interface SubscriptionHandle {
   unsub(): void;
@@ -7,7 +6,7 @@ export interface SubscriptionHandle {
 
 interface SubscriptionListener {
   id: number;
-  onEvent?: (event: import("nostr-tools").Event) => void;
+  onEvent?: (event: NostrEvent) => void;
   onEose?: () => void;
 }
 
@@ -19,7 +18,7 @@ interface ManagedSubscription {
   relays: string[];
   listeners: SubscriptionListener[];
   eoseFired: boolean;
-  receivedEvents: import("nostr-tools").Event[];
+  receivedEvents: NostrEvent[];
 }
 
 /**
@@ -44,7 +43,7 @@ export class SubscriptionManager {
     relays: string[],
     filters: Filter[],
     options?: {
-      onEvent?: (event: import("nostr-tools").Event) => void;
+      onEvent?: (event: NostrEvent) => void;
       onEose?: () => void;
     },
   ): SubscriptionHandle {
@@ -77,11 +76,13 @@ export class SubscriptionManager {
     }
 
     // New subscription
-    const listeners: SubscriptionListener[] = [{
-      id: listenerId,
-      onEvent: options?.onEvent,
-      onEose: options?.onEose,
-    }];
+    const listeners: SubscriptionListener[] = [
+      {
+        id: listenerId,
+        onEvent: options?.onEvent,
+        onEose: options?.onEose,
+      },
+    ];
 
     const managed: ManagedSubscription = {
       hash,

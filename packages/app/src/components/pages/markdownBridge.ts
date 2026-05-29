@@ -177,7 +177,9 @@ export function htmlToMarkdown(html: string): string {
     const tag = el.tagName.toLowerCase();
 
     const childText = (ctx?: "ul" | "ol" | "task") =>
-      Array.from(el.childNodes).map((c) => walk(c, ctx, depth)).join("");
+      Array.from(el.childNodes)
+        .map((c) => walk(c, ctx, depth))
+        .join("");
 
     switch (tag) {
       case "h1":
@@ -215,10 +217,12 @@ export function htmlToMarkdown(html: string): string {
       }
       case "blockquote": {
         const inner = childText().trimEnd();
-        return inner
-          .split("\n")
-          .map((line) => (line.length ? `> ${line}` : ">"))
-          .join("\n") + "\n\n";
+        return (
+          inner
+            .split("\n")
+            .map((line) => (line.length ? `> ${line}` : ">"))
+            .join("\n") + "\n\n"
+        );
       }
       case "hr":
         return "---\n\n";

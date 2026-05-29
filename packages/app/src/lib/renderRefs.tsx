@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+
 import { EntityPill } from "../components/EntityPill";
 
 // Matches bech32 naddr1…, nevent1…, note1… tokens (common ref formats)
@@ -25,9 +26,7 @@ export function renderRefs(text: string): ReactNode[] {
     if (start > lastIndex) {
       nodes.push(text.slice(lastIndex, start));
     }
-    nodes.push(
-      <EntityPill key={`${start}-${naddr.slice(0, 12)}`} naddr={naddr} readOnly />,
-    );
+    nodes.push(<EntityPill key={`${start}-${naddr.slice(0, 12)}`} naddr={naddr} readOnly />);
     lastIndex = start + naddr.length;
   }
 

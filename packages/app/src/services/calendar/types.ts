@@ -40,19 +40,19 @@ export interface CalendarEvent {
   title: string;
   description: string;
   kind: number;
-  begin: number;         // ms timestamp
-  end: number;           // ms timestamp
+  begin: number; // ms timestamp
+  end: number; // ms timestamp
   createdAt: number;
   image?: string;
   categories: string[];
   participants: string[];
   location: string[];
   website: string;
-  user: string;          // author pubkey
+  user: string; // author pubkey
   isPrivate: boolean;
   viewKey?: string;
   repeat: { rrule: string | null };
-  startTzid?: string;    // IANA timezone identifier (matches upstream "start_tzid")
+  startTzid?: string; // IANA timezone identifier (matches upstream "start_tzid")
   endTzid?: string;
   registrationFormRef?: string; // naddr of a Formstr form used as registration
   calendarId?: string;

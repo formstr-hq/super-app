@@ -1,10 +1,7 @@
+import { LocalSigner, wrapEvent, type NostrSigner } from "@formstr/core";
 import { generateSecretKey, getPublicKey } from "nostr-tools";
-import {
-  LocalSigner,
-  wrapEvent,
-  type NostrSigner,
-} from "@formstr/core";
 import type { VerifiedEvent } from "nostr-tools";
+
 import { FORM_KINDS } from "./types";
 
 /**

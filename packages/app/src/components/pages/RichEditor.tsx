@@ -1,27 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { Editor, Range } from "@tiptap/core";
 import { Extension } from "@tiptap/core";
+import Link from "@tiptap/extension-link";
+import Placeholder from "@tiptap/extension-placeholder";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
+import { PluginKey } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import Link from "@tiptap/extension-link";
-import TaskList from "@tiptap/extension-task-list";
-import TaskItem from "@tiptap/extension-task-item";
-import Suggestion, {
-  type SuggestionKeyDownProps,
-  type SuggestionProps,
-} from "@tiptap/suggestion";
-import { PluginKey } from "@tiptap/pm/state";
+import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from "@tiptap/suggestion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+import { MentionPicker, type MentionItem } from "../MentionPicker";
+
+import { htmlToMarkdown, markdownToHtml } from "./markdownBridge";
+import { SLASH_COMMANDS, filterSlashCommands, type SlashCommandItem } from "./slashCommands";
 
 import { cn } from "@/lib/utils";
-import {
-  SLASH_COMMANDS,
-  filterSlashCommands,
-  type SlashCommandItem,
-} from "./slashCommands";
-import { htmlToMarkdown, markdownToHtml } from "./markdownBridge";
-import { MentionPicker, type MentionItem } from "../MentionPicker";
 
 // ═══════════════════════════════════════════════════════════
 // Slash command extension (uses @tiptap/suggestion)
@@ -129,9 +124,7 @@ function createMentionExtension(
               .run();
           },
           render: () => ({
-            onStart: (
-              props: SuggestionProps<MentionItem, { mention: MentionItem } | null>,
-            ) => {
+            onStart: (props: SuggestionProps<MentionItem, { mention: MentionItem } | null>) => {
               onOpen({
                 command: (item) => props.command(item),
                 clientRect: props.clientRect ?? null,
@@ -200,17 +193,13 @@ function SlashPopup({
                 }}
                 className={cn(
                   "flex w-full items-start gap-2.5 px-3 py-2 text-left text-sm transition-colors",
-                  i === selectedIdx
-                    ? "bg-accent text-accent-foreground"
-                    : "hover:bg-accent/50",
+                  i === selectedIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
                 )}
               >
                 <Icon className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium leading-tight">{item.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {item.description}
-                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{item.description}</p>
                 </div>
               </button>
             );
@@ -247,11 +236,7 @@ function MentionPopup({
 
   return createPortal(
     <div style={style}>
-      <MentionPicker
-        query={state.query}
-        onSelect={onSelect}
-        onClose={onClose}
-      />
+      <MentionPicker query={state.query} onSelect={onSelect} onClose={onClose} />
     </div>,
     document.body,
   );
@@ -373,7 +358,7 @@ export function RichEditor({
         handleMentionKeyDown,
       ),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [placeholder],
   );
 
@@ -390,8 +375,7 @@ export function RichEditor({
     editable,
     editorProps: {
       attributes: {
-        class:
-          "prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[280px] px-1",
+        class: "prose prose-sm dark:prose-invert max-w-none focus:outline-none min-h-[280px] px-1",
       },
     },
     onUpdate({ editor }) {
@@ -417,11 +401,7 @@ export function RichEditor({
       <EditorContent editor={editor} className="flex-1 min-h-0 overflow-auto" />
 
       {slashState && (
-        <SlashPopup
-          state={slashState}
-          selectedIdx={slashIdx}
-          onSelect={setSlashIdx}
-        />
+        <SlashPopup state={slashState} selectedIdx={slashIdx} onSelect={setSlashIdx} />
       )}
 
       {mentionState && (

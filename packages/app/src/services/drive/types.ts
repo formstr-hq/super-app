@@ -7,13 +7,13 @@ export const DRIVE_KINDS = {
 
 export interface FileMetadata {
   name: string;
-  hash: string;           // SHA-256 (Blossom blob ID)
+  hash: string; // SHA-256 (Blossom blob ID)
   size: number;
-  type: string;           // MIME type
-  folder: string;         // virtual path e.g. "/work/docs"
+  type: string; // MIME type
+  folder: string; // virtual path e.g. "/work/docs"
   uploadedAt: number;
-  server: string;         // Blossom server URL
-  encryptionKey: string;  // hex key for file decryption
+  server: string; // Blossom server URL
+  encryptionKey: string; // hex key for file decryption
   deleted?: boolean;
   previewHash?: string;
 }

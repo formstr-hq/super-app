@@ -1,6 +1,6 @@
-import { create } from "zustand";
 import type { SignerState, SignerMethod } from "@formstr/core";
 import { signerManager } from "@formstr/core";
+import { create } from "zustand";
 
 interface AuthStore {
   pubkey: string | null;

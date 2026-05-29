@@ -55,8 +55,8 @@ function serializeEvent(event: CalendarEvent): string[] {
   const endParam = event.endTzid
     ? `DTEND;TZID=${event.endTzid}:${toIcsDate(event.end, event.endTzid)}`
     : event.startTzid
-    ? `DTEND;TZID=${event.startTzid}:${toIcsDate(event.end, event.startTzid)}`
-    : `DTEND:${toIcsDate(event.end)}`;
+      ? `DTEND;TZID=${event.startTzid}:${toIcsDate(event.end, event.startTzid)}`
+      : `DTEND:${toIcsDate(event.end)}`;
 
   const lines: string[] = [
     "BEGIN:VEVENT",

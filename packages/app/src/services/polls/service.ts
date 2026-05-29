@@ -1,10 +1,7 @@
-import type { EventTemplate, Event, Filter } from "nostr-tools";
-import {
-  signerManager,
-  nostrRuntime,
-  relayManager,
-} from "@formstr/core";
+import { signerManager, nostrRuntime, relayManager } from "@formstr/core";
 import type { SubscriptionHandle } from "@formstr/core";
+import type { EventTemplate, Event, Filter } from "nostr-tools";
+
 import {
   POLLS_KINDS,
   type Poll,
@@ -21,9 +18,7 @@ export async function createPoll(draft: PollDraft): Promise<Poll> {
   const pubkey = await signer.getPublicKey();
   const relays = relayManager.getRelaysForModule("polls");
 
-  const tags: string[][] = [
-    ["polltype", draft.pollType],
-  ];
+  const tags: string[][] = [["polltype", draft.pollType]];
 
   const options: PollOption[] = draft.options.map((o) => ({
     id: crypto.randomUUID().slice(0, 8),
@@ -128,7 +123,7 @@ export function subscribeToPollResults(
   };
 
   return nostrRuntime.subscribe(relays, [filter], {
-    onEvent: (event) => {
+    onEvent: (event: Event) => {
       const selected = event.tags
         .filter((t: string[]) => t[0] === "response")
         .map((t: string[]) => t[1]);
@@ -179,7 +174,7 @@ export async function fetchRecentPolls(limit = 20): Promise<Poll[]> {
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map(parsePollEvent).filter((p): p is Poll => p !== null);
+  return events.map(parsePollEvent).filter((p: Poll | null): p is Poll => p !== null);
 }
 
 export async function fetchMyPolls(): Promise<Poll[]> {
@@ -193,7 +188,7 @@ export async function fetchMyPolls(): Promise<Poll[]> {
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map(parsePollEvent).filter((p): p is Poll => p !== null);
+  return events.map(parsePollEvent).filter((p: Poll | null): p is Poll => p !== null);
 }
 
 // ── Helpers ─────────────────────────────────────────────

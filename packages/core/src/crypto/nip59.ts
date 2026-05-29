@@ -1,9 +1,7 @@
-import {
-  generateSecretKey,
-  finalizeEvent,
-} from "nostr-tools";
-import * as nip44 from "nostr-tools/nip44";
+import { generateSecretKey, finalizeEvent } from "nostr-tools";
 import type { EventTemplate, Event, VerifiedEvent } from "nostr-tools";
+import * as nip44 from "nostr-tools/nip44";
+
 import type { NostrSigner } from "../signer/types";
 
 type UnsignedEvent = Omit<Event, "sig">;
@@ -29,7 +27,7 @@ export function createRumor(event: Partial<EventTemplate> & { kind: number }): U
     tags: event.tags ?? [],
     content: event.content ?? "",
     pubkey: "", // Will be set by caller
-    id: "",    // Unsigned — no ID
+    id: "", // Unsigned — no ID
     sig: "",
   } as UnsignedEvent;
 }

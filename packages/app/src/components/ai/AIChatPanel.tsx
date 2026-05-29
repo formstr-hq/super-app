@@ -1,8 +1,10 @@
-import { useRef, useEffect, useState, useCallback, type KeyboardEvent } from "react";
 import { X, Send, Trash2, Sparkles, Loader2, AlertCircle } from "lucide-react";
+import { useRef, useEffect, useState, useCallback, type KeyboardEvent } from "react";
+
 import { useAIStore, useSettingsStore } from "../../stores";
-import { MessageBubble } from "./MessageBubble";
+
 import { EntityCard } from "./EntityCard";
+import { MessageBubble } from "./MessageBubble";
 
 export function AIChatPanel() {
   const {
@@ -54,14 +56,15 @@ export function AIChatPanel() {
 
   const recentEntities = entities.slice(-5);
 
-  const suggestions = messages.length === 0
-    ? [
-        "Create a feedback form",
-        "Schedule a meeting for tomorrow at 3pm",
-        "Create a poll about lunch options",
-        "Write a project update page",
-      ]
-    : [];
+  const suggestions =
+    messages.length === 0
+      ? [
+          "Create a feedback form",
+          "Schedule a meeting for tomorrow at 3pm",
+          "Create a poll about lunch options",
+          "Write a project update page",
+        ]
+      : [];
 
   return (
     <div className="flex h-full w-[380px] shrink-0 flex-col border-l border-border bg-background">
@@ -81,7 +84,9 @@ export function AIChatPanel() {
               title="Select AI model"
             >
               {availableModels.map((m) => (
-                <option key={m} value={m}>{m.replace(/:latest$/, "")}</option>
+                <option key={m} value={m}>
+                  {m.replace(/:latest$/, "")}
+                </option>
               ))}
             </select>
           )}
@@ -107,14 +112,17 @@ export function AIChatPanel() {
           <div className="flex flex-col items-center justify-center gap-3 pt-12 text-center">
             <Sparkles className="h-8 w-8 text-muted-foreground/50" />
             <p className="text-sm text-muted-foreground">
-              Ask me to create forms, schedule events, write pages, create polls, or browse your files.
+              Ask me to create forms, schedule events, write pages, create polls, or browse your
+              files.
             </p>
           </div>
         )}
 
-        {messages.filter((m) => m.role !== "assistant" || m.content.trim()).map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
+        {messages
+          .filter((m) => m.role !== "assistant" || m.content.trim())
+          .map((msg) => (
+            <MessageBubble key={msg.id} message={msg} />
+          ))}
 
         {streamingContent && (
           <MessageBubble
@@ -210,7 +218,5 @@ function StatusDot({ status }: { status: string }) {
           ? "bg-red-500"
           : "bg-gray-400";
 
-  return (
-    <span className={`inline-block h-2 w-2 rounded-full ${color}`} title={status} />
-  );
+  return <span className={`inline-block h-2 w-2 rounded-full ${color}`} title={status} />;
 }

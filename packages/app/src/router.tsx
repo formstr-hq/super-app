@@ -1,23 +1,17 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
+
 import { AppShell } from "./layout";
+
 import { Skeleton } from "@/components/ui/skeleton";
 
-const FormsPage = lazy(() =>
-  import("./pages/FormsPage").then((m) => ({ default: m.FormsPage })),
-);
+const FormsPage = lazy(() => import("./pages/FormsPage").then((m) => ({ default: m.FormsPage })));
 const CalendarPage = lazy(() =>
   import("./pages/CalendarPage").then((m) => ({ default: m.CalendarPage })),
 );
-const PagesPage = lazy(() =>
-  import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })),
-);
-const DrivePage = lazy(() =>
-  import("./pages/DrivePage").then((m) => ({ default: m.DrivePage })),
-);
-const PollsPage = lazy(() =>
-  import("./pages/PollsPage").then((m) => ({ default: m.PollsPage })),
-);
+const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })));
+const DrivePage = lazy(() => import("./pages/DrivePage").then((m) => ({ default: m.DrivePage })));
+const PollsPage = lazy(() => import("./pages/PollsPage").then((m) => ({ default: m.PollsPage })));
 
 function RouteFallback() {
   return (

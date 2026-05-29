@@ -1,12 +1,8 @@
-import type { EventTemplate, Filter } from "nostr-tools";
-import {
-  signerManager,
-  nostrRuntime,
-  relayManager,
-  wrapEvent,
-  unwrapEvent,
-} from "@formstr/core";
-import { CALENDAR_KINDS, RSVPStatus, type RSVPResponse } from "./types";
+import { signerManager, nostrRuntime, relayManager, wrapEvent, unwrapEvent } from "@formstr/core";
+import type { Event as NostrEvent, EventTemplate, Filter } from "nostr-tools";
+
+import type { RSVPStatus } from "./types";
+import { CALENDAR_KINDS, type RSVPResponse } from "./types";
 
 // ── Publish an RSVP ─────────────────────────────────────
 /**
@@ -50,7 +46,11 @@ export async function rsvpToEvent(
 
   if (isPrivate) {
     const wrap = await wrapEvent(
-      { kind: CALENDAR_KINDS.rsvpRumor, content: JSON.stringify({ eventCoordinate, status }), tags },
+      {
+        kind: CALENDAR_KINDS.rsvpRumor,
+        content: JSON.stringify({ eventCoordinate, status }),
+        tags,
+      },
       signer,
       authorPubkey,
       CALENDAR_KINDS.rsvpGiftWrap,
@@ -64,9 +64,7 @@ export async function rsvpToEvent(
 
 // ── Fetch RSVPs for events ──────────────────────────────
 
-export async function fetchRsvpsForEvent(
-  eventCoordinate: string,
-): Promise<RSVPResponse[]> {
+export async function fetchRsvpsForEvent(eventCoordinate: string): Promise<RSVPResponse[]> {
   const relays = relayManager.getRelaysForModule("calendar");
   const filter: Filter = {
     kinds: [CALENDAR_KINDS.publicRsvp],
@@ -76,7 +74,7 @@ export async function fetchRsvpsForEvent(
 
   const latestByPubkey = new Map<string, RSVPResponse>();
   for (const evt of events) {
-    const status = evt.tags.find((t) => t[0] === "status")?.[1] as RSVPStatus | undefined;
+    const status = evt.tags.find((t: string[]) => t[0] === "status")?.[1] as RSVPStatus | undefined;
     if (!status) continue;
     const existing = latestByPubkey.get(evt.pubkey);
     if (existing && existing.createdAt >= evt.created_at) continue;
@@ -104,19 +102,14 @@ export interface InvitationRumor {
  * Decrypt a gift-wrap addressed to the current user and, when it contains
  * a calendar-rumor pointer, return the referenced addressable coordinate.
  */
-export async function extractInvitationFromWrap(
-  wrap: import("nostr-tools").Event,
-): Promise<InvitationRumor | null> {
+export async function extractInvitationFromWrap(wrap: NostrEvent): Promise<InvitationRumor | null> {
   try {
     const signer = await signerManager.getSigner();
     const unwrapped = await unwrapEvent(wrap, signer);
     if (!unwrapped) return null;
     // The rumor content is the stringified envelope we publish from
     // `publishPrivateCalendarEvent` — shape: { eventId, authorPubkey, kind }.
-    if (
-      unwrapped.kind !== CALENDAR_KINDS.rumor &&
-      unwrapped.kind !== CALENDAR_KINDS.rsvpRumor
-    ) {
+    if (unwrapped.kind !== CALENDAR_KINDS.rumor && unwrapped.kind !== CALENDAR_KINDS.rsvpRumor) {
       return null;
     }
     const payload = JSON.parse(unwrapped.content ?? "{}");

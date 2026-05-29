@@ -1,4 +1,5 @@
 import { create } from "zustand";
+
 import type { CalendarEvent, CalendarList, CalendarEventDraft } from "../services/calendar";
 import * as calendarService from "../services/calendar/service";
 
@@ -36,7 +37,10 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       const events = await calendarService.fetchCalendarEventsSync(params ?? {});
       set({ events, isLoadingEvents: false });
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Failed to fetch events", isLoadingEvents: false });
+      set({
+        error: e instanceof Error ? e.message : "Failed to fetch events",
+        isLoadingEvents: false,
+      });
     }
   },
 
@@ -46,7 +50,10 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       const calendars = await calendarService.fetchCalendarLists();
       set({ calendars, isLoadingCalendars: false });
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Failed to fetch calendars", isLoadingCalendars: false });
+      set({
+        error: e instanceof Error ? e.message : "Failed to fetch calendars",
+        isLoadingCalendars: false,
+      });
     }
   },
 
@@ -61,12 +68,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       if (draft.calendarId) {
         const calendar = get().calendars.find((c) => c.id === draft.calendarId);
         if (calendar) {
-          const ref: string[] = [
-            "a",
-            `${event.kind}:${event.user}:${event.id}`,
-            "",
-            "",
-          ];
+          const ref: string[] = ["a", `${event.kind}:${event.user}:${event.id}`, "", ""];
           const updatedCalendar = {
             ...calendar,
             eventRefs: [...calendar.eventRefs, ref],
