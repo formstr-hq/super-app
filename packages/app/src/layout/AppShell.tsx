@@ -1,3 +1,4 @@
+import { relayManager } from "@formstr/core";
 import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
@@ -25,6 +26,7 @@ export function AppShell() {
   useCommandPaletteHotkey(paletteOpen, setPaletteOpen);
 
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const pubkey = useAuthStore((s) => s.pubkey);
   const startFormsKeyStore = useFormsKeyStore((s) => s.start);
   const stopFormsKeyStore = useFormsKeyStore((s) => s.stop);
   const rememberViewKey = useFormsKeyStore((s) => s.remember);
@@ -36,6 +38,12 @@ export function AppShell() {
     startFormsKeyStore();
     return () => stopFormsKeyStore();
   }, [isLoggedIn, startFormsKeyStore, stopFormsKeyStore]);
+
+  // Fire-and-forget NIP-65 relay fetch once the user is authenticated.
+  useEffect(() => {
+    if (!pubkey) return;
+    void relayManager.fetchUserRelays(pubkey);
+  }, [pubkey]);
 
   // Upstream nostr-forms shares view keys via the URL hash `#view-key=<coord>:<hex>`.
   // Stash any matching fragment into the key store, then strip it so reloads stay clean.
