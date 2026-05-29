@@ -1,1 +1,10 @@
 node_modules
+
+# Upstream reference clones (read-only, not part of monorepo)
+upstream/
+
+# Test coverage
+coverage/
+
+# TS incremental build cache
+*.tsbuildinfo
