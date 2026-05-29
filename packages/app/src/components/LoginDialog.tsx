@@ -1,3 +1,4 @@
+import { SignerUnavailableError } from "@formstr/core";
 import { Key, Puzzle, UserRound, Eye, EyeOff, Radio } from "lucide-react";
 import { useState } from "react";
 
@@ -31,7 +32,11 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
       setNsec("");
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      if (e instanceof SignerUnavailableError && e.code === "no-signer") {
+        setError("Browser extension not detected — install Alby, nos2x, or use a private key.");
+      } else {
+        setError(e instanceof Error ? e.message : "Something went wrong");
+      }
     } finally {
       setLoading(null);
     }
