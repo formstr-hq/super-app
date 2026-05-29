@@ -1,48 +1,46 @@
 import { parseRef, resolveRef, type ModuleType } from "@formstr/core";
-import { Calendar, ClipboardList, FileText, FolderOpen, Loader2, Vote, X } from "lucide-react";
+import { Box, Chip, CircularProgress, Tooltip, Typography } from "@mui/material";
+import { Calendar, ClipboardList, FileText, FolderOpen, Vote, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
 
 import { useCalendarStore } from "../stores/calendarStore";
 import { useFormsStore } from "../stores/formsStore";
 import { usePagesStore } from "../stores/pagesStore";
 import { usePollsStore } from "../stores/pollsStore";
 
-import { cn } from "@/lib/utils";
-
 const MODULE_META: Record<
   ModuleType,
   {
     icon: typeof FileText;
     label: string;
-    className: string;
+    color: "primary" | "secondary" | "info" | "success" | "warning";
   }
 > = {
   forms: {
     icon: ClipboardList,
     label: "Form",
-    className: "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20",
+    color: "info",
   },
   calendar: {
     icon: Calendar,
     label: "Event",
-    className: "bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/20",
+    color: "warning",
   },
   pages: {
     icon: FileText,
     label: "Page",
-    className: "bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/20",
+    color: "success",
   },
   drive: {
     icon: FolderOpen,
     label: "File",
-    className: "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20",
+    color: "secondary",
   },
   polls: {
     icon: Vote,
     label: "Poll",
-    className: "bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/20",
+    color: "primary",
   },
 };
 
@@ -66,9 +64,12 @@ export function EntityPill({ naddr, onRemove, size = "sm", readOnly = false }: E
 
   if (!ref) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-        {naddr.slice(0, 10)}…
-      </span>
+      <Chip
+        size="small"
+        label={`${naddr.slice(0, 10)}…`}
+        variant="outlined"
+        sx={{ verticalAlign: "baseline", cursor: "default" }}
+      />
     );
   }
 
@@ -76,50 +77,36 @@ export function EntityPill({ naddr, onRemove, size = "sm", readOnly = false }: E
   const Icon = meta.icon;
   const route = resolveRef(naddr) ?? `/${ref.module}`;
 
-  return (
-    <span
-      role={readOnly ? undefined : "button"}
-      tabIndex={readOnly ? -1 : 0}
-      onClick={(e) => {
-        if (readOnly) return;
-        e.stopPropagation();
-        navigate(route);
-      }}
-      onKeyDown={(e) => {
-        if (readOnly) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          navigate(route);
-        }
-      }}
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md border font-medium align-baseline transition-colors",
-        meta.className,
-        readOnly ? "cursor-default" : "cursor-pointer hover:brightness-110",
-        size === "sm" ? "px-1.5 py-0.5 text-xs" : "px-2 py-1 text-sm",
-      )}
-      title={`${meta.label}: ${label ?? naddr}`}
-    >
-      <Icon className={size === "sm" ? "h-3 w-3 shrink-0" : "h-3.5 w-3.5 shrink-0"} />
+  const content = (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+      <Icon size={size === "sm" ? 12 : 14} />
       {resolving && !label ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <CircularProgress size={12} color="inherit" />
       ) : (
-        <span className="max-w-[180px] truncate">{label ?? meta.label}</span>
+        <Typography variant={size === "sm" ? "caption" : "body2"} sx={{ maxWidth: 180 }} noWrap>
+          {label ?? meta.label}
+        </Typography>
       )}
-      {onRemove && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm hover:bg-current/10"
-          aria-label="Remove link"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      )}
-    </span>
+    </Box>
+  );
+
+  return (
+    <Tooltip title={`${meta.label}: ${label ?? naddr}`}>
+      <Chip
+        size={size === "sm" ? "small" : "medium"}
+        label={content}
+        color={meta.color}
+        onClick={readOnly ? undefined : () => navigate(route)}
+        onDelete={onRemove ? () => onRemove() : undefined}
+        deleteIcon={onRemove ? <X size={12} /> : undefined}
+        sx={{
+          verticalAlign: "baseline",
+          cursor: readOnly ? "default" : "pointer",
+          fontWeight: 500,
+          "& .MuiChip-label": { px: 1 },
+        }}
+      />
+    </Tooltip>
   );
 }
 

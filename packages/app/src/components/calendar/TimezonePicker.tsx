@@ -1,17 +1,5 @@
-import { Check, ChevronsUpDown } from "lucide-react";
-import { useMemo, useState } from "react";
-
-import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { Autocomplete, Box, TextField } from "@mui/material";
+import { useMemo } from "react";
 
 function getTimezoneList(): string[] {
   const intlAny = Intl as unknown as { supportedValuesOf?: (key: string) => string[] };
@@ -22,8 +10,6 @@ function getTimezoneList(): string[] {
       /* fall through */
     }
   }
-  // Fallback list — common timezones, sufficient for demo when the runtime
-  // lacks Intl.supportedValuesOf.
   return [
     "UTC",
     "America/New_York",
@@ -53,62 +39,51 @@ interface TimezonePickerProps {
 }
 
 export function TimezonePicker({ value, onChange, placeholder }: TimezonePickerProps) {
-  const [open, setOpen] = useState(false);
   const zones = useMemo(getTimezoneList, []);
   const local = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
 
-  const display = value ?? "";
+  // Prepend local timezone option
+  const options = useMemo(
+    () => [
+      { label: `Viewer's timezone (${local})`, value: "" },
+      ...zones.map((tz) => ({ label: tz, value: tz })),
+    ],
+    [zones, local],
+  );
+
+  const selectedOption = useMemo(
+    () => options.find((o) => o.value === (value || "")) || null,
+    [options, value],
+  );
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="h-9 w-full justify-between text-xs font-normal"
-        >
-          <span className="truncate">
-            {display || placeholder || `Use viewer's timezone (${local})`}
-          </span>
-          <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search timezone…" className="h-9" />
-          <CommandList>
-            <CommandEmpty>No timezone found.</CommandEmpty>
-            <CommandGroup>
-              <CommandItem
-                value=""
-                onSelect={() => {
-                  onChange(undefined);
-                  setOpen(false);
-                }}
-              >
-                <Check className={cn("mr-2 h-4 w-4", !value ? "opacity-100" : "opacity-0")} />
-                Viewer's timezone ({local})
-              </CommandItem>
-              {zones.map((tz) => (
-                <CommandItem
-                  key={tz}
-                  value={tz}
-                  onSelect={(currentValue) => {
-                    onChange(currentValue === value ? undefined : currentValue);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn("mr-2 h-4 w-4", value === tz ? "opacity-100" : "opacity-0")}
-                  />
-                  {tz}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <Autocomplete
+      size="small"
+      options={options}
+      getOptionLabel={(option) => option.label}
+      value={selectedOption}
+      onChange={(_, newValue) => onChange(newValue?.value || undefined)}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          placeholder={placeholder || `Use viewer's timezone (${local})`}
+          InputProps={{
+            ...params.InputProps,
+            sx: { fontSize: 13 },
+          }}
+        />
+      )}
+      renderOption={(props, option) => {
+        // extract key from props, then delete it to avoid warnings from React
+        const { key: _key, ...otherProps } = props;
+        return (
+          <Box component="li" key={option.value || "local"} {...otherProps} sx={{ fontSize: 13 }}>
+            {option.label}
+          </Box>
+        );
+      }}
+      disableClearable={false}
+      fullWidth
+    />
   );
 }

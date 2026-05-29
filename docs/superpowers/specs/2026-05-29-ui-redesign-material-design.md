@@ -8,7 +8,7 @@
 
 ## Overview
 
-Complete UI overhaul of `@formstr/app`: replace Tailwind CSS + shadcn/ui (Radix UI) with Material UI v5, and adopt a clean Notion-inspired visual language — cool minimal palette, compact sidebar, standard topbar, list/grid toggle for content pages.
+Complete UI overhaul of `@formstr/app`: replace Tailwind CSS + shadcn/ui (Radix UI) with Material UI v6, and adopt a clean Notion-inspired visual language — cool minimal palette, compact sidebar, standard topbar, list/grid toggle for content pages.
 
 This PR ships before Weeks 3 & 4 (forms service implementation) so the design system is stable before new pages are added.
 
@@ -22,7 +22,7 @@ This PR ships before Weeks 3 & 4 (forms service implementation) so the design sy
 | Header            | Standard 48px topbar — breadcrumb + search pill + AI toggle + avatar |
 | Dark mode         | Yes — #1E1E1E sidebar, #141414 content, #2A2A2A borders              |
 | Content layout    | List view default + list/grid toggle                                 |
-| Component library | Material UI v5 only (no Tailwind, no Radix UI)                       |
+| Component library | Material UI v6 only (no Tailwind, no Radix UI)                       |
 | Typography        | Inter, `-0.02em` tracking on headings, 14px base                     |
 | Icons             | lucide-react (keep — no change)                                      |
 
@@ -44,7 +44,7 @@ This PR ships before Weeks 3 & 4 (forms service implementation) so the design sy
 
 ## What Gets Added
 
-- `@mui/material` v5
+- `@mui/material` v6
 - `@mui/icons-material` (optional — lucide-react is already present, MUI icons only if needed)
 - `@emotion/react` and `@emotion/styled` (MUI peer deps)
 - `notistack` for toast notifications (wraps MUI Snackbar, matches sonner's API surface)

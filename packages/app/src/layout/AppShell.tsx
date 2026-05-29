@@ -3,7 +3,6 @@ import { Box, Drawer } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
-import { Toaster } from "sonner";
 
 import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
@@ -174,7 +173,6 @@ export function AppShell() {
         onOpenChange={setPaletteOpen}
         onLoginClick={() => setLoginOpen(true)}
       />
-      <Toaster position="bottom-right" richColors closeButton toastOptions={{ duration: 6000 }} />
     </Box>
   );
 }

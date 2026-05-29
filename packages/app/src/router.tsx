@@ -1,9 +1,8 @@
+import { Box, Skeleton } from "@mui/material";
 import { lazy, Suspense, type ReactNode } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "./layout";
-
-import { Skeleton } from "@/components/ui/skeleton";
 
 const FormsPage = lazy(() => import("./pages/FormsPage").then((m) => ({ default: m.FormsPage })));
 const CalendarPage = lazy(() =>
@@ -15,17 +14,32 @@ const PollsPage = lazy(() => import("./pages/PollsPage").then((m) => ({ default:
 
 function RouteFallback() {
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6">
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-7 w-40" />
-        <Skeleton className="h-9 w-28" />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-32 w-full" />
-        ))}
-      </div>
-    </div>
+    <Box
+      sx={{
+        maxWidth: "lg",
+        mx: "auto",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        px: 2,
+        py: 3,
+        width: "100%",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Skeleton variant="rectangular" height={28} width={160} sx={{ borderRadius: 1 }} />
+        <Skeleton variant="rectangular" height={36} width={100} sx={{ borderRadius: 1 }} />
+      </Box>
+      <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+        <Skeleton variant="rectangular" height={160} sx={{ flex: 1, borderRadius: 2 }} />
+        <Skeleton variant="rectangular" height={160} sx={{ flex: 1, borderRadius: 2 }} />
+        <Skeleton
+          variant="rectangular"
+          height={160}
+          sx={{ flex: 1, borderRadius: 2, display: { xs: "none", md: "block" } }}
+        />
+      </Box>
+    </Box>
   );
 }
 
