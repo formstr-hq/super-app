@@ -1,7 +1,7 @@
 import { nip19 } from "nostr-tools";
 import { describe, expect, it } from "vitest";
 
-import { createRef, createTagRef, parseRef, parseTagRef } from "./linking";
+import { createRef, createTagRef, MODULE_ROUTES, parseRef, parseTagRef } from "./linking";
 
 describe("linking parseRef", () => {
   it("parses a forms naddr", () => {
@@ -68,5 +68,24 @@ describe("linking tag-ref form", () => {
     expect(parseTagRef("not-a-tag-ref")).toBeNull();
     expect(parseTagRef("formstr:invalid-module:abc")).toBeNull();
     expect(parseTagRef("formstr:forms:")).toBeNull();
+  });
+});
+
+describe("MODULE_ROUTES", () => {
+  it("has an entry for every module type", () => {
+    for (const m of ["forms", "calendar", "pages", "drive", "polls"] as const) {
+      expect(MODULE_ROUTES[m]).toMatch(/^\/\w+/);
+    }
+  });
+
+  it("parseRef route uses MODULE_ROUTES base", () => {
+    const naddr = nip19.naddrEncode({
+      kind: 30168,
+      pubkey: "00".repeat(32),
+      identifier: "x",
+      relays: [],
+    });
+    const ref = parseRef(naddr);
+    expect(ref?.route.startsWith(MODULE_ROUTES.forms)).toBe(true);
   });
 });

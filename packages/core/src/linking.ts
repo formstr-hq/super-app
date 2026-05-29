@@ -16,6 +16,15 @@ export interface ModuleRef {
   raw: string; // Original bech32 or naddr
 }
 
+/** Module → route base. Single source of truth for router and AI action layer. */
+export const MODULE_ROUTES: Record<ModuleType, string> = {
+  forms: "/forms",
+  calendar: "/calendar",
+  pages: "/pages",
+  drive: "/drive",
+  polls: "/polls",
+} as const;
+
 /** Map event kinds to modules */
 const KIND_MODULE_MAP: Record<number, ModuleType> = {
   // Forms
@@ -60,7 +69,7 @@ export function parseRef(bech32: string): ModuleRef | null {
 
       return {
         module,
-        route: `/${module}/${bech32}`,
+        route: `${MODULE_ROUTES[module]}/${bech32}`,
         params: {
           kind: String(kind),
           pubkey,
@@ -78,7 +87,7 @@ export function parseRef(bech32: string): ModuleRef | null {
 
       return {
         module,
-        route: `/${module}/${bech32}`,
+        route: `${MODULE_ROUTES[module]}/${bech32}`,
         params: {
           id,
           kind: String(kind),
