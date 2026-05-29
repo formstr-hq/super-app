@@ -1,0 +1,101 @@
+import type { Event } from "nostr-tools";
+
+// ── Event Kinds ─────────────────────────────────────────
+export const CALENDAR_KINDS = {
+  publicEvent: 31923,
+  privateEvent: 32678,
+  privateRecurring: 32679,
+  calendarList: 32123,
+  giftWrap: 1052,
+  rumor: 52,
+  publicRsvp: 31925,
+  privateRsvp: 32069,
+  rsvpGiftWrap: 1055,
+  rsvpRumor: 55,
+  participantRemoval: 84,
+} as const;
+
+// ── Data Structures ─────────────────────────────────────
+
+export enum RSVPStatus {
+  accepted = "accepted",
+  declined = "declined",
+  tentative = "tentative",
+  pending = "pending",
+}
+
+export enum RepeatingFrequency {
+  None = "None",
+  Daily = "Daily",
+  Weekly = "Weekly",
+  Weekday = "Weekday",
+  Monthly = "Monthly",
+  Quarterly = "Quarterly",
+  Yearly = "Yearly",
+}
+
+export interface CalendarEvent {
+  id: string;
+  eventId: string;
+  title: string;
+  description: string;
+  kind: number;
+  begin: number;         // ms timestamp
+  end: number;           // ms timestamp
+  createdAt: number;
+  image?: string;
+  categories: string[];
+  participants: string[];
+  location: string[];
+  website: string;
+  user: string;          // author pubkey
+  isPrivate: boolean;
+  viewKey?: string;
+  repeat: { rrule: string | null };
+  startTzid?: string;    // IANA timezone identifier (matches upstream "start_tzid")
+  endTzid?: string;
+  registrationFormRef?: string; // naddr of a Formstr form used as registration
+  calendarId?: string;
+  isInvitation?: boolean;
+  relayHint?: string;
+  event?: Event;
+}
+
+export interface CalendarList {
+  id: string;
+  eventId: string;
+  title: string;
+  description: string;
+  color: string;
+  eventRefs: string[][];
+  createdAt: number;
+  isVisible: boolean;
+}
+
+export interface RSVPResponse {
+  pubkey: string;
+  status: RSVPStatus;
+  eventCoordinate: string;
+  createdAt: number;
+}
+
+export interface CalendarEventDraft {
+  title: string;
+  description: string;
+  begin: Date;
+  end: Date;
+  location?: string;
+  categories?: string[];
+  participants?: string[];
+  isPrivate?: boolean;
+  calendarId?: string;
+  repeat?: RepeatingFrequency;
+  rrule?: string; // RFC-5545 RRULE string (takes precedence over repeat)
+  startTzid?: string;
+  endTzid?: string;
+  registrationFormRef?: string;
+  image?: string;
+  website?: string;
+  /** When updating, re-use the same addressable `d` identifier. */
+  existingId?: string;
+}

@@ -1,0 +1,20 @@
+{
+  "name": "formstr-super-app",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Formstr Super App — unified orchestration layer for Forms, Calendar, Pages, Drive, Polls",
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:core": "pnpm --filter @formstr/core build",
+    "build:app": "pnpm --filter @formstr/app build",
+    "dev": "pnpm --filter @formstr/app dev",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "clean": "pnpm -r clean"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}
