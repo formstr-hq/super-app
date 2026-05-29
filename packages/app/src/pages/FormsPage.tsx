@@ -1,13 +1,49 @@
 import {
+  Box,
+  Button,
+  Checkbox,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  FormControl,
+  FormControlLabel,
+  Grid2 as MuiGrid,
+  IconButton,
+  MenuItem,
+  Paper,
+  Radio,
+  RadioGroup,
+  Select,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import {
   BarChart3,
   Check,
   FileText,
   GripVertical,
+  Grid,
+  List,
   Lock,
   Plus,
   PlusCircle,
   Send,
   Trash2,
+  Unlock,
   X,
 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
@@ -23,56 +59,43 @@ import {
 import * as formsService from "../services/forms/service";
 import { useFormsStore } from "../stores";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-
-
 // ── Answer type label map ────────────────────────────────
 
 const CHOICE_TYPES = new Set([AnswerType.radioButton, AnswerType.checkboxes, AnswerType.dropdown]);
 
-// ── Skeleton card ───────────────────────────────────────
+// ── Skeleton rows ────────────────────────────────────────
+
+function FormRowSkeleton() {
+  return (
+    <TableRow>
+      <TableCell>
+        <Skeleton variant="text" width="60%" />
+      </TableCell>
+      <TableCell>
+        <Skeleton variant="text" width={80} />
+      </TableCell>
+      <TableCell>
+        <Skeleton variant="rounded" width={70} height={22} />
+      </TableCell>
+      <TableCell />
+    </TableRow>
+  );
+}
 
 function FormCardSkeleton() {
   return (
-    <Card>
-      <CardContent className="p-4 space-y-2">
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-3 w-1/3" />
-        <Skeleton className="h-5 w-16" />
-      </CardContent>
-    </Card>
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 1.5 }}>
+      <Skeleton variant="text" width="70%" />
+      <Skeleton variant="text" width="40%" sx={{ mt: 0.5 }} />
+      <Skeleton variant="rounded" width={70} height={22} sx={{ mt: 1 }} />
+    </Paper>
   );
 }
 
 // ── Main page ────────────────────────────────────────────
 
 type ActiveDialog = "none" | "create" | "fill" | "responses";
+type ViewMode = "list" | "grid";
 
 export function FormsPage() {
   const {
@@ -91,6 +114,8 @@ export function FormsPage() {
 
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>("none");
   const [selectedForm, setSelectedForm] = useState<FormSummary | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const theme = useTheme();
 
   useEffect(() => {
     fetchMyForms();
@@ -122,154 +147,282 @@ export function FormsPage() {
   }, [clearCurrent]);
 
   return (
-    <TooltipProvider>
-      <div className="space-y-4">
-        {/* Top bar */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">Forms</h1>
-          <Button size="sm" onClick={() => setActiveDialog("create")} className="cursor-pointer">
-            <Plus className="h-4 w-4 mr-1.5" />
+    <Box>
+      {/* Top bar */}
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2.5 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          Forms
+        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={(_, v) => v && setViewMode(v)}
+            size="small"
+          >
+            <ToggleButton value="list" aria-label="list view">
+              <List size={16} />
+            </ToggleButton>
+            <ToggleButton value="grid" aria-label="grid view">
+              <Grid size={16} />
+            </ToggleButton>
+          </ToggleButtonGroup>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<Plus size={16} />}
+            onClick={() => setActiveDialog("create")}
+          >
             New Form
           </Button>
-        </div>
+        </Box>
+      </Box>
 
-        {/* Error */}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+      {/* Error */}
+      {error && (
+        <Typography variant="body2" color="error" sx={{ mb: 2 }}>
+          {error}
+        </Typography>
+      )}
 
-        {/* Loading */}
-        {isLoading && myForms.length === 0 ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <FormCardSkeleton key={i} />
-            ))}
-          </div>
-        ) : myForms.length === 0 ? (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
-            <FileText className="h-12 w-12 text-muted-foreground" />
-            <p className="font-medium text-sm">No forms yet</p>
-            <p className="text-sm text-muted-foreground">Create your first form to get started</p>
-            <Button
-              size="sm"
-              onClick={() => setActiveDialog("create")}
-              className="cursor-pointer mt-1"
-            >
-              <Plus className="h-4 w-4 mr-1.5" />
-              New Form
-            </Button>
-          </div>
+      {/* Loading */}
+      {isLoading && myForms.length === 0 ? (
+        viewMode === "list" ? (
+          <Paper variant="outlined" sx={{ borderRadius: 1.5 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Created</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <FormRowSkeleton key={i} />
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
         ) : (
-          /* Form grid */
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {myForms.map((form) => (
-              <Card
-                key={`${form.pubkey}:${form.id}`}
-                className="group hover:shadow-md transition-shadow duration-150 cursor-pointer"
-                onClick={() => handleOpenFill(form)}
-              >
-                <CardContent className="p-4">
-                  {/* Name row */}
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="font-medium text-sm truncate">{form.name}</span>
-                  </div>
-
-                  {/* Date */}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {new Date(form.createdAt * 1000).toLocaleDateString()}
-                  </p>
-
-                  {/* Encrypted badge */}
-                  {form.isEncrypted && (
-                    <Badge variant="secondary" className="mt-2">
-                      <Lock className="h-3 w-3 mr-1" />
-                      Encrypted
-                    </Badge>
-                  )}
-
-                  {/* Actions row */}
-                  <div
-                    className="mt-3 pt-3 border-t border-border flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 cursor-pointer"
-                          onClick={() => handleOpenFill(form)}
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Fill form</TooltipContent>
-                    </Tooltip>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 cursor-pointer"
-                          onClick={() => handleOpenResponses(form)}
-                        >
-                          <BarChart3 className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Responses</TooltipContent>
-                    </Tooltip>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
+          <MuiGrid container spacing={1.5}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <MuiGrid key={i} size={{ xs: 12, sm: 6, lg: 4 }}>
+                <FormCardSkeleton />
+              </MuiGrid>
+            ))}
+          </MuiGrid>
+        )
+      ) : myForms.length === 0 ? (
+        /* Empty state */
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            py: 10,
+            gap: 1.5,
+            textAlign: "center",
+          }}
+        >
+          <FileText size={48} color={theme.palette.text.secondary} />
+          <Typography variant="body2" fontWeight={500}>
+            No forms yet
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Create your first form to get started
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<Plus size={16} />}
+            onClick={() => setActiveDialog("create")}
+            sx={{ mt: 0.5 }}
+          >
+            New Form
+          </Button>
+        </Box>
+      ) : viewMode === "list" ? (
+        /* List view */
+        <Paper variant="outlined" sx={{ borderRadius: 1.5 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ "& th": { fontWeight: 600, fontSize: 12, color: "text.secondary" } }}>
+                <TableCell>Name</TableCell>
+                <TableCell>Created</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {myForms.map((form) => (
+                <TableRow
+                  key={`${form.pubkey}:${form.id}`}
+                  hover
+                  sx={{ cursor: "pointer" }}
+                  onClick={() => handleOpenFill(form)}
+                >
+                  <TableCell>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <FileText size={14} color={theme.palette.text.secondary} />
+                      <Typography variant="body2" fontWeight={500}>
+                        {form.name}
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="caption" color="text.secondary">
+                      {new Date(form.createdAt * 1000).toLocaleDateString()}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {form.isEncrypted ? (
+                      <Chip icon={<Lock size={11} />} label="Encrypted" size="small" />
+                    ) : (
+                      <Chip
+                        icon={<Unlock size={11} />}
+                        label="Public"
+                        size="small"
+                        variant="outlined"
+                      />
+                    )}
+                  </TableCell>
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                    <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.5 }}>
+                      <Tooltip title="Fill form">
+                        <IconButton size="small" onClick={() => handleOpenFill(form)}>
+                          <FileText size={14} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Responses">
+                        <IconButton size="small" onClick={() => handleOpenResponses(form)}>
+                          <BarChart3 size={14} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton
+                          size="small"
+                          color="error"
                           onClick={() => deleteForm(form.id, form.pubkey)}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Delete</TooltipContent>
-                    </Tooltip>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+                          <Trash2 size={14} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Paper>
+      ) : (
+        /* Grid view */
+        <MuiGrid container spacing={1.5}>
+          {myForms.map((form) => (
+            <MuiGrid key={`${form.pubkey}:${form.id}`} size={{ xs: 12, sm: 6, lg: 4 }}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  borderRadius: 1.5,
+                  cursor: "pointer",
+                  transition: "box-shadow 150ms",
+                  "&:hover": { boxShadow: 2 },
+                }}
+                onClick={() => handleOpenFill(form)}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                  <FileText size={14} color={theme.palette.text.secondary} />
+                  <Typography variant="body2" fontWeight={500} noWrap>
+                    {form.name}
+                  </Typography>
+                </Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  display="block"
+                  sx={{ mt: 0.5 }}
+                >
+                  {new Date(form.createdAt * 1000).toLocaleDateString()}
+                </Typography>
+                {form.isEncrypted ? (
+                  <Chip icon={<Lock size={11} />} label="Encrypted" size="small" sx={{ mt: 1 }} />
+                ) : (
+                  <Chip
+                    icon={<Unlock size={11} />}
+                    label="Public"
+                    size="small"
+                    variant="outlined"
+                    sx={{ mt: 1 }}
+                  />
+                )}
+                <Box
+                  sx={{
+                    mt: 1.5,
+                    pt: 1.5,
+                    borderTop: `1px solid ${theme.palette.divider}`,
+                    display: "flex",
+                    gap: 0.5,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Tooltip title="Fill form">
+                    <IconButton size="small" onClick={() => handleOpenFill(form)}>
+                      <FileText size={13} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Responses">
+                    <IconButton size="small" onClick={() => handleOpenResponses(form)}>
+                      <BarChart3 size={13} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete">
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => deleteForm(form.id, form.pubkey)}
+                    >
+                      <Trash2 size={13} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Paper>
+            </MuiGrid>
+          ))}
+        </MuiGrid>
+      )}
 
-        {/* Dialogs */}
-        <CreateFormDialog
-          open={activeDialog === "create"}
-          onClose={handleClose}
-          onCreate={createForm}
-        />
+      {/* Dialogs */}
+      <CreateFormDialog
+        open={activeDialog === "create"}
+        onClose={handleClose}
+        onCreate={createForm}
+      />
 
-        <FormFillerDialog
-          open={activeDialog === "fill"}
-          form={currentForm}
-          formSummary={selectedForm}
-          isLoading={isLoading}
-          onClose={handleClose}
-        />
+      <FormFillerDialog
+        open={activeDialog === "fill"}
+        form={currentForm}
+        formSummary={selectedForm}
+        isLoading={isLoading}
+        onClose={handleClose}
+      />
 
-        <ResponsesDialog
-          open={activeDialog === "responses"}
-          form={currentForm}
-          formSummary={selectedForm}
-          responses={responses}
-          isLoading={isLoading}
-          onClose={handleClose}
-        />
-      </div>
-    </TooltipProvider>
+      <ResponsesDialog
+        open={activeDialog === "responses"}
+        form={currentForm}
+        formSummary={selectedForm}
+        responses={responses}
+        isLoading={isLoading}
+        onClose={handleClose}
+      />
+    </Box>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-// Create Form Dialog — enhanced
+// Create Form Dialog
 // ═══════════════════════════════════════════════════════════
 
 interface CreateFormDialogProps {
@@ -307,7 +460,6 @@ function CreateFormDialog({ open, onClose, onCreate }: CreateFormDialogProps) {
   const updateField = (index: number, updates: Partial<FormField>) => {
     const updated = [...fields];
     updated[index] = { ...updated[index], ...updates };
-    // If switching to a choice type and no options yet, add two defaults
     if (updates.type && CHOICE_TYPES.has(updates.type) && !updated[index].options?.length) {
       updated[index].options = [
         { id: crypto.randomUUID().slice(0, 6), label: "Option 1" },
@@ -317,9 +469,7 @@ function CreateFormDialog({ open, onClose, onCreate }: CreateFormDialogProps) {
     setFields(updated);
   };
 
-  const removeField = (index: number) => {
-    setFields(fields.filter((_, i) => i !== index));
-  };
+  const removeField = (index: number) => setFields(fields.filter((_, i) => i !== index));
 
   const addOption = (fieldIndex: number) => {
     const updated = [...fields];
@@ -351,10 +501,7 @@ function CreateFormDialog({ open, onClose, onCreate }: CreateFormDialogProps) {
       await onCreate({
         name,
         fields,
-        settings: {
-          publicForm: !encrypt,
-          description: description || undefined,
-        },
+        settings: { publicForm: !encrypt, description: description || undefined },
         encrypt,
       });
       setName("");
@@ -373,208 +520,187 @@ function CreateFormDialog({ open, onClose, onCreate }: CreateFormDialogProps) {
   const canSubmit = name.trim().length > 0 && fields.length > 0 && !isSubmitting;
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>New Form</DialogTitle>
-          <DialogDescription>Add a title and questions to your form.</DialogDescription>
-        </DialogHeader>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="sm"
+      PaperProps={{ sx: { maxHeight: "85vh" } }}
+    >
+      <DialogTitle>New Form</DialogTitle>
+      <DialogContent
+        dividers
+        sx={{ display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}
+      >
+        <TextField
+          label="Form title"
+          placeholder="Untitled form"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          size="small"
+          fullWidth
+        />
+        <TextField
+          label="Description (optional)"
+          placeholder="Describe your form…"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          size="small"
+          fullWidth
+          multiline
+          rows={2}
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={encrypt}
+              onChange={(e) => setEncrypt(e.target.checked)}
+              size="small"
+            />
+          }
+          label={<Typography variant="body2">Encrypt form (only you can see responses)</Typography>}
+        />
 
-        <ScrollArea className="flex-1 pr-3 -mr-3">
-          <div className="space-y-4 py-2">
-            {/* Form title */}
-            <div className="space-y-1.5">
-              <Label htmlFor="form-title">Form title</Label>
-              <Input
-                id="form-title"
-                placeholder="Untitled form"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
+        {/* Questions section */}
+        <Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+            <Typography variant="body2" fontWeight={500}>
+              Questions
+            </Typography>
+            <Divider sx={{ flex: 1 }} />
+          </Box>
 
-            {/* Description */}
-            <div className="space-y-1.5">
-              <Label htmlFor="form-desc">Description (optional)</Label>
-              <textarea
-                id="form-desc"
-                className={cn(
-                  "flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2",
-                  "text-sm ring-offset-background placeholder:text-muted-foreground",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  "disabled:cursor-not-allowed disabled:opacity-50 resize-none",
-                )}
-                placeholder="Describe your form…"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={2}
-              />
-            </div>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            {fields.map((field, index) => (
+              <Paper key={field.id} variant="outlined" sx={{ p: 1.5, borderRadius: 1.5 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <GripVertical size={14} color="var(--mui-palette-text-disabled)" />
+                  <TextField
+                    placeholder="Question…"
+                    value={field.label}
+                    onChange={(e) => updateField(index, { label: e.target.value })}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <Select
+                    value={field.type}
+                    onChange={(e) => updateField(index, { type: e.target.value as AnswerType })}
+                    size="small"
+                    sx={{ width: 150 }}
+                  >
+                    <MenuItem value={AnswerType.shortText}>Short answer</MenuItem>
+                    <MenuItem value={AnswerType.paragraph}>Paragraph</MenuItem>
+                    <MenuItem value={AnswerType.radioButton}>Multiple choice</MenuItem>
+                    <MenuItem value={AnswerType.checkboxes}>Checkboxes</MenuItem>
+                    <MenuItem value={AnswerType.dropdown}>Dropdown</MenuItem>
+                    <MenuItem value={AnswerType.number}>Number</MenuItem>
+                    <MenuItem value={AnswerType.date}>Date</MenuItem>
+                    <MenuItem value={AnswerType.time}>Time</MenuItem>
+                    <MenuItem value={AnswerType.datetime}>Date & time</MenuItem>
+                    <MenuItem value={AnswerType.label}>Label</MenuItem>
+                  </Select>
+                  <Tooltip title={field.required ? "Mark optional" : "Mark required"}>
+                    <Box
+                      component="button"
+                      onClick={() => updateField(index, { required: !field.required })}
+                      sx={{
+                        fontSize: 11,
+                        px: 1,
+                        py: 0.25,
+                        borderRadius: 1,
+                        border: "1px solid",
+                        cursor: "pointer",
+                        bgcolor: field.required ? "primary.main" : "transparent",
+                        color: field.required ? "primary.contrastText" : "text.secondary",
+                        borderColor: field.required ? "primary.main" : "divider",
+                      }}
+                    >
+                      Req
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Remove field">
+                    <IconButton size="small" color="error" onClick={() => removeField(index)}>
+                      <Trash2 size={13} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
 
-            {/* Encrypt toggle */}
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="form-encrypt"
-                checked={encrypt}
-                onCheckedChange={(v) => setEncrypt(v === true)}
-              />
-              <Label htmlFor="form-encrypt" className="text-sm cursor-pointer">
-                Encrypt form (only you can see responses)
-              </Label>
-            </div>
-
-            {/* Questions section */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Questions</span>
-                <Separator className="flex-1" />
-              </div>
-
-              <div className="space-y-3">
-                {fields.map((field, index) => (
-                  <div key={field.id} className="space-y-2 rounded-md border border-border p-3">
-                    <div className="flex items-center gap-2">
-                      {/* Drag handle */}
-                      <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground/30" />
-
-                      {/* Question label */}
-                      <Input
-                        className="flex-1"
-                        placeholder="Question…"
-                        value={field.label}
-                        onChange={(e) => updateField(index, { label: e.target.value })}
-                      />
-
-                      {/* Type select */}
-                      <Select
-                        value={field.type}
-                        onValueChange={(val) => updateField(index, { type: val as AnswerType })}
-                      >
-                        <SelectTrigger className="w-35 shrink-0">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={AnswerType.shortText}>Short answer</SelectItem>
-                          <SelectItem value={AnswerType.paragraph}>Paragraph</SelectItem>
-                          <SelectItem value={AnswerType.radioButton}>Multiple choice</SelectItem>
-                          <SelectItem value={AnswerType.checkboxes}>Checkboxes</SelectItem>
-                          <SelectItem value={AnswerType.dropdown}>Dropdown</SelectItem>
-                          <SelectItem value={AnswerType.number}>Number</SelectItem>
-                          <SelectItem value={AnswerType.date}>Date</SelectItem>
-                          <SelectItem value={AnswerType.time}>Time</SelectItem>
-                          <SelectItem value={AnswerType.datetime}>Date & time</SelectItem>
-                          <SelectItem value={AnswerType.label}>Label</SelectItem>
-                        </SelectContent>
-                      </Select>
-
-                      {/* Required toggle */}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            className={cn(
-                              "text-xs px-1.5 py-0.5 rounded border cursor-pointer",
-                              field.required
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-border text-muted-foreground hover:border-primary/50",
-                            )}
-                            onClick={() => updateField(index, { required: !field.required })}
-                          >
-                            Req
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {field.required ? "Mark optional" : "Mark required"}
-                        </TooltipContent>
-                      </Tooltip>
-
-                      {/* Delete field */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 cursor-pointer shrink-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => removeField(index)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-
-                    {/* Options editor for choice types */}
-                    {CHOICE_TYPES.has(field.type) && (
-                      <div className="pl-6 space-y-1.5">
-                        {(field.options ?? []).map((opt, oi) => (
-                          <div key={opt.id} className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground w-4 text-right">
-                              {oi + 1}.
-                            </span>
-                            <Input
-                              className="flex-1 h-7 text-sm"
-                              value={opt.label}
-                              onChange={(e) => updateOption(index, oi, e.target.value)}
-                              placeholder={`Option ${oi + 1}`}
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 cursor-pointer shrink-0 text-muted-foreground hover:text-destructive"
-                              onClick={() => removeOption(index, oi)}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="cursor-pointer text-xs text-muted-foreground h-7"
-                          onClick={() => addOption(index)}
+                {CHOICE_TYPES.has(field.type) && (
+                  <Box sx={{ pl: 3.5, mt: 1, display: "flex", flexDirection: "column", gap: 0.75 }}>
+                    {(field.options ?? []).map((opt, oi) => (
+                      <Box key={opt.id} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ width: 16, textAlign: "right" }}
                         >
-                          <PlusCircle className="h-3 w-3 mr-1" />
-                          Add option
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                          {oi + 1}.
+                        </Typography>
+                        <TextField
+                          size="small"
+                          value={opt.label}
+                          onChange={(e) => updateOption(index, oi, e.target.value)}
+                          placeholder={`Option ${oi + 1}`}
+                          sx={{ flex: 1, "& .MuiInputBase-input": { py: 0.5, fontSize: 13 } }}
+                        />
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => removeOption(index, oi)}
+                        >
+                          <X size={12} />
+                        </IconButton>
+                      </Box>
+                    ))}
+                    <Button
+                      size="small"
+                      variant="text"
+                      startIcon={<PlusCircle size={13} />}
+                      onClick={() => addOption(index)}
+                      sx={{ alignSelf: "flex-start", fontSize: 12, color: "text.secondary" }}
+                    >
+                      Add option
+                    </Button>
+                  </Box>
+                )}
+              </Paper>
+            ))}
+          </Box>
 
-              {/* Add question */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="cursor-pointer text-muted-foreground"
-                onClick={addField}
-              >
-                <PlusCircle className="h-4 w-4 mr-1.5" />
-                Add question
-              </Button>
-            </div>
-          </div>
-        </ScrollArea>
-
-        {/* Inline error above footer */}
-        {dialogError && <p className="text-xs text-destructive">{dialogError}</p>}
-
-        <DialogFooter>
           <Button
-            variant="outline"
-            onClick={onClose}
-            className="cursor-pointer"
-            disabled={isSubmitting}
+            size="small"
+            variant="text"
+            startIcon={<PlusCircle size={14} />}
+            onClick={addField}
+            sx={{ mt: 1, color: "text.secondary" }}
           >
-            Cancel
+            Add question
           </Button>
-          <Button onClick={handleCreate} disabled={!canSubmit} className="cursor-pointer">
-            {isSubmitting ? "Creating…" : "Create"}
-          </Button>
-        </DialogFooter>
+        </Box>
       </DialogContent>
+
+      {dialogError && (
+        <Box sx={{ px: 3, pt: 1 }}>
+          <Typography variant="caption" color="error">
+            {dialogError}
+          </Typography>
+        </Box>
+      )}
+
+      <DialogActions>
+        <Button onClick={onClose} disabled={isSubmitting}>
+          Cancel
+        </Button>
+        <Button variant="contained" onClick={handleCreate} disabled={!canSubmit}>
+          {isSubmitting ? "Creating…" : "Create"}
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }
 
 // ═══════════════════════════════════════════════════════════
-// Form Filler Dialog — interactive form filling + submit
+// Form Filler Dialog
 // ═══════════════════════════════════════════════════════════
 
 function FormFillerDialog({
@@ -596,7 +722,6 @@ function FormFillerDialog({
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Reset state when form changes
   useEffect(() => {
     if (form) {
       setAnswers({});
@@ -606,9 +731,8 @@ function FormFillerDialog({
     }
   }, [form?.id]);
 
-  const setAnswer = (fieldId: string, value: string) => {
+  const setAnswer = (fieldId: string, value: string) =>
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
-  };
 
   const toggleCheck = (fieldId: string, optionId: string) => {
     setCheckAnswers((prev) => {
@@ -621,8 +745,6 @@ function FormFillerDialog({
 
   const handleSubmit = async () => {
     if (!form || !formSummary) return;
-
-    // Validate required fields
     const missing = form.fields.filter((f) => {
       if (!f.required) return false;
       if (f.type === AnswerType.checkboxes) return !checkAnswers[f.id]?.size;
@@ -632,7 +754,6 @@ function FormFillerDialog({
       setSubmitError(`Please fill required fields: ${missing.map((f) => f.label).join(", ")}`);
       return;
     }
-
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -641,12 +762,10 @@ function FormFillerDialog({
         .map((f) => {
           let answer = answers[f.id] ?? "";
           if (f.type === AnswerType.checkboxes) {
-            const selected = Array.from(checkAnswers[f.id] ?? []);
-            answer = JSON.stringify(selected);
+            answer = JSON.stringify(Array.from(checkAnswers[f.id] ?? []));
           }
           return { fieldId: f.id, answer };
         });
-
       await formsService.submitResponse(
         formSummary.pubkey,
         formSummary.id,
@@ -662,77 +781,107 @@ function FormFillerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{form?.name ?? formSummary?.name ?? "Loading…"}</DialogTitle>
-          {form?.settings.description && (
-            <DialogDescription>{form.settings.description}</DialogDescription>
-          )}
-        </DialogHeader>
-
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="md"
+      PaperProps={{ sx: { maxHeight: "85vh" } }}
+    >
+      <DialogTitle>{form?.name ?? formSummary?.name ?? "Loading…"}</DialogTitle>
+      {form?.settings.description && (
+        <Box sx={{ px: 3, pb: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {form.settings.description}
+          </Typography>
+        </Box>
+      )}
+      <DialogContent dividers sx={{ overflowY: "auto" }}>
         {isLoading || !form ? (
-          <div className="space-y-3 py-2">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-4/5" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            <Skeleton variant="text" />
+            <Skeleton variant="text" width="80%" />
+            <Skeleton variant="text" width="65%" />
+          </Box>
         ) : submitted ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-            <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Check className="h-6 w-6 text-primary" />
-            </div>
-            <p className="font-medium">Response submitted!</p>
-            <p className="text-sm text-muted-foreground">Thank you for filling out this form.</p>
-            <Button variant="outline" size="sm" onClick={onClose} className="cursor-pointer mt-2">
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              py: 6,
+              gap: 1.5,
+              textAlign: "center",
+            }}
+          >
+            <Box
+              sx={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Check size={24} color="var(--mui-palette-primary-contrastText)" />
+            </Box>
+            <Typography fontWeight={500}>Response submitted!</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Thank you for filling out this form.
+            </Typography>
+            <Button variant="outlined" size="small" onClick={onClose} sx={{ mt: 1 }}>
               Close
             </Button>
-          </div>
+          </Box>
         ) : form.fields.length === 0 ? (
-          <div className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">
+          <Box sx={{ py: 4, textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">
               {form.isEncrypted
                 ? "This form is encrypted and cannot be decrypted with your key."
                 : "This form has no fields."}
-            </p>
-          </div>
+            </Typography>
+          </Box>
         ) : (
-          <>
-            <ScrollArea className="flex-1 pr-3 -mr-3">
-              <div className="space-y-5 py-2">
-                {form.fields.map((field) => (
-                  <FieldRenderer
-                    key={field.id}
-                    field={field}
-                    value={answers[field.id] ?? ""}
-                    checkedValues={checkAnswers[field.id]}
-                    onChange={(v) => setAnswer(field.id, v)}
-                    onToggleCheck={(optId) => toggleCheck(field.id, optId)}
-                  />
-                ))}
-              </div>
-            </ScrollArea>
-
-            {submitError && <p className="text-xs text-destructive">{submitError}</p>}
-
-            <DialogFooter>
-              <Button variant="outline" onClick={onClose} className="cursor-pointer">
-                Cancel
-              </Button>
-              <Button onClick={handleSubmit} disabled={submitting} className="cursor-pointer">
-                {submitting ? (
-                  "Submitting…"
-                ) : (
-                  <>
-                    <Send className="h-4 w-4 mr-1.5" />
-                    Submit
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+            {form.fields.map((field) => (
+              <FieldRenderer
+                key={field.id}
+                field={field}
+                value={answers[field.id] ?? ""}
+                checkedValues={checkAnswers[field.id]}
+                onChange={(v) => setAnswer(field.id, v)}
+                onToggleCheck={(optId) => toggleCheck(field.id, optId)}
+              />
+            ))}
+          </Box>
         )}
       </DialogContent>
+
+      {submitError && (
+        <Box sx={{ px: 3, pt: 1 }}>
+          <Typography variant="caption" color="error">
+            {submitError}
+          </Typography>
+        </Box>
+      )}
+
+      {!submitted && form && form.fields.length > 0 && (
+        <DialogActions>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleSubmit}
+            disabled={submitting}
+            startIcon={
+              submitting ? <CircularProgress size={14} color="inherit" /> : <Send size={14} />
+            }
+          >
+            {submitting ? "Submitting…" : "Submit"}
+          </Button>
+        </DialogActions>
+      )}
     </Dialog>
   );
 }
@@ -752,168 +901,147 @@ function FieldRenderer({
   onChange: (value: string) => void;
   onToggleCheck: (optionId: string) => void;
 }) {
-  const labelEl = (
-    <div className="flex items-center gap-1.5 mb-1.5">
-      <Label className="text-sm font-medium">{field.label || "Untitled"}</Label>
-      {field.required && <span className="text-destructive text-xs">*</span>}
-    </div>
+  const label = (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
+      <Typography variant="body2" fontWeight={500}>
+        {field.label || "Untitled"}
+      </Typography>
+      {field.required && (
+        <Typography variant="caption" color="error">
+          *
+        </Typography>
+      )}
+    </Box>
   );
 
   switch (field.type) {
     case AnswerType.shortText:
+    case AnswerType.number:
+    case AnswerType.date:
+    case AnswerType.time:
+    case AnswerType.datetime:
       return (
-        <div>
-          {labelEl}
-          <Input
+        <Box>
+          {label}
+          <TextField
+            size="small"
+            fullWidth
+            type={
+              field.type === AnswerType.number
+                ? "number"
+                : field.type === AnswerType.date
+                  ? "date"
+                  : field.type === AnswerType.time
+                    ? "time"
+                    : field.type === AnswerType.datetime
+                      ? "datetime-local"
+                      : "text"
+            }
             placeholder={field.placeholder || "Your answer"}
             value={value}
             onChange={(e) => onChange(e.target.value)}
           />
-        </div>
+        </Box>
       );
 
     case AnswerType.paragraph:
       return (
-        <div>
-          {labelEl}
-          <textarea
-            className={cn(
-              "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2",
-              "text-sm ring-offset-background placeholder:text-muted-foreground",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              "resize-none",
-            )}
+        <Box>
+          {label}
+          <TextField
+            size="small"
+            fullWidth
+            multiline
+            rows={3}
             placeholder={field.placeholder || "Your answer"}
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            rows={3}
           />
-        </div>
+        </Box>
       );
 
     case AnswerType.radioButton:
       return (
-        <div>
-          {labelEl}
-          <RadioGroup value={value} onValueChange={onChange} className="space-y-1.5">
+        <Box>
+          {label}
+          <RadioGroup value={value} onChange={(e) => onChange(e.target.value)}>
             {(field.options ?? []).map((opt) => (
-              <div key={opt.id} className="flex items-center gap-2">
-                <RadioGroupItem value={opt.id} id={`r-${field.id}-${opt.id}`} />
-                <Label
-                  htmlFor={`r-${field.id}-${opt.id}`}
-                  className="text-sm cursor-pointer font-normal"
-                >
-                  {opt.label}
-                </Label>
-              </div>
+              <FormControlLabel
+                key={opt.id}
+                value={opt.id}
+                control={<Radio size="small" />}
+                label={<Typography variant="body2">{opt.label}</Typography>}
+              />
             ))}
           </RadioGroup>
-        </div>
+        </Box>
       );
 
     case AnswerType.checkboxes:
       return (
-        <div>
-          {labelEl}
-          <div className="space-y-1.5">
+        <Box>
+          {label}
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
             {(field.options ?? []).map((opt) => (
-              <div key={opt.id} className="flex items-center gap-2">
-                <Checkbox
-                  id={`c-${field.id}-${opt.id}`}
-                  checked={checkedValues?.has(opt.id) ?? false}
-                  onCheckedChange={() => onToggleCheck(opt.id)}
-                />
-                <Label
-                  htmlFor={`c-${field.id}-${opt.id}`}
-                  className="text-sm cursor-pointer font-normal"
-                >
-                  {opt.label}
-                </Label>
-              </div>
+              <FormControlLabel
+                key={opt.id}
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={checkedValues?.has(opt.id) ?? false}
+                    onChange={() => onToggleCheck(opt.id)}
+                  />
+                }
+                label={<Typography variant="body2">{opt.label}</Typography>}
+              />
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       );
 
     case AnswerType.dropdown:
       return (
-        <div>
-          {labelEl}
-          <Select value={value} onValueChange={onChange}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select an option" />
-            </SelectTrigger>
-            <SelectContent>
+        <Box>
+          {label}
+          <FormControl size="small" fullWidth>
+            <Select value={value} onChange={(e) => onChange(e.target.value)} displayEmpty>
+              <MenuItem value="">
+                <em>Select an option</em>
+              </MenuItem>
               {(field.options ?? []).map((opt) => (
-                <SelectItem key={opt.id} value={opt.id}>
+                <MenuItem key={opt.id} value={opt.id}>
                   {opt.label}
-                </SelectItem>
+                </MenuItem>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
-      );
-
-    case AnswerType.number:
-      return (
-        <div>
-          {labelEl}
-          <Input
-            type="number"
-            placeholder={field.placeholder || "0"}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-          />
-        </div>
-      );
-
-    case AnswerType.date:
-      return (
-        <div>
-          {labelEl}
-          <Input type="date" value={value} onChange={(e) => onChange(e.target.value)} />
-        </div>
-      );
-
-    case AnswerType.time:
-      return (
-        <div>
-          {labelEl}
-          <Input type="time" value={value} onChange={(e) => onChange(e.target.value)} />
-        </div>
-      );
-
-    case AnswerType.datetime:
-      return (
-        <div>
-          {labelEl}
-          <Input type="datetime-local" value={value} onChange={(e) => onChange(e.target.value)} />
-        </div>
+            </Select>
+          </FormControl>
+        </Box>
       );
 
     case AnswerType.label:
       return (
-        <div className="py-1">
-          <p className="text-sm text-muted-foreground">{field.label}</p>
-        </div>
+        <Typography variant="body2" sx={{ py: 0.5, color: "text.secondary", fontStyle: "italic" }}>
+          {field.label}
+        </Typography>
       );
 
     default:
       return (
-        <div>
-          {labelEl}
-          <Input
-            placeholder="Your answer"
+        <Box>
+          {label}
+          <TextField
+            size="small"
+            fullWidth
             value={value}
             onChange={(e) => onChange(e.target.value)}
           />
-        </div>
+        </Box>
       );
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-// Responses Dialog — table of submissions
+// Responses Dialog
 // ═══════════════════════════════════════════════════════════
 
 function ResponsesDialog({
@@ -932,99 +1060,80 @@ function ResponsesDialog({
   onClose: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Responses — {form?.name ?? formSummary?.name ?? "Loading…"}</DialogTitle>
-          <DialogDescription>
-            {responses.length} response{responses.length !== 1 ? "s" : ""} received
-          </DialogDescription>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="space-y-2 py-4">
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-          </div>
-        ) : responses.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
-            <BarChart3 className="h-10 w-10 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">No responses yet</p>
-          </div>
-        ) : (
-          <ScrollArea className="flex-1">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">#</th>
-                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">
-                      Responder
-                    </th>
-                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Time</th>
-                    {(form?.fields ?? []).map((f) => (
-                      <th
-                        key={f.id}
-                        className="text-left py-2 px-2 font-medium text-muted-foreground max-w-[200px] truncate"
-                      >
-                        {f.label || "Untitled"}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {responses.map((resp, ri) => {
-                    const answerMap = new Map(resp.responses.map((r) => [r.fieldId, r.answer]));
-                    return (
-                      <tr key={resp.id} className="border-b border-border/50 hover:bg-muted/30">
-                        <td className="py-2 px-2 text-muted-foreground">{ri + 1}</td>
-                        <td className="py-2 px-2 font-mono text-xs">{resp.pubkey.slice(0, 8)}…</td>
-                        <td className="py-2 px-2 text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(resp.createdAt * 1000).toLocaleString()}
-                        </td>
-                        {(form?.fields ?? []).map((f) => {
-                          const raw = answerMap.get(f.id) ?? "";
-                          let display = raw;
-                          // For checkboxes, show labels instead of IDs
-                          if (f.type === AnswerType.checkboxes && raw) {
-                            try {
-                              const ids = JSON.parse(raw) as string[];
-                              const optMap = new Map((f.options ?? []).map((o) => [o.id, o.label]));
-                              display = ids.map((id) => optMap.get(id) ?? id).join(", ");
-                            } catch {
-                              /* keep raw */
-                            }
-                          }
-                          // For radio/dropdown, show label instead of ID
-                          if (
-                            (f.type === AnswerType.radioButton || f.type === AnswerType.dropdown) &&
-                            raw
-                          ) {
-                            const opt = (f.options ?? []).find((o) => o.id === raw);
-                            if (opt) display = opt.label;
-                          }
-                          return (
-                            <td key={f.id} className="py-2 px-2 max-w-[200px] truncate">
-                              {display || <span className="text-muted-foreground">—</span>}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </ScrollArea>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="md"
+      PaperProps={{ sx: { maxHeight: "85vh" } }}
+    >
+      <DialogTitle>
+        Responses — {form?.name ?? formSummary?.name ?? "Loading…"}
+        {!isLoading && (
+          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+            ({responses.length})
+          </Typography>
         )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="cursor-pointer">
-            Close
-          </Button>
-        </DialogFooter>
+      </DialogTitle>
+      <DialogContent dividers sx={{ overflowX: "auto", overflowY: "auto" }}>
+        {isLoading || !form ? (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} variant="text" />
+            ))}
+          </Box>
+        ) : responses.length === 0 ? (
+          <Box sx={{ py: 6, textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">
+              No responses yet.
+            </Typography>
+          </Box>
+        ) : (
+          <Table size="small" sx={{ minWidth: 600 }}>
+            <TableHead>
+              <TableRow sx={{ "& th": { fontWeight: 600, fontSize: 12, color: "text.secondary" } }}>
+                <TableCell>#</TableCell>
+                <TableCell>Date</TableCell>
+                {form.fields
+                  .filter((f) => f.type !== AnswerType.label)
+                  .map((f) => (
+                    <TableCell key={f.id}>{f.label || "—"}</TableCell>
+                  ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {responses.map((r, ri) => {
+                const byId: Record<string, string> = {};
+                r.responses.forEach((rr) => {
+                  byId[rr.fieldId] = rr.answer;
+                });
+                return (
+                  <TableRow key={r.id} hover>
+                    <TableCell>
+                      <Typography variant="caption">{ri + 1}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(r.createdAt * 1000).toLocaleString()}
+                      </Typography>
+                    </TableCell>
+                    {form.fields
+                      .filter((f) => f.type !== AnswerType.label)
+                      .map((f) => (
+                        <TableCell key={f.id}>
+                          <Typography variant="caption">{byId[f.id] ?? "—"}</Typography>
+                        </TableCell>
+                      ))}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
       </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
     </Dialog>
   );
 }

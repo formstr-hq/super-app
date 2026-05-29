@@ -1,3 +1,4 @@
+import { Box, Paper, Typography } from "@mui/material";
 import type { Editor, Range } from "@tiptap/core";
 import { Extension } from "@tiptap/core";
 import Link from "@tiptap/extension-link";
@@ -15,8 +16,6 @@ import { MentionPicker, type MentionItem } from "../MentionPicker";
 
 import { htmlToMarkdown, markdownToHtml } from "./markdownBridge";
 import { SLASH_COMMANDS, filterSlashCommands, type SlashCommandItem } from "./slashCommands";
-
-import { cn } from "@/lib/utils";
 
 // ═══════════════════════════════════════════════════════════
 // Slash command extension (uses @tiptap/suggestion)
@@ -167,46 +166,66 @@ function SlashPopup({
     position: "fixed",
     top: Math.min(rect.bottom + 6, window.innerHeight - 320),
     left: Math.min(rect.left, window.innerWidth - 300),
-    zIndex: 60,
+    zIndex: 1300,
   };
 
   return createPortal(
-    <div
+    <Paper
+      elevation={4}
       style={style}
-      className="w-72 overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+      sx={{ width: 280, borderRadius: 1.5, overflow: "hidden", py: 0.5 }}
     >
-      <div className="max-h-72 overflow-y-auto py-1">
+      <Box sx={{ maxHeight: 280, overflowY: "auto" }}>
         {state.items.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-muted-foreground">
+          <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
             No commands match “{state.query}”
-          </div>
+          </Typography>
         ) : (
           state.items.map((item, i) => {
             const Icon = item.icon;
+            const selected = i === selectedIdx;
             return (
-              <button
+              <Box
                 key={item.title}
+                component="button"
                 onMouseEnter={() => onSelect(i)}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   state.command(item);
                 }}
-                className={cn(
-                  "flex w-full items-start gap-2.5 px-3 py-2 text-left text-sm transition-colors",
-                  i === selectedIdx ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-                )}
+                sx={{
+                  display: "flex",
+                  width: "100%",
+                  alignItems: "flex-start",
+                  gap: 1.5,
+                  px: 2,
+                  py: 1,
+                  textAlign: "left",
+                  border: "none",
+                  cursor: "pointer",
+                  bgcolor: selected ? "action.selected" : "transparent",
+                  color: "text.primary",
+                  "&:hover": { bgcolor: "action.hover" },
+                }}
               >
-                <Icon className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium leading-tight">{item.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">{item.description}</p>
-                </div>
-              </button>
+                <Icon
+                  size={16}
+                  style={{ marginTop: 2, color: "var(--mui-palette-text-secondary)" }}
+                />
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography variant="body2" fontWeight={500} lineHeight={1.2} sx={{ mb: 0.25 }}>
+                    {item.title}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap display="block">
+                    {item.description}
+                  </Typography>
+                </Box>
+              </Box>
             );
           })
         )}
-      </div>
-    </div>,
+      </Box>
+    </Paper>,
     document.body,
   );
 }
@@ -231,7 +250,7 @@ function MentionPopup({
     position: "fixed",
     top: Math.min(rect.bottom + 6, window.innerHeight - 280),
     left: Math.min(rect.left, window.innerWidth - 300),
-    zIndex: 60,
+    zIndex: 1300,
   };
 
   return createPortal(
@@ -334,7 +353,6 @@ export function RichEditor({
       Link.configure({
         openOnClick: false,
         autolink: true,
-        HTMLAttributes: { class: "underline underline-offset-2" },
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -358,7 +376,7 @@ export function RichEditor({
         handleMentionKeyDown,
       ),
     ],
-     
+
     [placeholder],
   );
 
@@ -397,8 +415,29 @@ export function RichEditor({
   }, [initialMarkdown]);
 
   return (
-    <div className={cn("rich-editor flex flex-col min-h-0", className)}>
-      <EditorContent editor={editor} className="flex-1 min-h-0 overflow-auto" />
+    <Box
+      className={`rich-editor ${className || ""}`}
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        height: "100%",
+        "& .tiptap": {
+          outline: "none",
+          p: 1,
+          minHeight: 280,
+          typography: "body2",
+          "& p.is-editor-empty:first-of-type::before": {
+            color: "text.disabled",
+            content: "attr(data-placeholder)",
+            float: "left",
+            height: 0,
+            pointerEvents: "none",
+          },
+        },
+      }}
+    >
+      <EditorContent editor={editor} style={{ flex: 1, minHeight: 0, overflow: "auto" }} />
 
       {slashState && (
         <SlashPopup state={slashState} selectedIdx={slashIdx} onSelect={setSlashIdx} />
@@ -415,7 +454,7 @@ export function RichEditor({
           }}
         />
       )}
-    </div>
+    </Box>
   );
 }
 

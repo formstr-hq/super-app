@@ -1,48 +1,66 @@
+import { Box, Skeleton, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { Sparkles } from "lucide-react";
 import { useMemo } from "react";
 
 import { useAIPendingStore, type AIModule } from "../../stores/aiPendingStore";
-
-import { Skeleton } from "@/components/ui/skeleton";
-
 
 interface AIPendingRowProps {
   module: AIModule;
   label?: string;
 }
 
-/**
- * Placeholder row rendered at the top of a module's list whenever the AI
- * assistant has a write in flight for that module. Lets the user see that
- * something is happening in the module even before the network round-trip
- * completes.
- */
 export function AIPendingRow({ module, label }: AIPendingRowProps) {
-  // Select the stable array reference; filter in a memo so the selector
-  // does not return a new array every render (which would cause
-  // useSyncExternalStore to loop indefinitely).
+  const theme = useTheme();
   const allPending = useAIPendingStore((s) => s.pending);
   const pending = useMemo(
     () => allPending.filter((p) => p.module === module),
     [allPending, module],
   );
+
   if (pending.length === 0) return null;
 
   return (
-    <div className="mb-3 flex flex-col gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+    <Box
+      sx={{
+        mb: 1.5,
+        display: "flex",
+        flexDirection: "column",
+        gap: 1,
+        borderRadius: 1.5,
+        border: `1px dashed ${theme.palette.primary.main}44`,
+        bgcolor: `${theme.palette.primary.main}08`,
+        p: 1.5,
+      }}
+    >
       {pending.map((entry) => (
-        <div key={entry.id} className="flex items-center gap-3">
-          <Sparkles className="h-4 w-4 shrink-0 animate-pulse text-primary" />
-          <div className="flex-1 space-y-1.5">
-            <div className="flex items-center gap-2 text-xs font-medium text-primary">
-              <span>AI is running</span>
-              <span className="font-mono">{entry.toolName}</span>
-              {label && <span className="text-muted-foreground">— {label}</span>}
-            </div>
-            <Skeleton className="h-3 w-3/4" />
-          </div>
-        </div>
+        <Box key={entry.id} sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Sparkles
+            size={16}
+            style={{
+              flexShrink: 0,
+              color: theme.palette.primary.main,
+              animation: "pulse 1.5s ease-in-out infinite",
+            }}
+          />
+          <Box sx={{ flex: 1 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+              <Typography variant="caption" fontWeight={500} sx={{ color: "primary.main" }}>
+                AI is running
+              </Typography>
+              <Typography variant="caption" sx={{ fontFamily: "monospace", color: "primary.main" }}>
+                {entry.toolName}
+              </Typography>
+              {label && (
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                  — {label}
+                </Typography>
+              )}
+            </Box>
+            <Skeleton variant="text" width="75%" height={12} />
+          </Box>
+        </Box>
       ))}
-    </div>
+    </Box>
   );
 }

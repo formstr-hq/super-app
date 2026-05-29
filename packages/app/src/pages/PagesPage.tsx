@@ -1,4 +1,22 @@
 import { createRef } from "@formstr/core";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  IconButton,
+  Paper,
+  Skeleton,
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { Plus, FileEdit, Trash2, Share2, Edit, Link2, Lock, Tag } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -6,23 +24,6 @@ import { AIPendingRow } from "../components/ai/AIPendingRow";
 import { RichEditor } from "../components/pages/RichEditor";
 import { PAGES_KINDS, type PageSummary } from "../services/pages/types";
 import { usePagesStore } from "../stores";
-
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-
 
 export function PagesPage() {
   const {
@@ -41,6 +42,7 @@ export function PagesPage() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     fetchMyPages();
@@ -73,187 +75,226 @@ export function PagesPage() {
     if (result) {
       setShareUrl(result.url);
       navigator.clipboard.writeText(result.url);
-    } else {
-      setShareError("Open the page first to enable sharing (viewKey required).");
-    }
-  };
-
-  const handleEditorClose = () => {
-    setEditorOpen(false);
-    clearCurrent();
+    } else setShareError("Open the page first to enable sharing (viewKey required).");
   };
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-foreground">Pages</h1>
-          <Button size="sm" onClick={handleNewPage} className="gap-1.5 h-8">
-            <Plus className="h-3.5 w-3.5" />
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Typography variant="h6" fontWeight={600}>
+          Pages
+        </Typography>
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<Plus size={16} />}
+          onClick={handleNewPage}
+        >
+          New Page
+        </Button>
+      </Box>
+
+      <AIPendingRow module="pages" />
+
+      {error && (
+        <Alert severity="error" sx={{ py: 0.5 }}>
+          {error}
+        </Alert>
+      )}
+      {shareError && (
+        <Alert severity="warning" sx={{ py: 0.5 }}>
+          {shareError}
+        </Alert>
+      )}
+      {shareUrl && (
+        <Alert severity="success" sx={{ py: 0.5 }} onClose={() => setShareUrl(null)}>
+          Link copied to clipboard!
+        </Alert>
+      )}
+
+      {isLoading ? (
+        <Paper variant="outlined" sx={{ borderRadius: 1.5 }}>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Box
+              key={i}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                px: 2,
+                py: 1.5,
+                borderBottom: i < 4 ? `1px solid ${theme.palette.divider}` : "none",
+              }}
+            >
+              <Skeleton variant="rounded" width={16} height={16} />
+              <Skeleton variant="text" sx={{ flex: 1 }} />
+              <Skeleton variant="text" width={80} />
+            </Box>
+          ))}
+        </Paper>
+      ) : pages.length === 0 ? (
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            py: 10,
+            gap: 1.5,
+            textAlign: "center",
+          }}
+        >
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: 2,
+              bgcolor: "action.hover",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <FileEdit size={28} color={theme.palette.text.secondary} />
+          </Box>
+          <Typography variant="body2" fontWeight={500}>
+            No pages yet
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Create your first page to get started
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<Plus size={14} />}
+            onClick={handleNewPage}
+            sx={{ mt: 0.5 }}
+          >
             New Page
           </Button>
-        </div>
-
-        <AIPendingRow module="pages" />
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {shareError && <p className="text-sm text-amber-500">{shareError}</p>}
-        {shareUrl && (
-          <div className="flex items-center gap-2 rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 px-3 py-2">
-            <span className="text-xs text-green-700 dark:text-green-400 flex-1">
-              Link copied to clipboard!
-            </span>
-            <button
-              onClick={() => setShareUrl(null)}
-              className="text-green-600 dark:text-green-400 hover:opacity-70 transition-opacity"
-              aria-label="Dismiss"
+        </Box>
+      ) : (
+        <Paper variant="outlined" sx={{ borderRadius: 1.5, overflow: "hidden" }}>
+          {pages.map((page, idx) => (
+            <Box
+              key={page.id}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                px: 2,
+                py: 1.5,
+                borderBottom:
+                  idx < pages.length - 1 ? `1px solid ${theme.palette.divider}` : "none",
+                "&:hover": { bgcolor: "action.hover" },
+                "&:hover .page-actions": { opacity: 1 },
+              }}
             >
-              ×
-            </button>
-          </div>
-        )}
+              <FileEdit size={16} color={theme.palette.text.secondary} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body2" fontWeight={500} noWrap>
+                  {page.title}
+                </Typography>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.75,
+                    mt: 0.25,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    {new Date(page.createdAt * 1000).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </Typography>
+                  {page.isEncrypted && (
+                    <Chip
+                      icon={<Lock size={10} />}
+                      label="Encrypted"
+                      size="small"
+                      sx={{ height: 16, fontSize: 10 }}
+                    />
+                  )}
+                  {page.tags?.map((tag) => (
+                    <Chip
+                      key={tag}
+                      icon={<Tag size={10} />}
+                      label={tag}
+                      size="small"
+                      variant="outlined"
+                      sx={{ height: 16, fontSize: 10 }}
+                    />
+                  ))}
+                </Box>
+              </Box>
 
-        {isLoading ? (
-          <div className="space-y-1">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 py-3 border-b border-border">
-                <Skeleton className="h-4 w-4 rounded" />
-                <Skeleton className="h-4 flex-1" />
-                <Skeleton className="h-4 w-20" />
-              </div>
-            ))}
-          </div>
-        ) : pages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-muted">
-              <FileEdit className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">No pages yet</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Create your first page to get started
-              </p>
-            </div>
-            <Button size="sm" onClick={handleNewPage} className="gap-1.5 mt-1 h-8">
-              <Plus className="h-3.5 w-3.5" />
-              New Page
-            </Button>
-          </div>
-        ) : (
-          /* List view — Notion-style rows */
-          <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
-            {pages.map((page) => (
-              <div
-                key={page.id}
-                className="group flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors duration-150"
+              <Box
+                className="page-actions"
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.25,
+                  opacity: 0,
+                  transition: "opacity 150ms",
+                }}
               >
-                <FileEdit className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Tooltip title="Edit">
+                  <IconButton size="small" onClick={() => handleEdit(page)}>
+                    <Edit size={14} />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Share">
+                  <IconButton size="small" onClick={() => handleShare(page.address)}>
+                    <Share2 size={14} />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={copiedId === page.id ? "Copied!" : "Copy cross-app link"}>
+                  <IconButton size="small" onClick={() => handleCopyLink(page)}>
+                    <Link2 size={14} />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Delete">
+                  <IconButton size="small" color="error" onClick={() => deletePage(page.address)}>
+                    <Trash2 size={14} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
+          ))}
+        </Paper>
+      )}
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{page.title}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(page.createdAt * 1000).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                    {page.isEncrypted && (
-                      <Badge variant="secondary" className="text-xs gap-1 py-0 h-4">
-                        <Lock className="h-2.5 w-2.5" />
-                        Encrypted
-                      </Badge>
-                    )}
-                    {page.tags?.map((tag) => (
-                      <Badge key={tag} variant="outline" className="text-xs gap-1 py-0 h-4">
-                        <Tag className="h-2.5 w-2.5" />
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Actions — shown on hover */}
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleEdit(page)}
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Edit</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleShare(page.address)}
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Share</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleCopyLink(page)}
-                      >
-                        <Link2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {copiedId === page.id ? "Copied!" : "Copy cross-app link"}
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        onClick={() => deletePage(page.address)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Delete</TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <PageEditorDialog
-          open={editorOpen}
-          onClose={handleEditorClose}
-          onSave={savePage}
-          initialContent={currentPage?.content}
-          initialTitle={currentPage?.title}
-          existingId={currentPage?.id}
-          viewKey={currentPage?.viewKey}
-        />
-      </div>
-    </TooltipProvider>
+      <PageEditorDialog
+        open={editorOpen}
+        onClose={() => {
+          setEditorOpen(false);
+          clearCurrent();
+        }}
+        onSave={savePage}
+        initialContent={currentPage?.content}
+        initialTitle={currentPage?.title}
+        existingId={currentPage?.id}
+        viewKey={currentPage?.viewKey}
+      />
+    </Box>
   );
 }
 
-// ── Page Editor Dialog ────────────────────────────────────────
+// ── Page Editor Dialog ────────────────────────────────────
 
-interface PageEditorDialogProps {
+function PageEditorDialog({
+  open,
+  onClose,
+  onSave,
+  initialContent,
+  initialTitle,
+  existingId,
+  viewKey,
+}: {
   open: boolean;
   onClose: () => void;
   onSave: (params: {
@@ -266,28 +307,17 @@ interface PageEditorDialogProps {
   initialTitle?: string;
   existingId?: string;
   viewKey?: string;
-}
-
-function PageEditorDialog({
-  open,
-  onClose,
-  onSave,
-  initialContent,
-  initialTitle,
-  existingId,
-  viewKey,
-}: PageEditorDialogProps) {
+}) {
   const [title, setTitle] = useState(initialTitle ?? "");
   const [content, setContent] = useState(initialContent ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const theme = useTheme();
 
   useEffect(() => {
     setTitle(initialTitle ?? "");
     setContent(initialContent ?? "");
   }, [initialContent, initialTitle]);
 
-  // Strip any leading "# title" block that was prepended by a previous save so
-  // the rich editor body shows only the body content.
   const bodyMarkdown = useMemo(() => stripLeadingTitle(content, title), [content, title]);
 
   const handleSave = async () => {
@@ -309,58 +339,86 @@ function PageEditorDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-3xl h-[85vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
-          <DialogTitle className="text-base">{existingId ? "Edit Page" : "New Page"}</DialogTitle>
-          <DialogDescription className="text-xs">
-            Rich editor with slash commands. Type <kbd className="rounded bg-muted px-1">/</kbd> for
-            blocks, <kbd className="rounded bg-muted px-1">@</kbd> to link another entity.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-1 flex flex-col gap-3 px-6 py-4 min-h-0">
-          <div className="space-y-1.5 shrink-0">
-            <Label htmlFor="page-title" className="text-xs">
-              Title
-            </Label>
-            <Input
-              id="page-title"
-              placeholder="Page title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="h-9 text-base font-medium"
-            />
-          </div>
-
-          <Separator />
-
-          <div className="flex-1 flex flex-col space-y-1.5 min-h-0">
-            <Label className="text-xs shrink-0">Content</Label>
-            <div className="flex-1 min-h-0 overflow-hidden rounded-md border border-input bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-ring">
-              <RichEditor
-                key={existingId ?? "new-page"}
-                initialMarkdown={bodyMarkdown}
-                onChangeMarkdown={setContent}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border shrink-0">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
-            Cancel
-          </Button>
-          <Button size="sm" onClick={handleSave} disabled={!title.trim() || isSubmitting}>
-            {isSubmitting ? "Saving…" : "Save"}
-          </Button>
-        </div>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="md"
+      PaperProps={{ sx: { height: "85vh", display: "flex", flexDirection: "column" } }}
+    >
+      <DialogTitle sx={{ borderBottom: `1px solid ${theme.palette.divider}`, py: 1.5 }}>
+        <Typography variant="body1" fontWeight={600}>
+          {existingId ? "Edit Page" : "New Page"}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Type{" "}
+          <Box
+            component="kbd"
+            sx={{ bgcolor: "action.hover", px: 0.5, borderRadius: 0.5, fontFamily: "monospace" }}
+          >
+            /
+          </Box>{" "}
+          for blocks,{" "}
+          <Box
+            component="kbd"
+            sx={{ bgcolor: "action.hover", px: 0.5, borderRadius: 0.5, fontFamily: "monospace" }}
+          >
+            @
+          </Box>{" "}
+          to link another entity.
+        </Typography>
+      </DialogTitle>
+      <DialogContent
+        sx={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          gap: 1.5,
+          overflowY: "hidden",
+          px: 3,
+          py: 2,
+        }}
+      >
+        <TextField
+          placeholder="Page title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          size="small"
+          fullWidth
+          InputProps={{ sx: { fontSize: 16, fontWeight: 500 } }}
+        />
+        <Divider />
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 1,
+            px: 1.5,
+            py: 1,
+            "&:focus-within": { outline: `2px solid ${theme.palette.primary.main}` },
+          }}
+        >
+          <RichEditor
+            key={existingId ?? "new-page"}
+            initialMarkdown={bodyMarkdown}
+            onChangeMarkdown={setContent}
+          />
+        </Box>
       </DialogContent>
+      <DialogActions sx={{ borderTop: `1px solid ${theme.palette.divider}`, px: 3, py: 1.5 }}>
+        <Button onClick={onClose} disabled={isSubmitting}>
+          Cancel
+        </Button>
+        <Button variant="contained" onClick={handleSave} disabled={!title.trim() || isSubmitting}>
+          {isSubmitting ? "Saving…" : "Save"}
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 }
 
-/** Remove a leading `# Title` line from markdown so the editor body doesn't duplicate it. */
 function stripLeadingTitle(markdown: string, title: string): string {
   const trimmed = markdown.replace(/^\s+/, "");
   const firstLineEnd = trimmed.indexOf("\n");

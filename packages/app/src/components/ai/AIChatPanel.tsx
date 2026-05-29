@@ -1,10 +1,37 @@
-import { X, Send, Trash2, Sparkles, Loader2, AlertCircle } from "lucide-react";
-import { useRef, useEffect, useState, useCallback, type KeyboardEvent } from "react";
+import { Box, Divider, IconButton, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { AlertCircle, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { useAIStore, useSettingsStore } from "../../stores";
 
 import { EntityCard } from "./EntityCard";
 import { MessageBubble } from "./MessageBubble";
+
+function StatusDot({ status }: { status: string }) {
+  const color =
+    status === "connected"
+      ? "#22c55e"
+      : status === "connecting"
+        ? "#eab308"
+        : status === "error"
+          ? "#ef4444"
+          : "#9ca3af";
+  return (
+    <Box
+      component="span"
+      title={status}
+      sx={{
+        display: "inline-block",
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        bgcolor: color,
+        animation: status === "connecting" ? "pulse 1.5s ease-in-out infinite" : undefined,
+      }}
+    />
+  );
+}
 
 export function AIChatPanel() {
   const {
@@ -23,12 +50,10 @@ export function AIChatPanel() {
   const { aiPanelOpen, setAIPanelOpen, aiModel } = useSettingsStore();
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const theme = useTheme();
 
   useEffect(() => {
-    if (aiPanelOpen && providerStatus === "disconnected") {
-      initProvider();
-    }
+    if (aiPanelOpen && providerStatus === "disconnected") initProvider();
   }, [aiPanelOpen, providerStatus, initProvider]);
 
   useEffect(() => {
@@ -43,7 +68,7 @@ export function AIChatPanel() {
   }, [input, isProcessing, sendMessage]);
 
   const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: KeyboardEvent<HTMLDivElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
@@ -55,7 +80,6 @@ export function AIChatPanel() {
   if (!aiPanelOpen) return null;
 
   const recentEntities = entities.slice(-5);
-
   const suggestions =
     messages.length === 0
       ? [
@@ -67,55 +91,94 @@ export function AIChatPanel() {
       : [];
 
   return (
-    <div className="flex h-full w-[380px] shrink-0 flex-col border-l border-border bg-background">
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        width: 380,
+        flexShrink: 0,
+        borderLeft: `1px solid ${theme.palette.divider}`,
+        bgcolor: "background.default",
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">AI Assistant</span>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          px: 2,
+          py: 1.5,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          flexShrink: 0,
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Sparkles size={16} />
+          <Typography variant="body2" fontWeight={600}>
+            AI Assistant
+          </Typography>
           <StatusDot status={providerStatus} />
-        </div>
-        <div className="flex items-center gap-1">
+        </Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
           {availableModels.length > 0 && (
-            <select
+            <Select
               value={aiModel ?? availableModels[0] ?? ""}
               onChange={(e) => setModel(e.target.value)}
-              className="h-6 rounded border border-border bg-background px-1 text-[10px] text-muted-foreground outline-none max-w-[120px]"
-              title="Select AI model"
+              variant="standard"
+              disableUnderline
+              sx={{
+                fontSize: 11,
+                color: "text.secondary",
+                maxWidth: 110,
+                "& .MuiSelect-select": { py: 0 },
+              }}
             >
               {availableModels.map((m) => (
-                <option key={m} value={m}>
+                <MenuItem key={m} value={m} sx={{ fontSize: 12 }}>
                   {m.replace(/:latest$/, "")}
-                </option>
+                </MenuItem>
               ))}
-            </select>
+            </Select>
           )}
-          <button
+          <IconButton
+            size="small"
             onClick={reset}
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             title="Clear conversation"
+            sx={{ color: "text.secondary" }}
           >
-            <Trash2 className="h-4 w-4" />
-          </button>
-          <button
+            <Trash2 size={15} />
+          </IconButton>
+          <IconButton
+            size="small"
             onClick={() => setAIPanelOpen(false)}
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            sx={{ color: "text.secondary" }}
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+            <X size={15} />
+          </IconButton>
+        </Box>
+      </Box>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <Box sx={{ flex: 1, overflowY: "auto", px: 2, py: 1.5 }}>
         {messages.length === 0 && !streamingContent && (
-          <div className="flex flex-col items-center justify-center gap-3 pt-12 text-center">
-            <Sparkles className="h-8 w-8 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 1.5,
+              pt: 6,
+              textAlign: "center",
+            }}
+          >
+            <Sparkles size={32} style={{ color: theme.palette.text.secondary, opacity: 0.4 }} />
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
               Ask me to create forms, schedule events, write pages, create polls, or browse your
               files.
-            </p>
-          </div>
+            </Typography>
+          </Box>
         )}
 
         {messages
@@ -137,86 +200,125 @@ export function AIChatPanel() {
         )}
 
         {isProcessing && !streamingContent && (
-          <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Thinking...</span>
-          </div>
+          <Box
+            sx={{ display: "flex", alignItems: "center", gap: 1, py: 1, color: "text.secondary" }}
+          >
+            <Loader2 size={14} style={{ animation: "spin 0.6s linear infinite" }} />
+            <Typography variant="body2">Thinking...</Typography>
+          </Box>
         )}
 
         {errorMessage && (
-          <div className="my-2 flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <Box
+            sx={{
+              my: 1,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 1,
+              borderRadius: 1,
+              bgcolor: "error.main",
+              color: "error.contrastText",
+              px: 1.5,
+              py: 1,
+              fontSize: 13,
+              opacity: 0.9,
+            }}
+          >
+            <AlertCircle size={14} style={{ marginTop: 2, flexShrink: 0 }} />
             <span>{errorMessage}</span>
-          </div>
+          </Box>
         )}
-
         <div ref={messagesEndRef} />
-      </div>
+      </Box>
 
-      {/* Recent Entities */}
+      {/* Recent entities */}
       {recentEntities.length > 0 && (
-        <div className="border-t border-border px-4 py-2">
-          <p className="mb-1 text-xs text-muted-foreground">Recent</p>
-          <div className="flex gap-2 overflow-x-auto">
+        <Box sx={{ px: 2, py: 1, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>
+            Recent
+          </Typography>
+          <Box sx={{ display: "flex", gap: 0.75, overflowX: "auto" }}>
             {recentEntities.map((entity, i) => (
               <EntityCard key={`${entity.ref}-${i}`} entity={entity} />
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
       {/* Suggestions */}
       {suggestions.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 border-t border-border px-4 py-2">
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 0.75,
+            px: 2,
+            py: 1,
+            borderTop: `1px solid ${theme.palette.divider}`,
+          }}
+        >
           {suggestions.map((s) => (
-            <button
+            <Box
               key={s}
-              onClick={() => {
-                setInput(s);
-                textareaRef.current?.focus();
+              component="button"
+              onClick={() => setInput(s)}
+              sx={{
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: "20px",
+                px: 1.25,
+                py: 0.5,
+                fontSize: 12,
+                color: "text.secondary",
+                bgcolor: "transparent",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                transition: "background 150ms",
+                "&:hover": { bgcolor: "action.hover", color: "text.primary" },
               }}
-              className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               {s}
-            </button>
+            </Box>
           ))}
-        </div>
+        </Box>
       )}
 
+      <Divider />
+
       {/* Input */}
-      <div className="border-t border-border p-3">
-        <div className="flex items-end gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
-          <textarea
-            ref={textareaRef}
+      <Box sx={{ p: 1.5 }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "flex-end",
+            gap: 1,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 1.5,
+            bgcolor: "background.paper",
+            px: 1.5,
+            py: 1,
+          }}
+        >
+          <TextField
+            multiline
+            maxRows={4}
+            variant="standard"
+            fullWidth
+            placeholder="Ask something..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask something..."
-            rows={1}
-            className="max-h-24 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            InputProps={{ disableUnderline: true, sx: { fontSize: 13 } }}
           />
-          <button
+          <IconButton
+            size="small"
             onClick={handleSend}
             disabled={!input.trim() || isProcessing}
-            className="rounded-md p-1 text-primary transition-colors hover:bg-primary/10 disabled:opacity-40"
+            sx={{ color: "text.primary", mb: 0.25, "&:disabled": { opacity: 0.3 } }}
           >
-            <Send className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </div>
+            <Send size={16} />
+          </IconButton>
+        </Box>
+      </Box>
+    </Box>
   );
-}
-
-function StatusDot({ status }: { status: string }) {
-  const color =
-    status === "connected"
-      ? "bg-green-500"
-      : status === "connecting"
-        ? "bg-yellow-500 animate-pulse"
-        : status === "error"
-          ? "bg-red-500"
-          : "bg-gray-400";
-
-  return <span className={`inline-block h-2 w-2 rounded-full ${color}`} title={status} />;
 }

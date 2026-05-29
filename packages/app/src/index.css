@@ -1,107 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
-@import "tailwindcss";
 
-/* ── Non-color design tokens ─────────────────────────────────── */
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-}
-
-/* ── shadcn/ui CSS variables — light mode ────────────────────── */
-:root {
-  --background: 0 0% 100%;
-  --foreground: 0 0% 9%;
-  --card: 0 0% 100%;
-  --card-foreground: 0 0% 9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 9%;
-  --primary: 0 0% 9%; /* near-black — Formstr brand */
-  --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 96%;
-  --secondary-foreground: 0 0% 9%;
-  --muted: 0 0% 96%;
-  --muted-foreground: 0 0% 45%;
-  --accent: 0 0% 96%;
-  --accent-foreground: 0 0% 9%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 89%;
-  --input: 0 0% 89%;
-  --ring: 0 0% 9%;
-  --radius: 0.375rem;
-}
-
-/* ── shadcn/ui CSS variables — dark mode ─────────────────────── */
-.dark {
-  --background: 0 0% 10%;
-  --foreground: 0 0% 93%;
-  --card: 0 0% 13%;
-  --card-foreground: 0 0% 93%;
-  --popover: 0 0% 13%;
-  --popover-foreground: 0 0% 93%;
-  --primary: 0 0% 93%; /* near-white — inverted brand */
-  --primary-foreground: 0 0% 9%;
-  --secondary: 0 0% 17%;
-  --secondary-foreground: 0 0% 93%;
-  --muted: 0 0% 17%;
-  --muted-foreground: 0 0% 60%;
-  --accent: 0 0% 17%;
-  --accent-foreground: 0 0% 93%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 22%;
-  --input: 0 0% 22%;
-  --ring: 0 0% 83%;
-}
-
-/* ── Bridge Tailwind utilities → dynamic CSS variables ──────── */
-/* This makes bg-background, text-primary, border-border, etc.  */
-/* all respond correctly to the .dark class toggle.             */
-@theme inline {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 2px);
-  --radius-xl: calc(var(--radius) + 6px);
-}
-
-/* ── Base Styles ─────────────────────────────────────────────── */
-* {
-  border-color: hsl(var(--border));
-  box-sizing: border-box;
-}
-
-html {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-/* ── Scrollbar ───────────────────────────────────────────────── */
+/* ── Scrollbar ─────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -110,20 +9,17 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
+  background: #d4d4d4;
   border-radius: 3px;
 }
+.dark ::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+}
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  opacity: 0.7;
 }
 
-/* ── Focus rings ─────────────────────────────────────────────── */
-:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: 2px;
-}
-
-/* ── Reduced motion ──────────────────────────────────────────── */
+/* ── Reduced motion ─────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -134,23 +30,11 @@ body {
   }
 }
 
-/* ── Utility: cursor-pointer on interactive elements ─────────── */
-button,
-[role="button"],
-a,
-select,
-label[for],
-input[type="checkbox"],
-input[type="radio"] {
-  cursor: pointer;
-}
-
-/* ── Rich (TipTap) editor prose styles ───────────────────────── */
+/* ── Rich (TipTap) editor prose styles ─────────────────────── */
 .rich-editor .ProseMirror {
   outline: none;
   min-height: 240px;
   padding: 0.5rem 0.25rem;
-  color: hsl(var(--foreground));
   font-size: 0.875rem;
   line-height: 1.6;
 }
@@ -211,23 +95,31 @@ input[type="radio"] {
   flex: 1;
 }
 .rich-editor .ProseMirror blockquote {
-  border-left: 3px solid hsl(var(--border));
+  border-left: 3px solid #e5e5e5;
   padding-left: 0.75rem;
-  color: hsl(var(--muted-foreground));
   font-style: italic;
 }
+.dark .rich-editor .ProseMirror blockquote {
+  border-left-color: #3a3a3a;
+}
 .rich-editor .ProseMirror code {
-  background: hsl(var(--muted));
+  background: #f5f5f5;
   padding: 0.1rem 0.3rem;
   border-radius: 0.25rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.85em;
 }
+.dark .rich-editor .ProseMirror code {
+  background: #2a2a2a;
+}
 .rich-editor .ProseMirror pre {
-  background: hsl(var(--muted));
+  background: #f5f5f5;
   padding: 0.75rem;
   border-radius: 0.375rem;
   overflow-x: auto;
+}
+.dark .rich-editor .ProseMirror pre {
+  background: #2a2a2a;
 }
 .rich-editor .ProseMirror pre code {
   background: transparent;
@@ -236,25 +128,27 @@ input[type="radio"] {
 }
 .rich-editor .ProseMirror hr {
   border: 0;
-  border-top: 1px solid hsl(var(--border));
+  border-top: 1px solid #ebebeb;
   margin: 1rem 0;
 }
+.dark .rich-editor .ProseMirror hr {
+  border-top-color: #2a2a2a;
+}
 .rich-editor .ProseMirror a {
-  color: hsl(222 83% 53%);
+  color: #2563eb;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 .dark .rich-editor .ProseMirror a {
-  color: hsl(222 83% 70%);
+  color: #60a5fa;
 }
 .rich-editor .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
-  color: hsl(var(--muted-foreground));
+  color: #aaa;
   pointer-events: none;
   float: left;
   height: 0;
 }
 .rich-editor .ProseMirror .suggestion {
-  color: hsl(var(--primary));
   font-weight: 500;
 }

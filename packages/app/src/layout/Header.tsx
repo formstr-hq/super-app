@@ -1,17 +1,21 @@
-import { Menu, LogOut, User, Settings, ChevronDown, Sparkles, Search } from "lucide-react";
+import {
+  AppBar,
+  Avatar,
+  Box,
+  Divider,
+  IconButton,
+  InputBase,
+  Menu,
+  MenuItem,
+  Toolbar,
+  Typography,
+} from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { LogOut, Menu as MenuIcon, Moon, Search, Settings, Sparkles, Sun } from "lucide-react";
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
 
-import { ThemeToggle } from "../components/ThemeToggle";
 import { useAuthStore, useSettingsStore } from "../stores";
-
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 const ROUTE_LABELS: Record<string, string> = {
   "/forms": "Forms",
@@ -29,121 +33,190 @@ interface HeaderProps {
 
 export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderProps) {
   const { pubkey, isLoggedIn, method, logout } = useAuthStore();
-  const { toggleSidebar, aiPanelOpen, setAIPanelOpen } = useSettingsStore();
+  const { toggleSidebar, aiPanelOpen, setAIPanelOpen, themeMode, toggleTheme } = useSettingsStore();
   const location = useLocation();
+  const theme = useTheme();
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const routeLabel =
     Object.entries(ROUTE_LABELS).find(([path]) => location.pathname.startsWith(path))?.[1] ??
     "Formstr";
-
   const shortPubkey = pubkey ? `${pubkey.slice(0, 6)}…${pubkey.slice(-4)}` : "";
 
   return (
-    <header className="sticky top-0 z-30 flex h-12 items-center border-b border-border bg-background/95 backdrop-blur-sm px-4 gap-3">
-      {/* Sidebar toggle */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={toggleSidebar}
-        aria-label="Toggle sidebar"
-        className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
-      >
-        <Menu className="h-4 w-4" />
-      </Button>
+    <AppBar
+      position="sticky"
+      elevation={0}
+      sx={{
+        bgcolor: "background.default",
+        borderBottom: `1px solid ${theme.palette.divider}`,
+        color: "text.primary",
+        zIndex: theme.zIndex.appBar,
+      }}
+    >
+      <Toolbar variant="dense" sx={{ minHeight: 48, gap: 1, px: 2 }}>
+        {/* Sidebar toggle */}
+        <IconButton
+          size="small"
+          onClick={toggleSidebar}
+          aria-label="Toggle sidebar"
+          sx={{ color: "text.secondary", flexShrink: 0 }}
+        >
+          <MenuIcon size={18} />
+        </IconButton>
 
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm min-w-0">
-        {isMobile ? null : <span className="text-muted-foreground hidden sm:block">Formstr</span>}
-        {!isMobile && <span className="text-muted-foreground hidden sm:block">/</span>}
-        <span className="font-medium text-foreground truncate">{routeLabel}</span>
-      </div>
+        {/* Breadcrumb */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+          {!isMobile && (
+            <>
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                Formstr
+              </Typography>
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                /
+              </Typography>
+            </>
+          )}
+          <Typography variant="body2" fontWeight={600} noWrap>
+            {routeLabel}
+          </Typography>
+        </Box>
 
-      {/* Spacer */}
-      <div className="flex-1" />
+        <Box sx={{ flex: 1 }} />
 
-      {/* Right side */}
-      <div className="flex items-center gap-1">
+        {/* Search pill */}
         {onOpenCommandPalette && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onOpenCommandPalette}
-            aria-label="Open command palette"
-            className="h-8 gap-2 px-2 text-muted-foreground hidden md:inline-flex"
-          >
-            <Search className="h-3.5 w-3.5" />
-            <span className="text-xs">Search</span>
-            <kbd className="pointer-events-none ml-1 hidden h-5 select-none items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
-              <span className="text-xs">⌘</span>K
-            </kbd>
-          </Button>
+          <>
+            {/* Desktop: full pill */}
+            <Box
+              onClick={onOpenCommandPalette}
+              sx={{
+                display: { xs: "none", md: "flex" },
+                alignItems: "center",
+                gap: 0.75,
+                bgcolor: "background.paper",
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: "6px",
+                px: 1.25,
+                py: 0.5,
+                cursor: "pointer",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
+            >
+              <Search size={13} color={theme.palette.text.secondary} />
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                Search
+              </Typography>
+              <Box
+                component="kbd"
+                sx={{
+                  ml: 0.75,
+                  fontSize: 10,
+                  bgcolor: theme.palette.divider,
+                  color: "text.secondary",
+                  px: 0.75,
+                  py: 0.25,
+                  borderRadius: "3px",
+                  fontFamily: "monospace",
+                }}
+              >
+                ⌘K
+              </Box>
+              <InputBase sx={{ display: "none" }} />
+            </Box>
+            {/* Mobile: icon only */}
+            <IconButton
+              size="small"
+              onClick={onOpenCommandPalette}
+              sx={{ display: { xs: "flex", md: "none" }, color: "text.secondary" }}
+            >
+              <Search size={18} />
+            </IconButton>
+          </>
         )}
 
-        {onOpenCommandPalette && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onOpenCommandPalette}
-            aria-label="Open command palette"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground md:hidden"
-          >
-            <Search className="h-4 w-4" />
-          </Button>
-        )}
+        {/* Theme toggle */}
+        <IconButton
+          size="small"
+          onClick={toggleTheme}
+          aria-label="Toggle theme"
+          sx={{ color: "text.secondary" }}
+        >
+          {themeMode === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+        </IconButton>
 
-        <ThemeToggle />
-
-        <Button
-          variant="ghost"
-          size="icon"
+        {/* AI toggle */}
+        <IconButton
+          size="small"
           onClick={() => setAIPanelOpen(!aiPanelOpen)}
           aria-label="Toggle AI assistant"
-          className={`h-8 w-8 ${aiPanelOpen ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+          sx={{ color: aiPanelOpen ? "text.primary" : "text.secondary" }}
         >
-          <Sparkles className="h-4 w-4" />
-        </Button>
+          <Sparkles size={18} />
+        </IconButton>
 
+        {/* User */}
         {isLoggedIn ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-2 px-2 text-muted-foreground hover:text-foreground"
-              >
-                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <User className="h-3 w-3" />
-                </div>
-                <span className="hidden sm:block font-mono text-xs">{shortPubkey}</span>
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <div className="px-2 py-1.5">
-                <p className="text-xs text-muted-foreground">Signed in via</p>
-                <p className="text-xs font-medium capitalize">{method ?? "unknown"}</p>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="gap-2 text-sm cursor-pointer">
-                <Settings className="h-3.5 w-3.5" />
+          <>
+            <IconButton
+              size="small"
+              onClick={(e) => setAnchorEl(e.currentTarget)}
+              sx={{ p: 0, ml: 0.5 }}
+            >
+              <Avatar sx={{ width: 26, height: 26, fontSize: 11 }} />
+            </IconButton>
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={() => setAnchorEl(null)}
+              PaperProps={{ sx: { minWidth: 160, mt: 0.5 } }}
+              transformOrigin={{ horizontal: "right", vertical: "top" }}
+              anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+            >
+              <Box sx={{ px: 2, py: 1 }}>
+                <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                  Signed in via
+                </Typography>
+                <Typography
+                  variant="caption"
+                  display="block"
+                  fontWeight={500}
+                  textTransform="capitalize"
+                >
+                  {method ?? "unknown"}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{ fontFamily: "monospace", color: "text.secondary" }}
+                >
+                  {shortPubkey}
+                </Typography>
+              </Box>
+              <Divider />
+              <MenuItem dense sx={{ gap: 1.5, fontSize: 13 }}>
+                <Settings size={14} />
                 Settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={logout}
-                className="gap-2 text-sm text-destructive focus:text-destructive cursor-pointer"
+              </MenuItem>
+              <Divider />
+              <MenuItem
+                dense
+                onClick={() => {
+                  logout();
+                  setAnchorEl(null);
+                }}
+                sx={{ gap: 1.5, fontSize: 13, color: "error.main" }}
               >
-                <LogOut className="h-3.5 w-3.5" />
+                <LogOut size={14} />
                 Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </MenuItem>
+            </Menu>
+          </>
         ) : (
-          <Button size="sm" onClick={onLoginClick} className="h-8">
-            Sign In
-          </Button>
+          <IconButton size="small" onClick={onLoginClick} sx={{ color: "text.secondary", ml: 0.5 }}>
+            <Avatar sx={{ width: 26, height: 26, fontSize: 11 }} />
+          </IconButton>
         )}
-      </div>
-    </header>
+      </Toolbar>
+    </AppBar>
   );
 }

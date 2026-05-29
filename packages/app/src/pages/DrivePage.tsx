@@ -1,23 +1,22 @@
 import {
-  FolderOpen,
-  File,
-  Home,
-  CloudUpload,
-  Download,
-  Trash2,
-  ChevronRight,
-  Loader2,
-} from "lucide-react";
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  IconButton,
+  LinearProgress,
+  Paper,
+  Skeleton,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { FolderOpen, File, Home, CloudUpload, Download, Trash2, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
 import { useDriveStore } from "../stores";
-
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -44,6 +43,7 @@ export function DrivePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [downloadingHash, setDownloadingHash] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const theme = useTheme();
 
   useEffect(() => {
     fetchFiles();
@@ -94,177 +94,255 @@ export function DrivePage() {
   };
 
   return (
-    <div className="space-y-4">
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">Drive</h1>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Typography variant="h6" fontWeight={600}>
+          Drive
+        </Typography>
         <Button
-          size="sm"
-          className="gap-1.5 h-8"
+          variant="contained"
+          size="small"
+          startIcon={
+            isUploading ? <CircularProgress size={14} color="inherit" /> : <CloudUpload size={16} />
+          }
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
         >
-          {isUploading ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Uploading…
-            </>
-          ) : (
-            <>
-              <CloudUpload className="h-3.5 w-3.5" />
-              Upload
-            </>
-          )}
+          {isUploading ? "Uploading…" : "Upload"}
         </Button>
         <input ref={fileInputRef} type="file" hidden onChange={handleFileSelect} />
-      </div>
+      </Box>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <Alert severity="error" sx={{ py: 0.5 }}>
+          {error}
+        </Alert>
+      )}
+      {isUploading && <LinearProgress sx={{ borderRadius: 1 }} />}
 
       <AIPendingRow module="drive" />
 
-      {/* Upload progress bar */}
-      {isUploading && (
-        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-          <div className="h-full bg-primary rounded-full animate-pulse w-1/3" />
-        </div>
-      )}
-
       {/* Breadcrumb */}
-      <nav aria-label="Folder path" className="flex items-center gap-1 text-sm flex-wrap">
-        <button
+      <Box
+        component="nav"
+        aria-label="Folder path"
+        sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}
+      >
+        <Box
+          component="button"
           onClick={() => setCurrentFolder("/")}
-          className={cn(
-            "flex items-center gap-1 text-xs font-medium rounded px-1.5 py-0.5 transition-colors duration-150",
-            currentFolder === "/"
-              ? "text-foreground bg-muted"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted",
-          )}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0.5,
+            fontSize: 12,
+            fontWeight: 500,
+            px: 1,
+            py: 0.375,
+            borderRadius: 1,
+            border: "none",
+            cursor: "pointer",
+            bgcolor: currentFolder === "/" ? "action.selected" : "transparent",
+            color: currentFolder === "/" ? "text.primary" : "text.secondary",
+            "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+          }}
         >
-          <Home className="h-3 w-3" />
+          <Home size={12} />
           Root
-        </button>
+        </Box>
         {breadcrumbs.map((crumb, i) => (
-          <div key={crumb.path} className="flex items-center gap-1">
-            <ChevronRight className="h-3 w-3 text-muted-foreground" />
-            <button
+          <Box key={crumb.path} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <ChevronRight size={12} color={theme.palette.text.secondary} />
+            <Box
+              component="button"
               onClick={() => setCurrentFolder(crumb.path)}
-              className={cn(
-                "text-xs font-medium rounded px-1.5 py-0.5 transition-colors duration-150",
-                i === breadcrumbs.length - 1
-                  ? "text-foreground bg-muted"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
-              )}
+              sx={{
+                fontSize: 12,
+                fontWeight: 500,
+                px: 1,
+                py: 0.375,
+                borderRadius: 1,
+                border: "none",
+                cursor: "pointer",
+                bgcolor: i === breadcrumbs.length - 1 ? "action.selected" : "transparent",
+                color: i === breadcrumbs.length - 1 ? "text.primary" : "text.secondary",
+                "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+              }}
             >
               {crumb.label}
-            </button>
-          </div>
+            </Box>
+          </Box>
         ))}
-      </nav>
+      </Box>
 
       {/* Drop zone + content */}
-      <div
+      <Paper
+        variant="outlined"
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragOver(true);
         }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
-        className={cn(
-          "rounded-lg border-2 transition-colors duration-150 min-h-50",
-          isDragOver ? "border-primary bg-primary/5 border-dashed" : "border-border border-solid",
-        )}
+        sx={{
+          borderRadius: 1.5,
+          minHeight: 200,
+          overflow: "hidden",
+          borderStyle: isDragOver ? "dashed" : "solid",
+          borderColor: isDragOver ? "primary.main" : "divider",
+          bgcolor: isDragOver ? "action.hover" : "transparent",
+          transition: "all 150ms",
+        }}
       >
         {isLoading ? (
-          <div className="p-4 space-y-2">
+          <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1 }}>
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 py-2">
-                <Skeleton className="h-4 w-4 rounded" />
-                <Skeleton className="h-4 flex-1" />
-                <Skeleton className="h-4 w-20" />
-              </div>
+              <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.5 }}>
+                <Skeleton variant="rounded" width={16} height={16} />
+                <Skeleton variant="text" sx={{ flex: 1 }} />
+                <Skeleton variant="text" width={80} />
+              </Box>
             ))}
-          </div>
+          </Box>
         ) : folders.length === 0 && files.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-muted">
-              <CloudUpload className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">Drop files here</p>
-              <p className="text-xs text-muted-foreground mt-0.5">or use the Upload button above</p>
-            </div>
-          </div>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              py: 8,
+              gap: 1.5,
+              textAlign: "center",
+            }}
+          >
+            <Box
+              sx={{
+                width: 56,
+                height: 56,
+                borderRadius: 2,
+                bgcolor: "action.hover",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <CloudUpload size={28} color={theme.palette.text.secondary} />
+            </Box>
+            <Typography variant="body2" fontWeight={500}>
+              Drop files here
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              or use the Upload button above
+            </Typography>
+          </Box>
         ) : (
-          <div className="divide-y divide-border">
+          <Box>
             {/* Folders */}
             {folders.map((folder) => {
               const label = folder.split("/").filter(Boolean).pop() ?? folder;
               return (
-                <button
+                <Box
                   key={folder}
+                  component="button"
                   onClick={() => setCurrentFolder(folder)}
-                  className="group w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors duration-150 text-left"
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1.5,
+                    px: 2,
+                    py: 1.25,
+                    width: "100%",
+                    textAlign: "left",
+                    border: "none",
+                    cursor: "pointer",
+                    bgcolor: "transparent",
+                    borderBottom: `1px solid ${theme.palette.divider}`,
+                    "&:hover": { bgcolor: "action.hover" },
+                    "&:hover .folder-arrow": { opacity: 1 },
+                  }}
                 >
-                  <FolderOpen className="h-4 w-4 text-amber-500 shrink-0" />
-                  <span className="text-sm text-foreground flex-1 truncate">{label}</span>
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
+                  <FolderOpen size={16} color="#f59e0b" />
+                  <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+                    {label}
+                  </Typography>
+                  <ChevronRight
+                    size={14}
+                    className="folder-arrow"
+                    color={theme.palette.text.secondary}
+                    style={{ opacity: 0, transition: "opacity 150ms" }}
+                  />
+                </Box>
               );
             })}
 
             {/* Files */}
-            {files.map((file) => (
-              <div
+            {files.map((file, idx) => (
+              <Box
                 key={file.hash}
-                className="group flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors duration-150"
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1.5,
+                  px: 2,
+                  py: 1.25,
+                  borderBottom:
+                    idx < files.length - 1 ? `1px solid ${theme.palette.divider}` : "none",
+                  "&:hover": { bgcolor: "action.hover" },
+                  "&:hover .file-actions": { opacity: 1 },
+                }}
               >
-                <File className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground truncate">{file.name}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-xs text-muted-foreground">{formatBytes(file.size)}</span>
-                    <Badge variant="outline" className="text-xs py-0 h-4">
-                      {file.type}
-                    </Badge>
-                  </div>
-                </div>
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    disabled={downloadingHash === file.hash}
-                    onClick={() => handleDownload(file)}
-                    aria-label="Download"
-                  >
-                    {downloadingHash === file.hash ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Download className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => deleteFile(file)}
-                    aria-label="Delete"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
+                <File size={16} color={theme.palette.text.secondary} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" noWrap>
+                    {file.name}
+                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 0.25 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {formatBytes(file.size)}
+                    </Typography>
+                    <Chip
+                      label={file.type}
+                      size="small"
+                      variant="outlined"
+                      sx={{ height: 16, fontSize: 10 }}
+                    />
+                  </Box>
+                </Box>
+                <Box
+                  className="file-actions"
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.25,
+                    opacity: 0,
+                    transition: "opacity 150ms",
+                  }}
+                >
+                  <Tooltip title="Download">
+                    <IconButton
+                      size="small"
+                      disabled={downloadingHash === file.hash}
+                      onClick={() => handleDownload(file)}
+                    >
+                      {downloadingHash === file.hash ? (
+                        <CircularProgress size={14} />
+                      ) : (
+                        <Download size={14} />
+                      )}
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete">
+                    <IconButton size="small" color="error" onClick={() => deleteFile(file)}>
+                      <Trash2 size={14} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
             ))}
-          </div>
+          </Box>
         )}
-
-        {isDragOver && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <p className="text-sm font-medium text-primary">Drop to upload</p>
-          </div>
-        )}
-      </div>
-    </div>
+      </Paper>
+    </Box>
   );
 }

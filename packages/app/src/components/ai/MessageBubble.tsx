@@ -1,3 +1,6 @@
+import { Box, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+
 import type { Message } from "../../ai/types";
 import { renderRefs } from "../../lib/renderRefs";
 
@@ -10,51 +13,78 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const theme = useTheme();
 
-  // Assistant messages are scanned for cross-module refs and rendered as pills.
-  // User messages stay plain (they may be in-flight and contain pasted naddrs).
   const body =
     !isUser && !isStreaming && message.content ? renderRefs(message.content) : [message.content];
-
   const toolCalls = !isUser ? (message.toolCalls ?? []) : [];
 
   return (
-    <div className={`mb-3 flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed ${
-          isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-        }`}
+    <Box
+      sx={{
+        mb: 1.5,
+        display: "flex",
+        justifyContent: isUser ? "flex-end" : "flex-start",
+      }}
+    >
+      <Box
+        sx={{
+          maxWidth: "85%",
+          borderRadius: "10px",
+          px: 1.5,
+          py: 1,
+          fontSize: 13,
+          lineHeight: 1.6,
+          bgcolor: isUser ? "text.primary" : "background.paper",
+          color: isUser ? "background.default" : "text.primary",
+          border: isUser ? "none" : `1px solid ${theme.palette.divider}`,
+        }}
       >
         {toolCalls.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
+          <Box sx={{ mb: 1, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
             {toolCalls.map((tc) => (
               <ToolCallChip key={tc.id} toolCall={tc} />
             ))}
-          </div>
+          </Box>
         )}
-        <div className="whitespace-pre-wrap break-words">
+        <Box sx={{ whiteSpace: "pre-wrap", wordBreak: "break-words" }}>
           {body.map((part, i) =>
             typeof part === "string" ? (
               <span key={i}>{part}</span>
             ) : (
-              <span key={i} className="mx-0.5">
+              <Box component="span" key={i} sx={{ mx: 0.25 }}>
                 {part}
-              </span>
+              </Box>
             ),
           )}
           {isStreaming && (
-            <span className="ml-0.5 inline-block h-4 w-1 animate-pulse bg-current align-text-bottom" />
+            <Box
+              component="span"
+              sx={{
+                display: "inline-block",
+                width: 4,
+                height: 14,
+                bgcolor: "currentColor",
+                ml: 0.25,
+                verticalAlign: "text-bottom",
+                animation: "blink 1s step-end infinite",
+                "@keyframes blink": { "50%": { opacity: 0 } },
+              }}
+            />
           )}
-        </div>
+        </Box>
         {!isStreaming && (
-          <div className="mt-1 text-[10px] opacity-50">
+          <Typography
+            variant="caption"
+            sx={{ display: "block", mt: 0.5, opacity: 0.4, fontSize: 10 }}
+          >
             {new Date(message.timestamp).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
             })}
-          </div>
+          </Typography>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

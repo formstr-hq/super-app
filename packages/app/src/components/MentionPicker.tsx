@@ -1,7 +1,7 @@
 import { createRef as createNostrRef, type ModuleType } from "@formstr/core";
+import { Box, Typography, Paper } from "@mui/material";
 import { Calendar, ClipboardList, FileText, FolderOpen, Vote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-
 
 import { CALENDAR_KINDS } from "../services/calendar/types";
 import { FORM_KINDS } from "../services/forms/types";
@@ -11,8 +11,6 @@ import { useCalendarStore } from "../stores/calendarStore";
 import { useFormsStore } from "../stores/formsStore";
 import { usePagesStore } from "../stores/pagesStore";
 import { usePollsStore } from "../stores/pollsStore";
-
-import { cn } from "@/lib/utils";
 
 export interface MentionItem {
   module: ModuleType;
@@ -47,11 +45,11 @@ const MODULE_ICON: Record<ModuleType, typeof FileText> = {
 };
 
 const MODULE_TINT: Record<ModuleType, string> = {
-  forms: "text-blue-600 dark:text-blue-400",
-  calendar: "text-orange-600 dark:text-orange-400",
-  pages: "text-green-600 dark:text-green-400",
-  drive: "text-purple-600 dark:text-purple-400",
-  polls: "text-pink-600 dark:text-pink-400",
+  forms: "info.main",
+  calendar: "warning.main",
+  pages: "success.main",
+  drive: "secondary.main",
+  polls: "primary.main",
 };
 
 export function MentionPicker({
@@ -204,53 +202,78 @@ export function MentionPicker({
 
   if (items.length === 0) {
     return (
-      <div
+      <Paper
         ref={containerRef}
-        className="z-50 w-64 overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+        elevation={4}
+        sx={{ width: 280, borderRadius: 1.5, overflow: "hidden", zIndex: 1300 }}
       >
-        <div className="px-3 py-2 text-xs text-muted-foreground">
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: "block", px: 2, py: 1.5 }}
+        >
           {query
             ? `No entities match “${query}”`
             : "Nothing to mention yet — create a form, event, page, or poll first."}
-        </div>
-      </div>
+        </Typography>
+      </Paper>
     );
   }
 
   return (
-    <div
+    <Paper
       ref={containerRef}
       role="listbox"
-      className="z-50 w-72 overflow-hidden rounded-md border border-border bg-popover shadow-lg"
+      elevation={4}
+      sx={{ width: 300, borderRadius: 1.5, overflow: "hidden", zIndex: 1300 }}
     >
-      <div className="max-h-64 overflow-y-auto py-1">
+      <Box sx={{ maxHeight: 260, overflowY: "auto", py: 0.5 }}>
         {items.map((item, i) => {
           const Icon = MODULE_ICON[item.module];
+          const selected = i === highlight;
           return (
-            <button
+            <Box
               key={`${item.module}-${item.identifier}`}
+              component="button"
               role="option"
-              aria-selected={i === highlight}
+              aria-selected={selected}
               onMouseEnter={() => setHighlight(i)}
               onMouseDown={(e) => {
-                // onMouseDown to pre-empt blur when used inside contentEditable
                 e.preventDefault();
                 onSelect(item);
               }}
-              className={cn(
-                "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors",
-                i === highlight ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-              )}
+              sx={{
+                display: "flex",
+                width: "100%",
+                alignItems: "center",
+                gap: 1.5,
+                px: 2,
+                py: 1,
+                textAlign: "left",
+                border: "none",
+                cursor: "pointer",
+                bgcolor: selected ? "action.selected" : "transparent",
+                color: "text.primary",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
             >
-              <Icon className={cn("h-3.5 w-3.5 shrink-0", MODULE_TINT[item.module])} />
-              <span className="flex-1 truncate">{item.label}</span>
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <Box sx={{ color: MODULE_TINT[item.module], display: "flex", alignItems: "center" }}>
+                <Icon size={14} />
+              </Box>
+              <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+                {item.label}
+              </Typography>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ textTransform: "uppercase", fontSize: 10, letterSpacing: "0.05em" }}
+              >
                 {item.module}
-              </span>
-            </button>
+              </Typography>
+            </Box>
           );
         })}
-      </div>
-    </div>
+      </Box>
+    </Paper>
   );
 }

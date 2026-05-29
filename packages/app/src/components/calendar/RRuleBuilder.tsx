@@ -1,16 +1,19 @@
+import {
+  Box,
+  Button,
+  Checkbox,
+  FormControl,
+  FormControlLabel,
+  Grid2 as Grid,
+  MenuItem,
+  Paper,
+  Select,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { useCallback, useMemo } from "react";
 
 import { buildRRuleString, type RRuleFreq, type RRuleParts } from "../../lib/rrule";
-
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 const DAYS: Array<RRuleParts["byDay"] extends (infer U)[] | undefined ? U : never> = [
   "MO",
@@ -50,102 +53,122 @@ export function RRuleBuilder({ value, onChange }: RRuleBuilderProps) {
   const preview = useMemo(() => buildRRuleString(enabled ? parts : null), [enabled, parts]);
 
   return (
-    <div className="rounded-md border border-border p-3 space-y-3 text-xs">
-      <label className="flex items-center gap-2 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => onChange(e.target.checked ? { freq: "WEEKLY", interval: 1 } : null)}
-        />
-        <span className="text-sm font-medium">Repeats</span>
-      </label>
+    <Paper
+      variant="outlined"
+      sx={{ p: 2, borderRadius: 1.5, display: "flex", flexDirection: "column", gap: 2 }}
+    >
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={enabled}
+            onChange={(e) => onChange(e.target.checked ? { freq: "WEEKLY", interval: 1 } : null)}
+            size="small"
+          />
+        }
+        label={
+          <Typography variant="body2" fontWeight={500}>
+            Repeats
+          </Typography>
+        }
+      />
 
       {enabled && (
-        <>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label>Frequency</Label>
-              <Select value={parts.freq} onValueChange={(v: RRuleFreq) => update({ freq: v })}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DAILY">Daily</SelectItem>
-                  <SelectItem value="WEEKLY">Weekly</SelectItem>
-                  <SelectItem value="MONTHLY">Monthly</SelectItem>
-                  <SelectItem value="YEARLY">Yearly</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Every</Label>
-              <Input
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 0.5 }}>
+                Frequency
+              </Typography>
+              <FormControl size="small" fullWidth>
+                <Select
+                  value={parts.freq}
+                  onChange={(e) => update({ freq: e.target.value as RRuleFreq })}
+                >
+                  <MenuItem value="DAILY">Daily</MenuItem>
+                  <MenuItem value="WEEKLY">Weekly</MenuItem>
+                  <MenuItem value="MONTHLY">Monthly</MenuItem>
+                  <MenuItem value="YEARLY">Yearly</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 0.5 }}>
+                Every
+              </Typography>
+              <TextField
+                size="small"
+                fullWidth
                 type="number"
-                min={1}
+                inputProps={{ min: 1 }}
                 value={parts.interval}
                 onChange={(e) => update({ interval: Math.max(1, Number(e.target.value) || 1) })}
-                className="h-8 text-xs"
               />
-            </div>
-          </div>
+            </Grid>
+          </Grid>
 
           {parts.freq === "WEEKLY" && (
-            <div className="space-y-1">
-              <Label>On days</Label>
-              <div className="flex flex-wrap gap-1.5">
+            <Box>
+              <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 0.5 }}>
+                On days
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
                 {DAYS.map((d) => {
                   const selected = parts.byDay?.includes(d) ?? false;
                   return (
-                    <button
-                      type="button"
+                    <Button
                       key={d}
                       onClick={() => toggleDay(d)}
-                      className={`h-7 w-10 rounded border text-[11px] font-medium transition-colors ${
-                        selected
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-background text-foreground border-border hover:bg-muted"
-                      }`}
+                      variant={selected ? "contained" : "outlined"}
+                      size="small"
+                      sx={{ minWidth: 40, px: 1, py: 0.25, fontSize: 11 }}
                     >
                       {d}
-                    </button>
+                    </Button>
                   );
                 })}
-              </div>
-            </div>
+              </Box>
+            </Box>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label>Until (optional)</Label>
-              <Input
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 0.5 }}>
+                Until (optional)
+              </Typography>
+              <TextField
+                size="small"
+                fullWidth
                 type="date"
                 value={parts.until ?? ""}
                 onChange={(e) => update({ until: e.target.value || undefined })}
-                className="h-8 text-xs"
+                InputLabelProps={{ shrink: true }}
               />
-            </div>
-            <div className="space-y-1">
-              <Label>Or count</Label>
-              <Input
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 0.5 }}>
+                Or count
+              </Typography>
+              <TextField
+                size="small"
+                fullWidth
                 type="number"
-                min={1}
+                inputProps={{ min: 1 }}
                 placeholder="Never ends"
                 value={parts.count ?? ""}
                 onChange={(e) =>
                   update({ count: e.target.value ? Number(e.target.value) : undefined })
                 }
-                className="h-8 text-xs"
               />
-            </div>
-          </div>
+            </Grid>
+          </Grid>
 
           {preview && (
-            <p className="text-[11px] text-muted-foreground">
-              RRULE: <span className="font-mono">{preview}</span>
-            </p>
+            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
+              RRULE: {preview}
+            </Typography>
           )}
-        </>
+        </Box>
       )}
-    </div>
+    </Paper>
   );
 }
