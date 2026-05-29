@@ -57,7 +57,14 @@ export {
 export type { EncryptedPayload } from "./crypto";
 
 // Linking
-export { createRef, parseRef, resolveRef } from "./linking";
+export {
+  createRef,
+  parseRef,
+  resolveRef,
+  createTagRef,
+  parseTagRef,
+  MODULE_ROUTES,
+} from "./linking";
 export type { ModuleRef, ModuleType } from "./linking";
 
 // Types
