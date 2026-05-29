@@ -74,13 +74,14 @@ export function parseRef(bech32: string): ModuleRef | null {
     if (decoded.type === "nevent") {
       const { id, kind, relays } = decoded.data;
       const module = kind != null ? KIND_MODULE_MAP[kind] : undefined;
+      if (!module) return null;
 
       return {
-        module: module ?? "forms", // Default to forms for unknown kinds
-        route: `/${module ?? "forms"}/${bech32}`,
+        module,
+        route: `/${module}/${bech32}`,
         params: {
           id,
-          ...(kind != null ? { kind: String(kind) } : {}),
+          kind: String(kind),
           ...(relays?.length ? { relays: relays.join(",") } : {}),
         },
         raw: bech32,
