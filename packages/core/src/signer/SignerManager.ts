@@ -1,6 +1,9 @@
 import { decode as decodeNsec } from "nostr-tools/nip19";
 
+import { bytesToHex, hexToBytes } from "../crypto/hex";
+
 import { DeferredSigner } from "./DeferredSigner";
+import { SignerUnavailableError } from "./errors";
 import { LocalSigner } from "./LocalSigner";
 import { NIP07Signer } from "./NIP07Signer";
 import type { NostrSigner, SignerMethod, SignerState, SignerObserver } from "./types";
@@ -28,7 +31,7 @@ export class SignerManager {
 
   // ── Restore from storage (instant startup) ──────────────
 
-  restoreFromStorage(): void {
+  async restore(): Promise<void> {
     const savedMethod = localStorage.getItem(KEY_METHOD) as SignerMethod | null;
     const savedPubkey = localStorage.getItem(KEY_PUBKEY);
 
@@ -47,7 +50,7 @@ export class SignerManager {
     this.notify();
 
     // Phase 2: Resolve actual signer in background
-    this.resolveSignerAsync(savedMethod, deferred);
+    await this.resolveSignerAsync(savedMethod, deferred);
   }
 
   private async resolveSignerAsync(method: SignerMethod, deferred: DeferredSigner): Promise<void> {
@@ -115,6 +118,9 @@ export class SignerManager {
   }
 
   logout(): void {
+    if (this.signer instanceof LocalSigner) {
+      this.signer.dispose();
+    }
     this.signer = null;
     this.pubkey = null;
     this.method = null;
@@ -135,13 +141,8 @@ export class SignerManager {
   /** Blocking — triggers login modal if no signer. Used by write paths. */
   async getSigner(): Promise<NostrSigner> {
     if (this.signer) return this.signer;
-
-    if (this.loginModalCallback) {
-      const signer = await this.loginModalCallback();
-      return signer;
-    }
-
-    throw new Error("No signer available and no login modal registered");
+    if (this.loginModalCallback) return this.loginModalCallback();
+    throw new SignerUnavailableError("no-modal");
   }
 
   getPublicKey(): string | null {
@@ -194,19 +195,3 @@ export class SignerManager {
 
 // Singleton
 export const signerManager = new SignerManager();
-
-// ── Hex helpers ───────────────────────────────────────────
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
-}

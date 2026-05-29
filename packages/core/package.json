@@ -44,6 +44,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@noble/hashes": "^2.0.1",
     "nostr-tools": "^2.16.0"
   },
   "devDependencies": {
