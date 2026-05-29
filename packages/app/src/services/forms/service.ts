@@ -198,12 +198,15 @@ export function subscribeToResponses(
     relays,
     [{ kinds: [FORM_KINDS.response], "#a": [`${FORM_KINDS.template}:${formPubkey}:${formId}`] }],
     {
-      onEvent: async (event: Event) => {
+      onEvent: (event: Event) => {
         const parsed = parseResponseEvent(event);
-        if (!parsed) return;
-        if (parsed.wasEncrypted && formSigner && event.content) {
-          try {
-            const decrypted = await formSigner.nip44Decrypt(event.pubkey, event.content);
+        if (!parsed.wasEncrypted || !formSigner || !event.content) {
+          onResponse(parsed);
+          return;
+        }
+        void formSigner
+          .nip44Decrypt(event.pubkey, event.content)
+          .then((decrypted) => {
             const tags = JSON.parse(decrypted) as string[][];
             onResponse({
               ...parsed,
@@ -211,12 +214,8 @@ export function subscribeToResponses(
                 .filter((t) => t[0] === "response")
                 .map((t) => ({ fieldId: t[1], answer: t[2], metadata: t[3] })),
             });
-            return;
-          } catch {
-            /* fall through — send as-is with empty responses */
-          }
-        }
-        onResponse(parsed);
+          })
+          .catch(() => onResponse(parsed));
       },
       onEose,
     },
@@ -477,7 +476,7 @@ function parseFormEvent(event: Event): FormTemplate {
   };
 }
 
-function parseResponseEvent(event: Event): FormResponseEvent | null {
+function parseResponseEvent(event: Event): FormResponseEvent {
   const responses: FormResponse[] = event.tags
     .filter((t) => t[0] === "response")
     .map((t) => ({ fieldId: t[1], answer: t[2], metadata: t[3] }));
