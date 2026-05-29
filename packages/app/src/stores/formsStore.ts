@@ -48,7 +48,7 @@ export const useFormsStore = create<FormsStore>((set, get) => ({
   },
 
   async loadResponses(pubkey, formId) {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, responses: [] });
     try {
       const summary = get().myForms.find((f) => f.pubkey === pubkey && f.id === formId);
       const responses = await formsService.fetchResponses(pubkey, formId, summary?.signingKey);
