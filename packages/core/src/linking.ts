@@ -113,3 +113,26 @@ export function resolveRef(bech32: string): string | null {
   const ref = parseRef(bech32);
   return ref?.route ?? null;
 }
+
+const MODULE_TYPES: readonly ModuleType[] = [
+  "forms",
+  "calendar",
+  "pages",
+  "drive",
+  "polls",
+] as const;
+
+/** Format a cross-module reference as `formstr:<module>:<identifier>` (event-tag form). */
+export function createTagRef(module: ModuleType, identifier: string): string {
+  return `formstr:${module}:${identifier}`;
+}
+
+/** Parse the `formstr:<module>:<identifier>` form; returns null on malformed input. */
+export function parseTagRef(s: string): { module: ModuleType; identifier: string } | null {
+  const match = s.match(/^formstr:([a-z]+):(.+)$/);
+  if (!match) return null;
+  const [, modStr, identifier] = match;
+  if (!MODULE_TYPES.includes(modStr as ModuleType)) return null;
+  if (!identifier) return null;
+  return { module: modStr as ModuleType, identifier };
+}

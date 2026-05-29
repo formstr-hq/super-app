@@ -1,7 +1,7 @@
 import { nip19 } from "nostr-tools";
 import { describe, expect, it } from "vitest";
 
-import { createRef, parseRef } from "./linking";
+import { createRef, createTagRef, parseRef, parseTagRef } from "./linking";
 
 describe("linking parseRef", () => {
   it("parses a forms naddr", () => {
@@ -44,5 +44,29 @@ describe("linking parseRef", () => {
     const ref = parseRef(naddr);
     expect(ref?.module).toBe("forms");
     expect(ref?.params.identifier).toBe("feedback");
+  });
+});
+
+describe("linking tag-ref form", () => {
+  it("createTagRef formats 'formstr:<module>:<identifier>'", () => {
+    expect(createTagRef("forms", "abcd")).toBe("formstr:forms:abcd");
+    expect(createTagRef("calendar", "naddr1xyz")).toBe("formstr:calendar:naddr1xyz");
+  });
+
+  it("parseTagRef inverts createTagRef", () => {
+    expect(parseTagRef("formstr:forms:abcd")).toEqual({
+      module: "forms",
+      identifier: "abcd",
+    });
+    expect(parseTagRef("formstr:polls:naddr1xyz")).toEqual({
+      module: "polls",
+      identifier: "naddr1xyz",
+    });
+  });
+
+  it("parseTagRef returns null for malformed input", () => {
+    expect(parseTagRef("not-a-tag-ref")).toBeNull();
+    expect(parseTagRef("formstr:invalid-module:abc")).toBeNull();
+    expect(parseTagRef("formstr:forms:")).toBeNull();
   });
 });
