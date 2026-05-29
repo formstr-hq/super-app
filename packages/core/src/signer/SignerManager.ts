@@ -1,5 +1,7 @@
 import { decode as decodeNsec } from "nostr-tools/nip19";
 
+import { bytesToHex, hexToBytes } from "../crypto/hex";
+
 import { DeferredSigner } from "./DeferredSigner";
 import { LocalSigner } from "./LocalSigner";
 import { NIP07Signer } from "./NIP07Signer";
@@ -194,19 +196,3 @@ export class SignerManager {
 
 // Singleton
 export const signerManager = new SignerManager();
-
-// ── Hex helpers ───────────────────────────────────────────
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
-}
