@@ -13,7 +13,11 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
     "@formstr/core": "workspace:*",
+    "@mui/material": "^6.4.0",
+    "notistack": "^3.0.1",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-dialog": "^1.1.15",
