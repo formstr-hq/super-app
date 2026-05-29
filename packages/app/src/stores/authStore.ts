@@ -8,7 +8,6 @@ interface AuthStore {
   isLoggedIn: boolean;
   isLoading: boolean;
 
-  // Actions
   init(): Promise<void>;
   loginWithNsec(nsec: string): Promise<void>;
   loginWithNip07(): Promise<void>;
@@ -17,7 +16,7 @@ interface AuthStore {
 }
 
 export const useAuthStore = create<AuthStore>((set) => {
-  // Subscribe to signer state changes
+  // Mirror SignerManager state into the store — single source of truth.
   signerManager.onChange((state: SignerState) => {
     set({
       pubkey: state.pubkey,
@@ -41,22 +40,33 @@ export const useAuthStore = create<AuthStore>((set) => {
 
     async loginWithNsec(nsec: string) {
       set({ isLoading: true });
-      await signerManager.loginWithNsec(nsec);
+      try {
+        await signerManager.loginWithNsec(nsec);
+      } finally {
+        set({ isLoading: false });
+      }
     },
 
     async loginWithNip07() {
       set({ isLoading: true });
-      await signerManager.loginWithNip07();
+      try {
+        await signerManager.loginWithNip07();
+      } finally {
+        set({ isLoading: false });
+      }
     },
 
     async loginAsGuest() {
       set({ isLoading: true });
-      await signerManager.createGuestAccount();
+      try {
+        await signerManager.createGuestAccount();
+      } finally {
+        set({ isLoading: false });
+      }
     },
 
     logout() {
       signerManager.logout();
-      set({ pubkey: null, method: null, isLoggedIn: false });
     },
   };
 });
