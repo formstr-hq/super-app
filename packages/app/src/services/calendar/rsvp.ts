@@ -1,7 +1,7 @@
 import { signerManager, nostrRuntime, relayManager, wrapEvent, unwrapEvent } from "@formstr/core";
 import type { Event as NostrEvent, EventTemplate, Filter } from "nostr-tools";
 
-import type { RSVPStatus} from "./types";
+import type { RSVPStatus } from "./types";
 import { CALENDAR_KINDS, type RSVPResponse } from "./types";
 
 // ── Publish an RSVP ─────────────────────────────────────
@@ -74,7 +74,7 @@ export async function fetchRsvpsForEvent(eventCoordinate: string): Promise<RSVPR
 
   const latestByPubkey = new Map<string, RSVPResponse>();
   for (const evt of events) {
-    const status = evt.tags.find((t) => t[0] === "status")?.[1] as RSVPStatus | undefined;
+    const status = evt.tags.find((t: string[]) => t[0] === "status")?.[1] as RSVPStatus | undefined;
     if (!status) continue;
     const existing = latestByPubkey.get(evt.pubkey);
     if (existing && existing.createdAt >= evt.created_at) continue;
@@ -102,9 +102,7 @@ export interface InvitationRumor {
  * Decrypt a gift-wrap addressed to the current user and, when it contains
  * a calendar-rumor pointer, return the referenced addressable coordinate.
  */
-export async function extractInvitationFromWrap(
-  wrap: NostrEvent,
-): Promise<InvitationRumor | null> {
+export async function extractInvitationFromWrap(wrap: NostrEvent): Promise<InvitationRumor | null> {
   try {
     const signer = await signerManager.getSigner();
     const unwrapped = await unwrapEvent(wrap, signer);

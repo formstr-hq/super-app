@@ -207,7 +207,7 @@ export function subscribeToResponses(
   };
 
   return nostrRuntime.subscribe(relays, [filter], {
-    onEvent: (event) => {
+    onEvent: (event: Event) => {
       const parsed = parseResponseEvent(event);
       if (parsed) onResponse(parsed);
     },
@@ -226,7 +226,9 @@ export async function fetchResponses(
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map(parseResponseEvent).filter((r): r is FormResponseEvent => r !== null);
+  return events
+    .map(parseResponseEvent)
+    .filter((r: FormResponseEvent | null): r is FormResponseEvent => r !== null);
 }
 
 // ── My Forms List (kind 14083) ──────────────────────────
@@ -343,7 +345,7 @@ async function fetchMyFormsByAuthor(pubkey: string, relays: string[]): Promise<F
     authors: [pubkey],
   };
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map((evt) => {
+  return events.map((evt: Event) => {
     const dTag = evt.tags.find((t: string[]) => t[0] === "d")?.[1] ?? "";
     const name = evt.tags.find((t: string[]) => t[0] === "name")?.[1] ?? "Untitled";
     const hasFieldTags = evt.tags.some((t: string[]) => t[0] === "field");

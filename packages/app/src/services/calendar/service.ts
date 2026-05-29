@@ -163,7 +163,7 @@ export function subscribeToCalendarEvents(
   };
 
   return nostrRuntime.subscribe(relays, [filter], {
-    onEvent: async (event) => {
+    onEvent: async (event: Event) => {
       const parsed = await parseCalendarEvent(event);
       if (parsed) onEvent(parsed);
     },
@@ -185,7 +185,7 @@ export async function fetchCalendarEventsSync(
 
   const events = await nostrRuntime.querySync(relays, filter);
   const parsed = await Promise.all(events.map(parseCalendarEvent));
-  return parsed.filter((e): e is CalendarEvent => e !== null);
+  return parsed.filter((e: CalendarEvent | null): e is CalendarEvent => e !== null);
 }
 
 // ── Calendar List CRUD ──────────────────────────────────
