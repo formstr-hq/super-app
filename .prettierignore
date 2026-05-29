@@ -1,0 +1,7 @@
+dist/
+node_modules/
+upstream/
+coverage/
+pnpm-lock.yaml
+*.tsbuildinfo
+packages/*/dist/
