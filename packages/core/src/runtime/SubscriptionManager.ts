@@ -163,6 +163,14 @@ export class SubscriptionManager {
     return hash.toString(36);
   }
 
+  /** Close all active subscriptions. */
+  dispose(): void {
+    for (const managed of this.subscriptions.values()) {
+      for (const sub of managed.subs) sub.close();
+    }
+    this.subscriptions.clear();
+  }
+
   get activeCount(): number {
     return this.subscriptions.size;
   }

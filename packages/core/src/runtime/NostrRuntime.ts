@@ -143,6 +143,18 @@ export class NostrRuntime {
     this.eventStore.store(event);
   }
 
+  /** Close all subscriptions + clear caches. Use in tests; rarely in production. */
+  dispose(): void {
+    this.subscriptionManager.dispose();
+    this.eventStore.clear();
+    if (this.batchTimer) {
+      clearTimeout(this.batchTimer);
+      this.batchTimer = null;
+    }
+    this.batchQueue.clear();
+    this.pool.close([]);
+  }
+
   // ── Internal ──────────────────────────────────────────
 
   private flushBatch(): void {
@@ -153,11 +165,14 @@ export class NostrRuntime {
     if (pending.size === 0) return;
 
     // Group by relay set
-    const byRelays = new Map<string, { ids: string[]; entries: typeof pending }>();
+    const byRelays = new Map<
+      string,
+      { ids: string[]; entries: typeof pending; relays: string[] }
+    >();
     for (const [id, entry] of pending) {
       const key = entry.relays.sort().join(",");
       if (!byRelays.has(key)) {
-        byRelays.set(key, { ids: [], entries: new Map() });
+        byRelays.set(key, { ids: [], entries: new Map(), relays: entry.relays });
       }
       const group = byRelays.get(key)!;
       group.ids.push(id);
@@ -165,7 +180,7 @@ export class NostrRuntime {
     }
 
     for (const [, group] of byRelays) {
-      const relays = group.entries.values().next().value!.relays;
+      const { relays } = group;
       const filter: Filter = { ids: group.ids };
       const resolved = new Set<string>();
 
