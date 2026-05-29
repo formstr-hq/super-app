@@ -32,7 +32,8 @@ jobs:
 
       - run: pnpm lint
 
-      - run: pnpm test
+      - run: pnpm --filter @formstr/core test:coverage
+      - run: pnpm --filter @formstr/app test
 
       - run: pnpm build
 

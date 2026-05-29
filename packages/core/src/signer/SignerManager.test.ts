@@ -77,4 +77,56 @@ describe("SignerManager", () => {
     await mgr.restore();
     expect(mgr.getState().signer).toBeNull();
   });
+
+  it("getSignerIfAvailable() returns null when no signer", async () => {
+    const mgr = new SignerManager();
+    await mgr.restore();
+    expect(mgr.getSignerIfAvailable()).toBeNull();
+  });
+
+  it("getSignerIfAvailable() returns signer after login", async () => {
+    const mgr = new SignerManager();
+    await mgr.loginWithNsec(nsecEncode(generateSecretKey()));
+    expect(mgr.getSignerIfAvailable()).not.toBeNull();
+  });
+
+  it("getSigner() returns signer when logged in", async () => {
+    const mgr = new SignerManager();
+    await mgr.loginWithNsec(nsecEncode(generateSecretKey()));
+    const signer = await mgr.getSigner();
+    expect(signer).not.toBeNull();
+    expect(await signer.getPublicKey()).toBe(mgr.getPublicKey());
+  });
+
+  it("getSigner() uses loginModalCallback when no signer", async () => {
+    const mgr = new SignerManager();
+    await mgr.restore();
+    const mockSigner = {
+      getPublicKey: async () => "bb".repeat(32),
+      signEvent: async () => {
+        throw new Error("not used");
+      },
+    };
+    mgr.registerLoginModal(async () => mockSigner as never);
+    const signer = await mgr.getSigner();
+    expect(await signer.getPublicKey()).toBe("bb".repeat(32));
+  });
+
+  it("onChange() returns an unsubscribe function", async () => {
+    const mgr = new SignerManager();
+    const observer = vi.fn();
+    const unsub = mgr.onChange(observer);
+    await mgr.restore();
+    const callsBefore = observer.mock.calls.length;
+    unsub();
+    mgr.logout(); // would notify if still subscribed
+    expect(observer.mock.calls.length).toBe(callsBefore);
+  });
+
+  it("createGuestAccount() sets method=guest", async () => {
+    const mgr = new SignerManager();
+    await mgr.createGuestAccount();
+    expect(mgr.getState().method).toBe("guest");
+    expect(mgr.getPublicKey()).toBeTypeOf("string");
+  });
 });

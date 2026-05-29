@@ -16,6 +16,15 @@ export interface ModuleRef {
   raw: string; // Original bech32 or naddr
 }
 
+/** Module → route base. Single source of truth for router and AI action layer. */
+export const MODULE_ROUTES: Record<ModuleType, string> = {
+  forms: "/forms",
+  calendar: "/calendar",
+  pages: "/pages",
+  drive: "/drive",
+  polls: "/polls",
+} as const;
+
 /** Map event kinds to modules */
 const KIND_MODULE_MAP: Record<number, ModuleType> = {
   // Forms
@@ -60,7 +69,7 @@ export function parseRef(bech32: string): ModuleRef | null {
 
       return {
         module,
-        route: `/${module}/${bech32}`,
+        route: `${MODULE_ROUTES[module]}/${bech32}`,
         params: {
           kind: String(kind),
           pubkey,
@@ -78,7 +87,7 @@ export function parseRef(bech32: string): ModuleRef | null {
 
       return {
         module,
-        route: `/${module}/${bech32}`,
+        route: `${MODULE_ROUTES[module]}/${bech32}`,
         params: {
           id,
           kind: String(kind),
@@ -112,4 +121,27 @@ export function parseRef(bech32: string): ModuleRef | null {
 export function resolveRef(bech32: string): string | null {
   const ref = parseRef(bech32);
   return ref?.route ?? null;
+}
+
+const MODULE_TYPES: readonly ModuleType[] = [
+  "forms",
+  "calendar",
+  "pages",
+  "drive",
+  "polls",
+] as const;
+
+/** Format a cross-module reference as `formstr:<module>:<identifier>` (event-tag form). */
+export function createTagRef(module: ModuleType, identifier: string): string {
+  return `formstr:${module}:${identifier}`;
+}
+
+/** Parse the `formstr:<module>:<identifier>` form; returns null on malformed input. */
+export function parseTagRef(s: string): { module: ModuleType; identifier: string } | null {
+  const match = s.match(/^formstr:([a-z]+):(.+)$/);
+  if (!match) return null;
+  const [, modStr, identifier] = match;
+  if (!MODULE_TYPES.includes(modStr as ModuleType)) return null;
+  if (!identifier) return null;
+  return { module: modStr as ModuleType, identifier };
 }

@@ -36,4 +36,29 @@ describe("RelayManager", () => {
     mgr.dispose();
     expect(mgr.getReadRelays()).toContain("wss://relay.damus.io");
   });
+
+  it("getAllRelays returns unique relay urls", () => {
+    mgr.setUserRelays([
+      { url: "wss://r1", read: true, write: false },
+      { url: "wss://r2", read: false, write: true },
+    ]);
+    const all = mgr.getAllRelays();
+    expect(all).toContain("wss://r1");
+    expect(all).toContain("wss://r2");
+    expect(new Set(all).size).toBe(all.length); // no duplicates
+  });
+
+  it("getDefaultRelays returns the built-in defaults", () => {
+    const defaults = mgr.getDefaultRelays();
+    expect(defaults).toContain("wss://relay.damus.io");
+    expect(defaults).toContain("wss://nos.lol");
+  });
+
+  it("getWriteRelays falls back to defaults when user relays empty", () => {
+    expect(mgr.getWriteRelays()).toContain("wss://relay.damus.io");
+  });
+
+  it("getAllRelays falls back to defaults when user relays empty", () => {
+    expect(mgr.getAllRelays()).toContain("wss://relay.damus.io");
+  });
 });
