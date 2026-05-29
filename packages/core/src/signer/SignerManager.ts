@@ -49,10 +49,7 @@ export class SignerManager {
     this.resolveSignerAsync(savedMethod, deferred);
   }
 
-  private async resolveSignerAsync(
-    method: SignerMethod,
-    deferred: DeferredSigner,
-  ): Promise<void> {
+  private async resolveSignerAsync(method: SignerMethod, deferred: DeferredSigner): Promise<void> {
     try {
       let realSigner: NostrSigner | null = null;
 

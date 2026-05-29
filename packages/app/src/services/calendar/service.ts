@@ -224,9 +224,7 @@ export async function createCalendarList(
   return { ...calendarData, eventId: signed.id };
 }
 
-export async function updateCalendarList(
-  calendarList: CalendarList,
-): Promise<CalendarList> {
+export async function updateCalendarList(calendarList: CalendarList): Promise<CalendarList> {
   const signer = await signerManager.getSigner();
 
   const content = await nip44SelfEncrypt(signer, JSON.stringify(calendarList));
@@ -274,10 +272,7 @@ export async function fetchCalendarLists(): Promise<CalendarList[]> {
 
 // ── Delete Event ────────────────────────────────────────
 
-export async function deleteCalendarEvent(
-  eventId: string,
-  coordinate?: string,
-): Promise<void> {
+export async function deleteCalendarEvent(eventId: string, coordinate?: string): Promise<void> {
   const signer = await signerManager.getSigner();
 
   const tags: string[][] = [["k", String(CALENDAR_KINDS.publicEvent)]];
@@ -319,9 +314,8 @@ async function parseCalendarEvent(event: Event): Promise<CalendarEvent | null> {
     }
   }
 
-  const title = tags.find((t) => t[0] === "title")?.[1]
-    ?? tags.find((t) => t[0] === "name")?.[1]
-    ?? "Untitled";
+  const title =
+    tags.find((t) => t[0] === "title")?.[1] ?? tags.find((t) => t[0] === "name")?.[1] ?? "Untitled";
   const description = tags.find((t) => t[0] === "description")?.[1] ?? "";
   const start = tags.find((t) => t[0] === "start")?.[1];
   const end = tags.find((t) => t[0] === "end")?.[1];

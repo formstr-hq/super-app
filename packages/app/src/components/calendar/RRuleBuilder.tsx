@@ -39,9 +39,7 @@ export function RRuleBuilder({ value, onChange }: RRuleBuilderProps) {
   const toggleDay = useCallback(
     (day: (typeof DAYS)[number]) => {
       const current = parts.byDay ?? [];
-      const next = current.includes(day)
-        ? current.filter((d) => d !== day)
-        : [...current, day];
+      const next = current.includes(day) ? current.filter((d) => d !== day) : [...current, day];
       update({ byDay: next.length ? next : undefined });
     },
     [parts.byDay, update],
@@ -55,9 +53,7 @@ export function RRuleBuilder({ value, onChange }: RRuleBuilderProps) {
         <input
           type="checkbox"
           checked={enabled}
-          onChange={(e) =>
-            onChange(e.target.checked ? { freq: "WEEKLY", interval: 1 } : null)
-          }
+          onChange={(e) => onChange(e.target.checked ? { freq: "WEEKLY", interval: 1 } : null)}
         />
         <span className="text-sm font-medium">Repeats</span>
       </label>
@@ -67,10 +63,7 @@ export function RRuleBuilder({ value, onChange }: RRuleBuilderProps) {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <Label>Frequency</Label>
-              <Select
-                value={parts.freq}
-                onValueChange={(v: RRuleFreq) => update({ freq: v })}
-              >
+              <Select value={parts.freq} onValueChange={(v: RRuleFreq) => update({ freq: v })}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -88,9 +81,7 @@ export function RRuleBuilder({ value, onChange }: RRuleBuilderProps) {
                 type="number"
                 min={1}
                 value={parts.interval}
-                onChange={(e) =>
-                  update({ interval: Math.max(1, Number(e.target.value) || 1) })
-                }
+                onChange={(e) => update({ interval: Math.max(1, Number(e.target.value) || 1) })}
                 className="h-8 text-xs"
               />
             </div>

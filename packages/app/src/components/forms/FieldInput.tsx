@@ -14,11 +14,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { AnswerType, type FormField } from "../../services/forms/types";
-import {
-  signerManager,
-  createBlossomAuthEvent,
-  BlossomClient,
-} from "@formstr/core";
+import { signerManager, createBlossomAuthEvent, BlossomClient } from "@formstr/core";
 import { DEFAULT_BLOSSOM_SERVERS } from "../../services/drive/types";
 
 /**
@@ -145,11 +141,7 @@ export function FieldInput(props: FieldInputProps) {
       return (
         <div>
           {labelEl}
-          <Select
-            value={props.value}
-            onValueChange={props.onChange}
-            disabled={props.disabled}
-          >
+          <Select value={props.value} onValueChange={props.onChange} disabled={props.disabled}>
             <SelectTrigger>
               <SelectValue placeholder="Select an option" />
             </SelectTrigger>
@@ -247,12 +239,7 @@ export function FieldInput(props: FieldInputProps) {
       return (
         <div>
           {labelEl}
-          <GridInput
-            field={field}
-            value={props.value}
-            onChange={props.onChange}
-            allowMultiple
-          />
+          <GridInput field={field} value={props.value} onChange={props.onChange} allowMultiple />
         </div>
       );
     default:
@@ -407,7 +394,9 @@ function BlossomFileUpload({
 
     const maxBytes = field.fileConfig?.maxBytes;
     if (maxBytes && file.size > maxBytes) {
-      setError(`File too large (${(file.size / 1e6).toFixed(1)} MB, max ${(maxBytes / 1e6).toFixed(1)} MB)`);
+      setError(
+        `File too large (${(file.size / 1e6).toFixed(1)} MB, max ${(maxBytes / 1e6).toFixed(1)} MB)`,
+      );
       return;
     }
     const mimeTypes = field.fileConfig?.mimeTypes;
@@ -552,7 +541,10 @@ function GridInput({
           <tr>
             <th className="w-32" />
             {cols.map((c, ci) => (
-              <th key={ci} className="text-xs font-normal text-muted-foreground px-2 py-1 text-center">
+              <th
+                key={ci}
+                className="text-xs font-normal text-muted-foreground px-2 py-1 text-center"
+              >
                 {c}
               </th>
             ))}
@@ -567,10 +559,7 @@ function GridInput({
                 return (
                   <td key={ci} className="text-center py-1.5">
                     {allowMultiple ? (
-                      <Checkbox
-                        checked={selected}
-                        onCheckedChange={() => setCell(ri, ci)}
-                      />
+                      <Checkbox checked={selected} onCheckedChange={() => setCell(ri, ci)} />
                     ) : (
                       <input
                         type="radio"
@@ -607,7 +596,7 @@ export function validateFieldAnswer(
   const v = field.validation;
   const isRequired = field.required || v?.required;
   const isEmpty = (() => {
-    if (field.type === AnswerType.checkboxes) return !(checkedValues?.size);
+    if (field.type === AnswerType.checkboxes) return !checkedValues?.size;
     if (field.type === AnswerType.signature) return !metadata;
     return !answer.trim();
   })();

@@ -62,9 +62,7 @@ function normalizePubkeyList(values: unknown): string[] {
 export async function dispatchAction(toolCall: ToolCall): Promise<ActionResult> {
   const args = toolCall.arguments as Record<string, unknown>;
   const module = moduleForTool(toolCall.name);
-  const pendingId = module
-    ? useAIPendingStore.getState().begin(module, toolCall.name)
-    : null;
+  const pendingId = module ? useAIPendingStore.getState().begin(module, toolCall.name) : null;
   try {
     return await runDispatch(toolCall, args);
   } finally {
@@ -107,12 +105,7 @@ async function runDispatch(
         shareViewKey,
       });
 
-      const naddr = createRef(
-        "forms",
-        FORM_KINDS.template,
-        result.pubkey,
-        result.formId,
-      );
+      const naddr = createRef("forms", FORM_KINDS.template, result.pubkey, result.formId);
 
       const entity: EntityRef = {
         module: "forms",
@@ -210,12 +203,7 @@ async function runDispatch(
         return { success: false, message: "Form not found on configured relays." };
       }
       await useFormsStore.getState().importForm(summary);
-      const naddr = createRef(
-        "forms",
-        FORM_KINDS.template,
-        summary.pubkey,
-        summary.id,
-      );
+      const naddr = createRef("forms", FORM_KINDS.template, summary.pubkey, summary.id);
       return {
         success: true,
         message: `Imported form "${summary.name}".`,
@@ -231,22 +219,18 @@ async function runDispatch(
     case "submit_form_response": {
       const formAuthorPubkey = args.formAuthorPubkey as string;
       const formId = args.formId as string;
-      const answersArg = (args.answers as Array<{
-        fieldId: string;
-        answer: string;
-        metadata?: string;
-      }>) ?? [];
+      const answersArg =
+        (args.answers as Array<{
+          fieldId: string;
+          answer: string;
+          metadata?: string;
+        }>) ?? [];
       const responses = answersArg.map((a) => ({
         fieldId: a.fieldId,
         answer: a.answer,
         metadata: a.metadata,
       }));
-      await formsService.submitResponse(
-        formAuthorPubkey,
-        formId,
-        responses,
-        Boolean(args.encrypt),
-      );
+      await formsService.submitResponse(formAuthorPubkey, formId, responses, Boolean(args.encrypt));
       return {
         success: true,
         message: `Submitted ${responses.length} answer(s) to form ${formId}.`,
@@ -274,10 +258,9 @@ async function runDispatch(
     }
 
     case "fetch_form_responses": {
-      await useFormsStore.getState().loadResponses(
-        args.formAuthorPubkey as string,
-        args.formId as string,
-      );
+      await useFormsStore
+        .getState()
+        .loadResponses(args.formAuthorPubkey as string, args.formId as string);
       const responses = useFormsStore.getState().responses;
       return {
         success: true,

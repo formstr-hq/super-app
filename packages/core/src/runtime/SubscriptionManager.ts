@@ -77,11 +77,13 @@ export class SubscriptionManager {
     }
 
     // New subscription
-    const listeners: SubscriptionListener[] = [{
-      id: listenerId,
-      onEvent: options?.onEvent,
-      onEose: options?.onEose,
-    }];
+    const listeners: SubscriptionListener[] = [
+      {
+        id: listenerId,
+        onEvent: options?.onEvent,
+        onEose: options?.onEose,
+      },
+    ];
 
     const managed: ManagedSubscription = {
       hash,

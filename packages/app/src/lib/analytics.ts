@@ -73,18 +73,91 @@ export function computeSummaryStats(
 
 export type FieldBreakdown =
   | { kind: "choice"; field: FormField; rows: Array<{ label: string; count: number }> }
-  | { kind: "number"; field: FormField; values: number[]; min: number; max: number; avg: number; histogram: Array<{ bucket: string; count: number }> }
-  | { kind: "text"; field: FormField; topTokens: Array<{ token: string; count: number }>; totalAnswered: number }
+  | {
+      kind: "number";
+      field: FormField;
+      values: number[];
+      min: number;
+      max: number;
+      avg: number;
+      histogram: Array<{ bucket: string; count: number }>;
+    }
+  | {
+      kind: "text";
+      field: FormField;
+      topTokens: Array<{ token: string; count: number }>;
+      totalAnswered: number;
+    }
   | { kind: "time"; field: FormField; series: Array<{ label: string; count: number }> }
   | { kind: "label"; field: FormField };
 
 const TEXT_STOPWORDS = new Set([
-  "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at", "by", "for",
-  "is", "are", "was", "were", "be", "been", "being", "it", "its", "this", "that",
-  "with", "as", "i", "you", "he", "she", "we", "they", "them", "my", "your", "our",
-  "not", "no", "yes", "so", "if", "then", "than", "from", "about", "into", "just",
-  "have", "has", "had", "do", "does", "did", "can", "could", "should", "would",
-  "will", "too", "very", "also", "more", "most", "some", "any", "all",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "but",
+  "of",
+  "to",
+  "in",
+  "on",
+  "at",
+  "by",
+  "for",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "it",
+  "its",
+  "this",
+  "that",
+  "with",
+  "as",
+  "i",
+  "you",
+  "he",
+  "she",
+  "we",
+  "they",
+  "them",
+  "my",
+  "your",
+  "our",
+  "not",
+  "no",
+  "yes",
+  "so",
+  "if",
+  "then",
+  "than",
+  "from",
+  "about",
+  "into",
+  "just",
+  "have",
+  "has",
+  "had",
+  "do",
+  "does",
+  "did",
+  "can",
+  "could",
+  "should",
+  "would",
+  "will",
+  "too",
+  "very",
+  "also",
+  "more",
+  "most",
+  "some",
+  "any",
+  "all",
 ]);
 
 function tokenize(text: string): string[] {
@@ -252,10 +325,7 @@ export function toCsv(form: FormTemplate, responses: FormResponseEvent[]): strin
             return raw;
           }
         }
-        if (
-          (f.type === AnswerType.radioButton || f.type === AnswerType.dropdown) &&
-          raw
-        ) {
+        if ((f.type === AnswerType.radioButton || f.type === AnswerType.dropdown) && raw) {
           const opt = (f.options ?? []).find((o) => o.id === raw);
           return opt?.label ?? raw;
         }

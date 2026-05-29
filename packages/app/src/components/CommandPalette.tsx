@@ -36,11 +36,7 @@ interface CommandPaletteProps {
  * App-wide Cmd-K command palette. Navigates between modules, triggers
  * quick-create actions, toggles UI, and signs out.
  */
-export function CommandPalette({
-  open,
-  onOpenChange,
-  onLoginClick,
-}: CommandPaletteProps) {
+export function CommandPalette({ open, onOpenChange, onLoginClick }: CommandPaletteProps) {
   const navigate = useNavigate();
   const { isLoggedIn, logout } = useAuthStore();
   const { themeMode, toggleTheme, aiPanelOpen, setAIPanelOpen } = useSettingsStore();
@@ -94,9 +90,7 @@ export function CommandPalette({
         <CommandSeparator />
 
         <CommandGroup heading="Search">
-          <CommandItem
-            onSelect={run(() => navigate("/calendar?focus=search"))}
-          >
+          <CommandItem onSelect={run(() => navigate("/calendar?focus=search"))}>
             <Search />
             <span>Search events…</span>
           </CommandItem>
@@ -136,9 +130,7 @@ export function CommandPalette({
           </CommandItem>
           <CommandItem onSelect={run(toggleTheme)}>
             {themeMode === "dark" ? <Sun /> : <Moon />}
-            <span>
-              Switch to {themeMode === "dark" ? "light" : "dark"} theme
-            </span>
+            <span>Switch to {themeMode === "dark" ? "light" : "dark"} theme</span>
           </CommandItem>
         </CommandGroup>
 
@@ -165,10 +157,7 @@ export function CommandPalette({
 }
 
 /** Hook that opens the palette on Cmd-K / Ctrl-K. */
-export function useCommandPaletteHotkey(
-  open: boolean,
-  onOpenChange: (open: boolean) => void,
-) {
+export function useCommandPaletteHotkey(open: boolean, onOpenChange: (open: boolean) => void) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {

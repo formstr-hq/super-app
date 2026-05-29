@@ -30,9 +30,9 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
   const { toggleSidebar, aiPanelOpen, setAIPanelOpen } = useSettingsStore();
   const location = useLocation();
 
-  const routeLabel = Object.entries(ROUTE_LABELS).find(([path]) =>
-    location.pathname.startsWith(path)
-  )?.[1] ?? "Formstr";
+  const routeLabel =
+    Object.entries(ROUTE_LABELS).find(([path]) => location.pathname.startsWith(path))?.[1] ??
+    "Formstr";
 
   const shortPubkey = pubkey ? `${pubkey.slice(0, 6)}…${pubkey.slice(-4)}` : "";
 
@@ -51,12 +51,8 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-sm min-w-0">
-        {isMobile ? null : (
-          <span className="text-muted-foreground hidden sm:block">Formstr</span>
-        )}
-        {!isMobile && (
-          <span className="text-muted-foreground hidden sm:block">/</span>
-        )}
+        {isMobile ? null : <span className="text-muted-foreground hidden sm:block">Formstr</span>}
+        {!isMobile && <span className="text-muted-foreground hidden sm:block">/</span>}
         <span className="font-medium text-foreground truncate">{routeLabel}</span>
       </div>
 
@@ -149,4 +145,3 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
     </header>
   );
 }
-

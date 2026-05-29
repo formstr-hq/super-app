@@ -50,9 +50,10 @@ export class ConversationContext {
 
   buildSystemPrompt(pubkey: string | null): string {
     const recentEntities = this.getRecentEntities(5);
-    const entityContext = recentEntities.length > 0
-      ? `\n\nRecently created/referenced entities:\n${recentEntities.map((e) => `- [${e.module}] ${e.label} (${e.ref})`).join("\n")}`
-      : "";
+    const entityContext =
+      recentEntities.length > 0
+        ? `\n\nRecently created/referenced entities:\n${recentEntities.map((e) => `- [${e.module}] ${e.label} (${e.ref})`).join("\n")}`
+        : "";
 
     return `You are the Formstr Super App assistant. You help users manage forms, calendar events, documents, files, and polls — all built on the Nostr protocol.
 

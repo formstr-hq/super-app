@@ -19,12 +19,12 @@ export interface PollOption {
 
 export interface Poll {
   id: string;
-  content: string;       // Poll question
+  content: string; // Poll question
   options: PollOption[];
   pollType: PollType;
   pubkey: string;
   createdAt: number;
-  endsAt?: number;       // Unix timestamp
+  endsAt?: number; // Unix timestamp
   powDifficulty?: number;
   relays: string[];
   hashtags: string[];

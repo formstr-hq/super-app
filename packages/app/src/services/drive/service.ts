@@ -11,11 +11,7 @@ import {
   aesGcmEncrypt,
   aesGcmDecrypt,
 } from "@formstr/core";
-import {
-  DRIVE_KINDS,
-  DEFAULT_BLOSSOM_SERVERS,
-  type FileMetadata,
-} from "./types";
+import { DRIVE_KINDS, DEFAULT_BLOSSOM_SERVERS, type FileMetadata } from "./types";
 
 // ── Upload File ─────────────────────────────────────────
 

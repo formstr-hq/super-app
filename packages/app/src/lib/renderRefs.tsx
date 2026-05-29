@@ -25,9 +25,7 @@ export function renderRefs(text: string): ReactNode[] {
     if (start > lastIndex) {
       nodes.push(text.slice(lastIndex, start));
     }
-    nodes.push(
-      <EntityPill key={`${start}-${naddr.slice(0, 12)}`} naddr={naddr} readOnly />,
-    );
+    nodes.push(<EntityPill key={`${start}-${naddr.slice(0, 12)}`} naddr={naddr} readOnly />);
     lastIndex = start + naddr.length;
   }
 

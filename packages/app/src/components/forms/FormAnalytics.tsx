@@ -9,18 +9,8 @@ import {
   Cell,
   CartesianGrid,
 } from "recharts";
-import {
-  BarChart3,
-  CheckCircle2,
-  Clock,
-  MessageSquare,
-  Users,
-} from "lucide-react";
-import {
-  AnswerType,
-  type FormResponseEvent,
-  type FormTemplate,
-} from "../../services/forms/types";
+import { BarChart3, CheckCircle2, Clock, MessageSquare, Users } from "lucide-react";
+import { AnswerType, type FormResponseEvent, type FormTemplate } from "../../services/forms/types";
 import {
   computeFieldBreakdown,
   computeSummaryStats,
@@ -109,15 +99,7 @@ export function FormAnalytics({ form, responses }: FormAnalyticsProps) {
 // Stat card
 // ═══════════════════════════════════════════════════════════
 
-function StatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="rounded-md border border-border bg-card p-3">
       <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -186,13 +168,7 @@ function typeLabel(t: AnswerType): string {
   }
 }
 
-function FieldBody({
-  breakdown,
-  accent,
-}: {
-  breakdown: FieldBreakdown;
-  accent: string;
-}) {
+function FieldBody({ breakdown, accent }: { breakdown: FieldBreakdown; accent: string }) {
   if (breakdown.kind === "choice") {
     const total = breakdown.rows.reduce((acc, r) => acc + r.count, 0);
     if (total === 0) {
@@ -207,11 +183,7 @@ function FieldBody({
               layout="vertical"
               margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
             >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
-                horizontal={false}
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
               <XAxis
                 type="number"
                 allowDecimals={false}
@@ -275,11 +247,7 @@ function FieldBody({
                 textAnchor="end"
                 height={40}
               />
-              <YAxis
-                allowDecimals={false}
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={11}
-              />
+              <YAxis allowDecimals={false} stroke="hsl(var(--muted-foreground))" fontSize={11} />
               <ChartTooltip
                 cursor={{ fill: "hsl(var(--accent))", opacity: 0.3 }}
                 contentStyle={{
@@ -313,11 +281,7 @@ function FieldBody({
               textAnchor="end"
               height={40}
             />
-            <YAxis
-              allowDecimals={false}
-              stroke="hsl(var(--muted-foreground))"
-              fontSize={11}
-            />
+            <YAxis allowDecimals={false} stroke="hsl(var(--muted-foreground))" fontSize={11} />
             <ChartTooltip
               cursor={{ fill: "hsl(var(--accent))", opacity: 0.3 }}
               contentStyle={{
@@ -338,8 +302,8 @@ function FieldBody({
     if (breakdown.topTokens.length === 0) {
       return (
         <div className="py-2 text-xs text-muted-foreground">
-          {breakdown.totalAnswered} response{breakdown.totalAnswered !== 1 ? "s" : ""} — no
-          common words detected.
+          {breakdown.totalAnswered} response{breakdown.totalAnswered !== 1 ? "s" : ""} — no common
+          words detected.
         </div>
       );
     }
@@ -347,8 +311,8 @@ function FieldBody({
     return (
       <div className="space-y-1.5">
         <p className="text-xs text-muted-foreground">
-          Top words across {breakdown.totalAnswered}{" "}
-          response{breakdown.totalAnswered !== 1 ? "s" : ""}
+          Top words across {breakdown.totalAnswered} response
+          {breakdown.totalAnswered !== 1 ? "s" : ""}
         </p>
         <div className="flex flex-wrap gap-1.5">
           {breakdown.topTokens.map((t) => {

@@ -13,10 +13,13 @@ export class NostrRuntime {
   readonly eventStore: EventStore;
   readonly subscriptionManager: SubscriptionManager;
 
-  private batchQueue = new Map<string, {
-    relays: string[];
-    resolve: (event: Event | null) => void;
-  }>();
+  private batchQueue = new Map<
+    string,
+    {
+      relays: string[];
+      resolve: (event: Event | null) => void;
+    }
+  >();
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
@@ -135,9 +138,7 @@ export class NostrRuntime {
 
   /** Publish event to relays */
   async publish(relays: string[], event: Event): Promise<void> {
-    await Promise.allSettled(
-      this.pool.publish(relays, event),
-    );
+    await Promise.allSettled(this.pool.publish(relays, event));
     this.eventStore.store(event);
   }
 

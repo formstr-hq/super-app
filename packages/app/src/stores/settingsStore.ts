@@ -30,7 +30,9 @@ interface SettingsStore {
   toggleSidebar(): void;
   setSidebarOpen(open: boolean): void;
   toggleSidebarCollapsed(): void;
-  setAIConfig(config: Partial<Pick<SettingsStore, "aiProvider" | "aiEndpoint" | "aiModel" | "aiApiKey">>): void;
+  setAIConfig(
+    config: Partial<Pick<SettingsStore, "aiProvider" | "aiEndpoint" | "aiModel" | "aiApiKey">>,
+  ): void;
   setAIPanelOpen(open: boolean): void;
 }
 
@@ -72,8 +74,10 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
 
   setAIConfig(config) {
     set((state) => {
-      if (config.aiProvider !== undefined) localStorage.setItem("formstr:ai-provider", config.aiProvider);
-      if (config.aiEndpoint !== undefined) localStorage.setItem("formstr:ai-endpoint", config.aiEndpoint);
+      if (config.aiProvider !== undefined)
+        localStorage.setItem("formstr:ai-provider", config.aiProvider);
+      if (config.aiEndpoint !== undefined)
+        localStorage.setItem("formstr:ai-endpoint", config.aiEndpoint);
       if (config.aiModel !== undefined) {
         if (config.aiModel) localStorage.setItem("formstr:ai-model", config.aiModel);
         else localStorage.removeItem("formstr:ai-model");

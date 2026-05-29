@@ -18,7 +18,13 @@ function loadPersistedMessages(): Message[] {
     if (!Array.isArray(parsed)) return [];
     // Basic validation — each item must have id, role, content
     return (parsed as Message[])
-      .filter((m) => m && typeof m.id === "string" && typeof m.role === "string" && typeof m.content === "string")
+      .filter(
+        (m) =>
+          m &&
+          typeof m.id === "string" &&
+          typeof m.role === "string" &&
+          typeof m.content === "string",
+      )
       .slice(-MAX_PERSISTED_MESSAGES);
   } catch {
     return [];
@@ -233,7 +239,9 @@ export const useAIStore = create<AIStore>((set, get) => ({
     try {
       localStorage.removeItem(STORAGE_KEY_MESSAGES);
       localStorage.removeItem(STORAGE_KEY_ENTITIES);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     set({
       messages: [],
       entities: [],

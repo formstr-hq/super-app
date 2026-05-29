@@ -42,14 +42,13 @@ export function ToolCallChip({ toolCall }: ToolCallChipProps) {
   const Icon = module ? moduleIcons[module] : Wrench;
   const color = module ? moduleColors[module] : "border-border bg-muted text-foreground";
 
-  const StatusIcon =
-    status === "pending" ? Loader2 : status === "success" ? Check : X;
+  const StatusIcon = status === "pending" ? Loader2 : status === "success" ? Check : X;
   const statusClass =
     status === "pending"
       ? "animate-spin opacity-80"
       : status === "success"
-      ? "text-emerald-500"
-      : "text-destructive";
+        ? "text-emerald-500"
+        : "text-destructive";
 
   return (
     <div

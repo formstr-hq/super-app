@@ -1,10 +1,6 @@
 import { useMemo, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -71,7 +67,9 @@ export function TimezonePicker({ value, onChange, placeholder }: TimezonePickerP
           aria-expanded={open}
           className="h-9 w-full justify-between text-xs font-normal"
         >
-          <span className="truncate">{display || placeholder || `Use viewer's timezone (${local})`}</span>
+          <span className="truncate">
+            {display || placeholder || `Use viewer's timezone (${local})`}
+          </span>
           <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -101,10 +99,7 @@ export function TimezonePicker({ value, onChange, placeholder }: TimezonePickerP
                   }}
                 >
                   <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value === tz ? "opacity-100" : "opacity-0",
-                    )}
+                    className={cn("mr-2 h-4 w-4", value === tz ? "opacity-100" : "opacity-0")}
                   />
                   {tz}
                 </CommandItem>

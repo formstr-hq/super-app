@@ -87,11 +87,7 @@ export interface FormSettings {
   collaborators?: string[];
 }
 
-export type FormDecryptError =
-  | "not-author"
-  | "decrypt-failed"
-  | "no-signer"
-  | "no-view-key";
+export type FormDecryptError = "not-author" | "decrypt-failed" | "no-signer" | "no-view-key";
 
 export interface FormTemplate {
   id: string;

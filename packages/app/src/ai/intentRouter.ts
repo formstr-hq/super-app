@@ -24,7 +24,10 @@ function tryExtractToolCallsFromText(text: string): ToolCall[] {
   const results: ToolCall[] = [];
 
   // Strip markdown code fences if present
-  const cleaned = text.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+  const cleaned = text
+    .replace(/```(?:json)?\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
 
   // Try to find JSON objects in the text
   const jsonCandidates: string[] = [];
@@ -48,7 +51,11 @@ function tryExtractToolCallsFromText(text: string): ToolCall[] {
       const obj = JSON.parse(candidate) as Record<string, unknown>;
 
       // Pattern 1: {"name": "...", "parameters": {...}}
-      if (typeof obj.name === "string" && typeof obj.parameters === "object" && obj.parameters !== null) {
+      if (
+        typeof obj.name === "string" &&
+        typeof obj.parameters === "object" &&
+        obj.parameters !== null
+      ) {
         const name = (obj.name as string).toLowerCase();
         if (VALID_TOOL_NAMES.has(name)) {
           results.push({
@@ -63,7 +70,11 @@ function tryExtractToolCallsFromText(text: string): ToolCall[] {
       // Pattern 2: {"function": {"name": "...", "arguments": {...}}}
       if (typeof obj.function === "object" && obj.function !== null) {
         const fn = obj.function as Record<string, unknown>;
-        if (typeof fn.name === "string" && typeof fn.arguments === "object" && fn.arguments !== null) {
+        if (
+          typeof fn.name === "string" &&
+          typeof fn.arguments === "object" &&
+          fn.arguments !== null
+        ) {
           const name = (fn.name as string).toLowerCase();
           if (VALID_TOOL_NAMES.has(name)) {
             results.push({
@@ -77,7 +88,11 @@ function tryExtractToolCallsFromText(text: string): ToolCall[] {
       }
 
       // Pattern 3: {"name": "...", "arguments": {...}} (variant)
-      if (typeof obj.name === "string" && typeof obj.arguments === "object" && obj.arguments !== null) {
+      if (
+        typeof obj.name === "string" &&
+        typeof obj.arguments === "object" &&
+        obj.arguments !== null
+      ) {
         const name = (obj.name as string).toLowerCase();
         if (VALID_TOOL_NAMES.has(name)) {
           results.push({
@@ -111,22 +126,29 @@ export class IntentRouter {
   async routeStream(
     userMessage: string,
     pubkey: string | null,
-    callbacks: StreamCallbacks & { onActionResult?: (result: ActionResult) => void; onContentReset?: () => void },
+    callbacks: StreamCallbacks & {
+      onActionResult?: (result: ActionResult) => void;
+      onContentReset?: () => void;
+    },
     model?: string,
   ): Promise<void> {
     this.context.addMessage(msg("user", userMessage));
 
     const systemPrompt = this.context.buildSystemPrompt(pubkey);
-    const messages: Message[] = [
-      msg("system", systemPrompt),
-      ...this.context.getMessages(),
-    ];
+    const messages: Message[] = [msg("system", systemPrompt), ...this.context.getMessages()];
 
     let fullContent = "";
-    const toolCallsReceived: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = [];
+    const toolCallsReceived: Array<{
+      id: string;
+      name: string;
+      arguments: Record<string, unknown>;
+    }> = [];
 
     // Determine if the message likely needs tools (action-oriented keywords)
-    const looksLikeAction = /\b(create|make|build|delete|remove|add|fetch|get|show|list|browse|share|save)\b/i.test(userMessage);
+    const looksLikeAction =
+      /\b(create|make|build|delete|remove|add|fetch|get|show|list|browse|share|save)\b/i.test(
+        userMessage,
+      );
 
     await this.provider.generateStream(
       messages,
@@ -209,7 +231,13 @@ export class IntentRouter {
                 callbacks.onActionResult?.(result);
 
                 // Add tool result to context
-                this.context.addMessage(msg("tool", result.message ?? (result.success ? "Done" : result.error ?? "Failed"), tc.id));
+                this.context.addMessage(
+                  msg(
+                    "tool",
+                    result.message ?? (result.success ? "Done" : (result.error ?? "Failed")),
+                    tc.id,
+                  ),
+                );
 
                 // If we had tool calls, do a follow-up generation for the final response
                 if (result.success) {

@@ -28,8 +28,14 @@ import { AIPendingRow } from "../components/ai/AIPendingRow";
 
 export function PollsPage() {
   const {
-    myPolls, recentPolls, isLoadingMine, isLoadingRecent, error,
-    fetchMyPolls, fetchRecentPolls, createPoll,
+    myPolls,
+    recentPolls,
+    isLoadingMine,
+    isLoadingRecent,
+    error,
+    fetchMyPolls,
+    fetchRecentPolls,
+    createPoll,
   } = usePollsStore();
   const [createOpen, setCreateOpen] = useState(false);
   const [viewPollId, setViewPollId] = useState<string | null>(null);
@@ -126,12 +132,7 @@ export function PollsPage() {
         onCreate={createPoll}
       />
 
-      {viewPollId && (
-        <PollDetailDialog
-          pollId={viewPollId}
-          onClose={() => setViewPollId(null)}
-        />
-      )}
+      {viewPollId && <PollDetailDialog pollId={viewPollId} onClose={() => setViewPollId(null)} />}
     </div>
   );
 }
@@ -182,7 +183,11 @@ function PollEmptyState({ onNew }: { onNew: () => void }) {
 // ── Poll Card ─────────────────────────────────────────────────
 
 function PollCard({
-  question, pollType, optionCount, createdAt, onView,
+  question,
+  pollType,
+  optionCount,
+  createdAt,
+  onView,
 }: {
   question: string;
   pollType: PollType;
@@ -207,11 +212,14 @@ function PollCard({
         <div className="flex items-center justify-between mt-3">
           <span className="text-xs text-muted-foreground">
             {new Date(createdAt * 1000).toLocaleDateString(undefined, {
-              month: "short", day: "numeric", year: "numeric",
+              month: "short",
+              day: "numeric",
+              year: "numeric",
             })}
           </span>
           <Button
-            variant="ghost" size="sm"
+            variant="ghost"
+            size="sm"
             className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={onView}
           >
@@ -262,9 +270,14 @@ function CreatePollDialog({ open, onClose, onCreate }: CreatePollDialogProps) {
       await onCreate({ question, pollType, options });
       setQuestion("");
       setPollType("singlechoice");
-      setOptions([{ id: "1", label: "" }, { id: "2", label: "" }]);
+      setOptions([
+        { id: "1", label: "" },
+        { id: "2", label: "" },
+      ]);
       onClose();
-    } catch { /* handled by store */ } finally {
+    } catch {
+      /* handled by store */
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -281,7 +294,9 @@ function CreatePollDialog({ open, onClose, onCreate }: CreatePollDialogProps) {
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="poll-question" className="text-xs">Question</Label>
+            <Label htmlFor="poll-question" className="text-xs">
+              Question
+            </Label>
             <Input
               id="poll-question"
               placeholder="What would you like to ask?"
@@ -327,7 +342,8 @@ function CreatePollDialog({ open, onClose, onCreate }: CreatePollDialogProps) {
                       className="h-8 text-sm flex-1"
                     />
                     <Button
-                      variant="ghost" size="icon"
+                      variant="ghost"
+                      size="icon"
                       className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
                       disabled={options.length <= 2}
                       onClick={() => removeOption(index)}
@@ -340,7 +356,8 @@ function CreatePollDialog({ open, onClose, onCreate }: CreatePollDialogProps) {
               </div>
             </ScrollArea>
             <Button
-              variant="ghost" size="sm"
+              variant="ghost"
+              size="sm"
               className="gap-1.5 h-7 text-xs text-muted-foreground hover:text-foreground"
               onClick={addOption}
             >
@@ -366,10 +383,8 @@ function CreatePollDialog({ open, onClose, onCreate }: CreatePollDialogProps) {
 // ── Poll Detail Dialog ────────────────────────────────────────
 
 function PollDetailDialog({ pollId, onClose }: { pollId: string; onClose: () => void }) {
-  const {
-    currentPoll, currentResults, isLoadingDetail,
-    loadPoll, loadResults, submitResponse,
-  } = usePollsStore();
+  const { currentPoll, currentResults, isLoadingDetail, loadPoll, loadResults, submitResponse } =
+    usePollsStore();
   const [selected, setSelected] = useState<string[]>([]);
   const [voted, setVoted] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -384,12 +399,7 @@ function PollDetailDialog({ pollId, onClose }: { pollId: string; onClose: () => 
   const handleCopyLink = async () => {
     if (!currentPoll) return;
     try {
-      const naddr = createRef(
-        "polls",
-        POLLS_KINDS.poll,
-        currentPoll.pubkey,
-        currentPoll.id,
-      );
+      const naddr = createRef("polls", POLLS_KINDS.poll, currentPoll.pubkey, currentPoll.id);
       await navigator.clipboard.writeText(naddr);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
@@ -413,10 +423,12 @@ function PollDetailDialog({ pollId, onClose }: { pollId: string; onClose: () => 
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="leading-snug text-base">
-            {isLoadingDetail ? "Loading…" : currentPoll?.content ?? "Poll"}
+            {isLoadingDetail ? "Loading…" : (currentPoll?.content ?? "Poll")}
           </DialogTitle>
           {currentResults && (
-            <DialogDescription>{totalVotes} response{totalVotes !== 1 ? "s" : ""}</DialogDescription>
+            <DialogDescription>
+              {totalVotes} response{totalVotes !== 1 ? "s" : ""}
+            </DialogDescription>
           )}
         </DialogHeader>
 
@@ -444,7 +456,7 @@ function PollDetailDialog({ pollId, onClose }: { pollId: string; onClose: () => 
                           "flex items-center gap-2.5 rounded-md border border-border px-3 py-2.5 cursor-pointer text-sm transition-colors duration-150",
                           selected[0] === opt.id
                             ? "border-primary bg-primary/5 text-foreground"
-                            : "hover:bg-muted/50 text-foreground"
+                            : "hover:bg-muted/50 text-foreground",
                         )}
                       >
                         <RadioGroupItem value={opt.id} id={`opt-${opt.id}`} className="shrink-0" />
@@ -461,7 +473,7 @@ function PollDetailDialog({ pollId, onClose }: { pollId: string; onClose: () => 
                           "flex items-center gap-2.5 rounded-md border border-border px-3 py-2.5 cursor-pointer text-sm transition-colors duration-150",
                           selected.includes(opt.id)
                             ? "border-primary bg-primary/5 text-foreground"
-                            : "hover:bg-muted/50 text-foreground"
+                            : "hover:bg-muted/50 text-foreground",
                         )}
                       >
                         <Checkbox
@@ -470,7 +482,7 @@ function PollDetailDialog({ pollId, onClose }: { pollId: string; onClose: () => 
                             setSelected(
                               checked
                                 ? [...selected, opt.id]
-                                : selected.filter((id) => id !== opt.id)
+                                : selected.filter((id) => id !== opt.id),
                             );
                           }}
                           className="shrink-0"
@@ -517,12 +529,7 @@ function PollDetailDialog({ pollId, onClose }: { pollId: string; onClose: () => 
 
         <DialogFooter>
           {currentPoll && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={handleCopyLink}
-            >
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCopyLink}>
               <Link2 className="h-3.5 w-3.5" />
               {copied ? "Copied!" : "Copy link"}
             </Button>
@@ -538,10 +545,11 @@ function PollDetailDialog({ pollId, onClose }: { pollId: string; onClose: () => 
               Submit Vote
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Close
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-

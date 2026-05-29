@@ -22,9 +22,9 @@ import {
 export interface SavePageParams {
   content: string;
   title?: string;
-  existingId?: string;   // Update existing doc
-  viewKey?: string;      // Existing view key for updates
-  editKey?: string;      // Signing key for shared docs
+  existingId?: string; // Update existing doc
+  viewKey?: string; // Existing view key for updates
+  editKey?: string; // Signing key for shared docs
 }
 
 export async function savePage(params: SavePageParams): Promise<PageDocument> {
@@ -32,9 +32,7 @@ export async function savePage(params: SavePageParams): Promise<PageDocument> {
   const docId = params.existingId ?? randomId(6);
 
   // Generate or reuse view key for encryption
-  const viewKeyBytes = params.viewKey
-    ? hexToBytes(params.viewKey)
-    : generateSecretKey();
+  const viewKeyBytes = params.viewKey ? hexToBytes(params.viewKey) : generateSecretKey();
   const viewKeyHex = params.viewKey ?? bytesToHex(viewKeyBytes);
   const viewPubkey = getPublicKey(viewKeyBytes);
 
@@ -153,8 +151,8 @@ export async function fetchPage(
     title: decrypted
       ? extractTitle(content)
       : titleTag && titleTag.trim()
-      ? titleTag
-      : `Document ${docId}`,
+        ? titleTag
+        : `Document ${docId}`,
     content,
     pubkey: event.pubkey,
     createdAt: event.created_at,
@@ -166,11 +164,7 @@ export async function fetchPage(
 
 // ── Share Page ──────────────────────────────────────────
 
-export function generateShareLink(
-  address: string,
-  viewKey: string,
-  editKey?: string,
-): ShareResult {
+export function generateShareLink(address: string, viewKey: string, editKey?: string): ShareResult {
   const keys: Record<string, string> = { viewKey };
   if (editKey) keys["editKey"] = editKey;
 
@@ -199,10 +193,7 @@ export async function deletePage(address: string): Promise<void> {
 
 // ── Document Metadata (tags/labels) ─────────────────────
 
-export async function saveDocMetadata(
-  address: string,
-  metadata: DocMetadata,
-): Promise<void> {
+export async function saveDocMetadata(address: string, metadata: DocMetadata): Promise<void> {
   const signer = await signerManager.getSigner();
   const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(metadata));
 

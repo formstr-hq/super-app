@@ -39,9 +39,7 @@ export class OutboxService {
     const relaySet = new Set(userRelays);
 
     // Fetch outbox relays for each author (up to 20 gossip relays)
-    const results = await Promise.allSettled(
-      authors.map((a) => this.getOutboxRelays(a)),
-    );
+    const results = await Promise.allSettled(authors.map((a) => this.getOutboxRelays(a)));
 
     for (const result of results) {
       if (result.status === "fulfilled") {

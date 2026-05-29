@@ -8,11 +8,7 @@ import {
   type SubscriptionHandle,
 } from "@formstr/core";
 import { FORM_KINDS } from "../services/forms/types";
-import {
-  FORM_VIEW_KEY_RUMOR_KIND,
-  FORM_VIEW_KEY_TAG,
-  hexToBytes,
-} from "../services/forms/keys";
+import { FORM_VIEW_KEY_RUMOR_KIND, FORM_VIEW_KEY_TAG, hexToBytes } from "../services/forms/keys";
 
 interface FormsKeyStore {
   /** coord → view secret bytes */
@@ -51,9 +47,7 @@ export const useFormsKeyStore = create<FormsKeyStore>((set, get) => ({
       const pubkey = await signer.getPublicKey();
       const relays = relayManager.getRelaysForModule("forms");
 
-      const filters: Filter[] = [
-        { kinds: [FORM_KINDS.giftWrap], "#p": [pubkey] },
-      ];
+      const filters: Filter[] = [{ kinds: [FORM_KINDS.giftWrap], "#p": [pubkey] }];
 
       const handle = nostrRuntime.subscribe(relays, filters, {
         onEvent: async (wrap) => {

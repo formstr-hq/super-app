@@ -11,10 +11,10 @@ export const PAGES_KINDS = {
 // ── Data Structures ─────────────────────────────────────
 
 export interface PageDocument {
-  id: string;          // d-tag
-  address: string;     // "kind:pubkey:dtag"
+  id: string; // d-tag
+  address: string; // "kind:pubkey:dtag"
   title: string;
-  content: string;     // Markdown
+  content: string; // Markdown
   pubkey: string;
   createdAt: number;
   isEncrypted: boolean;

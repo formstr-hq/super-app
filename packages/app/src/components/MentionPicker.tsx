@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Calendar,
-  ClipboardList,
-  FileText,
-  FolderOpen,
-  Vote,
-} from "lucide-react";
+import { Calendar, ClipboardList, FileText, FolderOpen, Vote } from "lucide-react";
 import { createRef as createNostrRef, type ModuleType } from "@formstr/core";
 import { cn } from "@/lib/utils";
 import { useFormsStore } from "../stores/formsStore";
@@ -112,8 +106,7 @@ export function MentionPicker({
     if (modules.includes("calendar")) {
       for (const e of calendarStore.events) {
         const kind =
-          e.kind === CALENDAR_KINDS.privateEvent ||
-          e.kind === CALENDAR_KINDS.publicEvent
+          e.kind === CALENDAR_KINDS.privateEvent || e.kind === CALENDAR_KINDS.publicEvent
             ? e.kind
             : CALENDAR_KINDS.publicEvent;
         all.push({
@@ -162,9 +155,7 @@ export function MentionPicker({
       ? all.filter((i) => i.label.toLowerCase().includes(q) || i.module.includes(q))
       : all;
 
-    return filtered
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, limit);
+    return filtered.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
   }, [
     query,
     modules,
@@ -245,9 +236,7 @@ export function MentionPicker({
               }}
               className={cn(
                 "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors",
-                i === highlight
-                  ? "bg-accent text-accent-foreground"
-                  : "hover:bg-accent/50",
+                i === highlight ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
               )}
             >
               <Icon className={cn("h-3.5 w-3.5 shrink-0", MODULE_TINT[item.module])} />

@@ -1,4 +1,3 @@
-
 /**
  * nkeys encoding — shared between Forms and Pages.
  * Bech32 + TLV encoding for passing encryption keys via URL hash fragments.

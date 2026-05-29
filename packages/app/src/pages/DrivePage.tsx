@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  FolderOpen, File, Home, CloudUpload, Download, Trash2, ChevronRight, Loader2,
+  FolderOpen,
+  File,
+  Home,
+  CloudUpload,
+  Download,
+  Trash2,
+  ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,15 +26,25 @@ function formatBytes(bytes: number): string {
 
 export function DrivePage() {
   const {
-    isLoading, isUploading, error, currentFolder,
-    fetchFiles, uploadFile, deleteFile, downloadFile,
-    setCurrentFolder, getFolders, getFilesInFolder,
+    isLoading,
+    isUploading,
+    error,
+    currentFolder,
+    fetchFiles,
+    uploadFile,
+    deleteFile,
+    downloadFile,
+    setCurrentFolder,
+    getFolders,
+    getFilesInFolder,
   } = useDriveStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [downloadingHash, setDownloadingHash] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  useEffect(() => { fetchFiles(); }, [fetchFiles]);
+  useEffect(() => {
+    fetchFiles();
+  }, [fetchFiles]);
 
   const folders = getFolders().filter((f) => {
     if (currentFolder === "/") return !f.slice(1).includes("/") && f !== "/";
@@ -85,9 +102,15 @@ export function DrivePage() {
           disabled={isUploading}
         >
           {isUploading ? (
-            <><Loader2 className="h-3.5 w-3.5 animate-spin" />Uploading…</>
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Uploading…
+            </>
           ) : (
-            <><CloudUpload className="h-3.5 w-3.5" />Upload</>
+            <>
+              <CloudUpload className="h-3.5 w-3.5" />
+              Upload
+            </>
           )}
         </Button>
         <input ref={fileInputRef} type="file" hidden onChange={handleFileSelect} />
@@ -112,7 +135,7 @@ export function DrivePage() {
             "flex items-center gap-1 text-xs font-medium rounded px-1.5 py-0.5 transition-colors duration-150",
             currentFolder === "/"
               ? "text-foreground bg-muted"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted",
           )}
         >
           <Home className="h-3 w-3" />
@@ -127,7 +150,7 @@ export function DrivePage() {
                 "text-xs font-medium rounded px-1.5 py-0.5 transition-colors duration-150",
                 i === breadcrumbs.length - 1
                   ? "text-foreground bg-muted"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
               )}
             >
               {crumb.label}
@@ -138,14 +161,15 @@ export function DrivePage() {
 
       {/* Drop zone + content */}
       <div
-        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragOver(true);
+        }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
         className={cn(
           "rounded-lg border-2 transition-colors duration-150 min-h-50",
-          isDragOver
-            ? "border-primary bg-primary/5 border-dashed"
-            : "border-border border-solid"
+          isDragOver ? "border-primary bg-primary/5 border-dashed" : "border-border border-solid",
         )}
       >
         {isLoading ? (
@@ -165,9 +189,7 @@ export function DrivePage() {
             </div>
             <div>
               <p className="text-sm font-medium text-foreground">Drop files here</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                or use the Upload button above
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">or use the Upload button above</p>
             </div>
           </div>
         ) : (
@@ -190,29 +212,38 @@ export function DrivePage() {
 
             {/* Files */}
             {files.map((file) => (
-              <div key={file.hash} className="group flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors duration-150">
+              <div
+                key={file.hash}
+                className="group flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors duration-150"
+              >
                 <File className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-foreground truncate">{file.name}</p>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="text-xs text-muted-foreground">{formatBytes(file.size)}</span>
-                    <Badge variant="outline" className="text-xs py-0 h-4">{file.type}</Badge>
+                    <Badge variant="outline" className="text-xs py-0 h-4">
+                      {file.type}
+                    </Badge>
                   </div>
                 </div>
                 <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                   <Button
-                    variant="ghost" size="icon"
+                    variant="ghost"
+                    size="icon"
                     className="h-7 w-7 text-muted-foreground hover:text-foreground"
                     disabled={downloadingHash === file.hash}
                     onClick={() => handleDownload(file)}
                     aria-label="Download"
                   >
-                    {downloadingHash === file.hash
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <Download className="h-3.5 w-3.5" />}
+                    {downloadingHash === file.hash ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
                   </Button>
                   <Button
-                    variant="ghost" size="icon"
+                    variant="ghost"
+                    size="icon"
                     className="h-7 w-7 text-muted-foreground hover:text-destructive"
                     onClick={() => deleteFile(file)}
                     aria-label="Delete"

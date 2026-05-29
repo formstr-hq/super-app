@@ -3,10 +3,7 @@ import { Check, Inbox, Loader2, X, CircleHelp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  useInvitationsStore,
-  type InvitationEntry,
-} from "../../stores/invitationsStore";
+import { useInvitationsStore, type InvitationEntry } from "../../stores/invitationsStore";
 import { rsvpToEvent } from "../../services/calendar/rsvp";
 
 function formatDate(ms?: number) {
@@ -37,9 +34,7 @@ export function InvitationInbox() {
     <div className="mb-3 rounded-lg border border-primary/30 bg-primary/5">
       <div className="flex items-center gap-2 border-b border-primary/20 px-3 py-2">
         <Inbox className="h-4 w-4 text-primary" />
-        <p className="text-xs font-semibold text-foreground">
-          Invitations ({pending.length})
-        </p>
+        <p className="text-xs font-semibold text-foreground">Invitations ({pending.length})</p>
       </div>
 
       <div className="divide-y divide-primary/10">
@@ -90,19 +85,10 @@ interface InvitationRowProps {
   onDismiss: () => void;
 }
 
-function InvitationRow({
-  inv,
-  onAccept,
-  onDecline,
-  onTentative,
-  onDismiss,
-}: InvitationRowProps) {
+function InvitationRow({ inv, onAccept, onDecline, onTentative, onDismiss }: InvitationRowProps) {
   const [busy, setBusy] = useState<"accept" | "decline" | "tentative" | null>(null);
 
-  const run = async (
-    kind: "accept" | "decline" | "tentative",
-    fn: () => Promise<void>,
-  ) => {
+  const run = async (kind: "accept" | "decline" | "tentative", fn: () => Promise<void>) => {
     setBusy(kind);
     try {
       await fn();
@@ -125,9 +111,7 @@ function InvitationRow({
             </Badge>
           )}
         </div>
-        {when && (
-          <p className="text-xs text-muted-foreground truncate">{when}</p>
-        )}
+        {when && <p className="text-xs text-muted-foreground truncate">{when}</p>}
       </div>
 
       <div className="flex items-center gap-1">

@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Calendar,
-  ClipboardList,
-  FileText,
-  FolderOpen,
-  Loader2,
-  Vote,
-  X,
-} from "lucide-react";
+import { Calendar, ClipboardList, FileText, FolderOpen, Loader2, Vote, X } from "lucide-react";
 import { parseRef, resolveRef, type ModuleType } from "@formstr/core";
 import { cn } from "@/lib/utils";
 import { useFormsStore } from "../stores/formsStore";
@@ -32,26 +24,22 @@ const MODULE_META: Record<
   calendar: {
     icon: Calendar,
     label: "Event",
-    className:
-      "bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/20",
+    className: "bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/20",
   },
   pages: {
     icon: FileText,
     label: "Page",
-    className:
-      "bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/20",
+    className: "bg-green-500/10 text-green-700 dark:text-green-300 border-green-500/20",
   },
   drive: {
     icon: FolderOpen,
     label: "File",
-    className:
-      "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20",
+    className: "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20",
   },
   polls: {
     icon: Vote,
     label: "Poll",
-    className:
-      "bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/20",
+    className: "bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/20",
   },
 };
 
@@ -68,12 +56,7 @@ interface EntityPillProps {
  * renders icon + resolved name + deep link. Resolves labels from the
  * matching module's store without a new network request when possible.
  */
-export function EntityPill({
-  naddr,
-  onRemove,
-  size = "sm",
-  readOnly = false,
-}: EntityPillProps) {
+export function EntityPill({ naddr, onRemove, size = "sm", readOnly = false }: EntityPillProps) {
   const navigate = useNavigate();
   const ref = useMemo(() => parseRef(naddr), [naddr]);
   const [label, resolving] = useResolveLabel(ref?.module, ref?.params);

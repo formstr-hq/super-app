@@ -41,10 +41,12 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
     <TooltipProvider delayDuration={300}>
       <div className="flex h-full flex-col">
         {/* Logo + collapse toggle */}
-        <div className={cn(
-          "flex h-12 items-center border-b border-border shrink-0",
-          collapsed ? "justify-center px-0" : "justify-between px-4"
-        )}>
+        <div
+          className={cn(
+            "flex h-12 items-center border-b border-border shrink-0",
+            collapsed ? "justify-center px-0" : "justify-between px-4",
+          )}
+        >
           {!collapsed && (
             <div className="flex items-center gap-2">
               <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary">
@@ -60,10 +62,11 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className="h-8 w-8 text-muted-foreground hover:text-foreground hidden lg:flex"
           >
-            {collapsed
-              ? <PanelLeftOpen className="h-4 w-4" />
-              : <PanelLeftClose className="h-4 w-4" />
-            }
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
           </Button>
           {collapsed && (
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary cursor-default">
@@ -89,7 +92,7 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
                         "flex h-8 w-full items-center justify-center rounded-md transition-colors duration-150",
                         isActive
                           ? "bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
                       )}
                     >
                       <Icon className="h-4 w-4" />
@@ -108,7 +111,7 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
                   "flex h-8 w-full items-center gap-2.5 rounded-md px-3 text-sm transition-colors duration-150",
                   isActive
                     ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -119,12 +122,11 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
         </nav>
 
         {/* Bottom section */}
-        <div className={cn(
-          "border-t border-border px-2 py-2",
-          collapsed ? "flex justify-center" : ""
-        )}>
-          {!isLoggedIn && (
-            collapsed ? (
+        <div
+          className={cn("border-t border-border px-2 py-2", collapsed ? "flex justify-center" : "")}
+        >
+          {!isLoggedIn &&
+            (collapsed ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -147,11 +149,9 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
                 <LogIn className="h-3.5 w-3.5" />
                 Sign In
               </Button>
-            )
-          )}
+            ))}
         </div>
       </div>
     </TooltipProvider>
   );
 }
-

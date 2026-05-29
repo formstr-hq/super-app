@@ -1,9 +1,5 @@
 import type { EventTemplate, Event, Filter } from "nostr-tools";
-import {
-  signerManager,
-  nostrRuntime,
-  relayManager,
-} from "@formstr/core";
+import { signerManager, nostrRuntime, relayManager } from "@formstr/core";
 import type { SubscriptionHandle } from "@formstr/core";
 import {
   POLLS_KINDS,
@@ -21,9 +17,7 @@ export async function createPoll(draft: PollDraft): Promise<Poll> {
   const pubkey = await signer.getPublicKey();
   const relays = relayManager.getRelaysForModule("polls");
 
-  const tags: string[][] = [
-    ["polltype", draft.pollType],
-  ];
+  const tags: string[][] = [["polltype", draft.pollType]];
 
   const options: PollOption[] = draft.options.map((o) => ({
     id: crypto.randomUUID().slice(0, 8),

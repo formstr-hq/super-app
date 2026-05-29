@@ -29,12 +29,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
     keywords: ["h1", "heading", "title"],
     icon: Heading1,
     command: ({ editor, range }) => {
-      editor
-        .chain()
-        .focus()
-        .deleteRange(range)
-        .setNode("heading", { level: 1 })
-        .run();
+      editor.chain().focus().deleteRange(range).setNode("heading", { level: 1 }).run();
     },
   },
   {
@@ -43,12 +38,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
     keywords: ["h2", "heading"],
     icon: Heading2,
     command: ({ editor, range }) => {
-      editor
-        .chain()
-        .focus()
-        .deleteRange(range)
-        .setNode("heading", { level: 2 })
-        .run();
+      editor.chain().focus().deleteRange(range).setNode("heading", { level: 2 }).run();
     },
   },
   {
@@ -57,12 +47,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
     keywords: ["h3", "heading"],
     icon: Heading3,
     command: ({ editor, range }) => {
-      editor
-        .chain()
-        .focus()
-        .deleteRange(range)
-        .setNode("heading", { level: 3 })
-        .run();
+      editor.chain().focus().deleteRange(range).setNode("heading", { level: 3 }).run();
     },
   },
   {

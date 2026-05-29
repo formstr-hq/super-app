@@ -13,12 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { createRef } from "@formstr/core";
 import { usePagesStore } from "../stores";
 import { PAGES_KINDS, type PageSummary } from "../services/pages/types";
@@ -27,17 +22,30 @@ import { AIPendingRow } from "../components/ai/AIPendingRow";
 
 export function PagesPage() {
   const {
-    pages, currentPage, isLoading, error,
-    fetchMyPages, loadPage, savePage, deletePage, sharePage, clearCurrent,
+    pages,
+    currentPage,
+    isLoading,
+    error,
+    fetchMyPages,
+    loadPage,
+    savePage,
+    deletePage,
+    sharePage,
+    clearCurrent,
   } = usePagesStore();
   const [editorOpen, setEditorOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  useEffect(() => { fetchMyPages(); }, [fetchMyPages]);
+  useEffect(() => {
+    fetchMyPages();
+  }, [fetchMyPages]);
 
-  const handleNewPage = () => { clearCurrent(); setEditorOpen(true); };
+  const handleNewPage = () => {
+    clearCurrent();
+    setEditorOpen(true);
+  };
 
   const handleCopyLink = async (page: PageSummary) => {
     try {
@@ -66,7 +74,10 @@ export function PagesPage() {
     }
   };
 
-  const handleEditorClose = () => { setEditorOpen(false); clearCurrent(); };
+  const handleEditorClose = () => {
+    setEditorOpen(false);
+    clearCurrent();
+  };
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -140,7 +151,9 @@ export function PagesPage() {
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <span className="text-xs text-muted-foreground">
                       {new Date(page.createdAt * 1000).toLocaleDateString(undefined, {
-                        month: "short", day: "numeric", year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
                       })}
                     </span>
                     {page.isEncrypted && (
@@ -163,7 +176,8 @@ export function PagesPage() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant="ghost" size="icon"
+                        variant="ghost"
+                        size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-foreground"
                         onClick={() => handleEdit(page)}
                       >
@@ -175,7 +189,8 @@ export function PagesPage() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant="ghost" size="icon"
+                        variant="ghost"
+                        size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-foreground"
                         onClick={() => handleShare(page.address)}
                       >
@@ -187,7 +202,8 @@ export function PagesPage() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant="ghost" size="icon"
+                        variant="ghost"
+                        size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-foreground"
                         onClick={() => handleCopyLink(page)}
                       >
@@ -201,7 +217,8 @@ export function PagesPage() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant="ghost" size="icon"
+                        variant="ghost"
+                        size="icon"
                         className="h-7 w-7 text-muted-foreground hover:text-destructive"
                         onClick={() => deletePage(page.address)}
                       >
@@ -235,7 +252,12 @@ export function PagesPage() {
 interface PageEditorDialogProps {
   open: boolean;
   onClose: () => void;
-  onSave: (params: { content: string; title?: string; existingId?: string; viewKey?: string }) => Promise<unknown>;
+  onSave: (params: {
+    content: string;
+    title?: string;
+    existingId?: string;
+    viewKey?: string;
+  }) => Promise<unknown>;
   initialContent?: string;
   initialTitle?: string;
   existingId?: string;
@@ -243,8 +265,13 @@ interface PageEditorDialogProps {
 }
 
 function PageEditorDialog({
-  open, onClose, onSave,
-  initialContent, initialTitle, existingId, viewKey,
+  open,
+  onClose,
+  onSave,
+  initialContent,
+  initialTitle,
+  existingId,
+  viewKey,
 }: PageEditorDialogProps) {
   const [title, setTitle] = useState(initialTitle ?? "");
   const [content, setContent] = useState(initialContent ?? "");
@@ -270,7 +297,9 @@ function PageEditorDialog({
         viewKey,
       });
       onClose();
-    } catch { /* handled by store */ } finally {
+    } catch {
+      /* handled by store */
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -281,14 +310,16 @@ function PageEditorDialog({
         <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
           <DialogTitle className="text-base">{existingId ? "Edit Page" : "New Page"}</DialogTitle>
           <DialogDescription className="text-xs">
-            Rich editor with slash commands. Type <kbd className="rounded bg-muted px-1">/</kbd> for blocks,{" "}
-            <kbd className="rounded bg-muted px-1">@</kbd> to link another entity.
+            Rich editor with slash commands. Type <kbd className="rounded bg-muted px-1">/</kbd> for
+            blocks, <kbd className="rounded bg-muted px-1">@</kbd> to link another entity.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 flex flex-col gap-3 px-6 py-4 min-h-0">
           <div className="space-y-1.5 shrink-0">
-            <Label htmlFor="page-title" className="text-xs">Title</Label>
+            <Label htmlFor="page-title" className="text-xs">
+              Title
+            </Label>
             <Input
               id="page-title"
               placeholder="Page title"
@@ -337,4 +368,3 @@ function stripLeadingTitle(markdown: string, title: string): string {
   }
   return markdown;
 }
-

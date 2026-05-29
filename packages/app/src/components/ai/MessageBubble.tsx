@@ -15,15 +15,13 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const body =
     !isUser && !isStreaming && message.content ? renderRefs(message.content) : [message.content];
 
-  const toolCalls = !isUser ? message.toolCalls ?? [] : [];
+  const toolCalls = !isUser ? (message.toolCalls ?? []) : [];
 
   return (
     <div className={`mb-3 flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
         className={`max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed ${
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-muted text-foreground"
+          isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
         }`}
       >
         {toolCalls.length > 0 && (

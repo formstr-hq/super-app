@@ -15,7 +15,10 @@ export const toolDefinitions: ToolDefinition[] = [
           description: { type: "string", description: "Form description shown to respondents" },
           titleImageUrl: { type: "string", description: "Optional title image URL" },
           coverImageUrl: { type: "string", description: "Optional cover image URL" },
-          thankYouText: { type: "string", description: "Custom thank-you message shown after submit" },
+          thankYouText: {
+            type: "string",
+            description: "Custom thank-you message shown after submit",
+          },
           fields: {
             type: "array",
             description: "Form fields/questions",
@@ -188,8 +191,7 @@ export const toolDefinitions: ToolDefinition[] = [
     type: "function",
     function: {
       name: "submit_form_response",
-      description:
-        "Submit a response to an existing form. Each answer is a fieldId/answer pair.",
+      description: "Submit a response to an existing form. Each answer is a fieldId/answer pair.",
       parameters: {
         type: "object",
         properties: {
@@ -258,10 +260,16 @@ export const toolDefinitions: ToolDefinition[] = [
         properties: {
           title: { type: "string", description: "Event title" },
           description: { type: "string", description: "Event description" },
-          start: { type: "string", description: "Start time in ISO 8601 format (e.g. 2026-04-20T15:00:00)" },
+          start: {
+            type: "string",
+            description: "Start time in ISO 8601 format (e.g. 2026-04-20T15:00:00)",
+          },
           end: { type: "string", description: "End time in ISO 8601 format" },
           location: { type: "string", description: "Event location" },
-          isPrivate: { type: "boolean", description: "Whether event is encrypted/private (default false)" },
+          isPrivate: {
+            type: "boolean",
+            description: "Whether event is encrypted/private (default false)",
+          },
         },
         required: ["title", "start"],
       },
@@ -371,8 +379,7 @@ export const toolDefinitions: ToolDefinition[] = [
     type: "function",
     function: {
       name: "save_private_note",
-      description:
-        "Save a quick private note. The note is encrypted and stored for the user only.",
+      description: "Save a quick private note. The note is encrypted and stored for the user only.",
       parameters: {
         type: "object",
         properties: {
@@ -408,8 +415,7 @@ export const toolDefinitions: ToolDefinition[] = [
     type: "function",
     function: {
       name: "browse_files",
-      description:
-        "List files in the user's encrypted drive. Optionally filter by folder.",
+      description: "List files in the user's encrypted drive. Optionally filter by folder.",
       parameters: {
         type: "object",
         properties: {

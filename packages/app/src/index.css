@@ -14,7 +14,7 @@
   --card-foreground: 0 0% 9%;
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 9%;
-  --primary: 0 0% 9%;              /* near-black — Formstr brand */
+  --primary: 0 0% 9%; /* near-black — Formstr brand */
   --primary-foreground: 0 0% 100%;
   --secondary: 0 0% 96%;
   --secondary-foreground: 0 0% 9%;
@@ -38,7 +38,7 @@
   --card-foreground: 0 0% 93%;
   --popover: 0 0% 13%;
   --popover-foreground: 0 0% 93%;
-  --primary: 0 0% 93%;             /* near-white — inverted brand */
+  --primary: 0 0% 93%; /* near-white — inverted brand */
   --primary-foreground: 0 0% 9%;
   --secondary: 0 0% 17%;
   --secondary-foreground: 0 0% 93%;
@@ -125,7 +125,9 @@ body {
 
 /* ── Reduced motion ──────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -133,7 +135,13 @@ body {
 }
 
 /* ── Utility: cursor-pointer on interactive elements ─────────── */
-button, [role="button"], a, select, label[for], input[type="checkbox"], input[type="radio"] {
+button,
+[role="button"],
+a,
+select,
+label[for],
+input[type="checkbox"],
+input[type="radio"] {
   cursor: pointer;
 }
 
@@ -177,9 +185,15 @@ button, [role="button"], a, select, label[for], input[type="checkbox"], input[ty
 .rich-editor .ProseMirror ol {
   padding-left: 1.25rem;
 }
-.rich-editor .ProseMirror ul { list-style-type: disc; }
-.rich-editor .ProseMirror ol { list-style-type: decimal; }
-.rich-editor .ProseMirror li p { display: inline; }
+.rich-editor .ProseMirror ul {
+  list-style-type: disc;
+}
+.rich-editor .ProseMirror ol {
+  list-style-type: decimal;
+}
+.rich-editor .ProseMirror li p {
+  display: inline;
+}
 .rich-editor .ProseMirror ul[data-type="taskList"] {
   list-style: none;
   padding-left: 0;
