@@ -1,15 +1,20 @@
 import { SignerUnavailableError } from "@formstr/core";
-import { Key, Puzzle, UserRound, Eye, EyeOff, Radio } from "lucide-react";
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogContent,
+  Divider,
+  IconButton,
+  InputAdornment,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { Eye, EyeOff, Key, Puzzle, Radio, UserRound } from "lucide-react";
 import { useState } from "react";
 
 import { useAuthStore } from "../stores";
-
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
 
 interface LoginDialogProps {
   open: boolean;
@@ -23,6 +28,7 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
   const [showNsec, setShowNsec] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const theme = useTheme();
 
   const wrap = async (key: string, fn: () => Promise<void>) => {
     setLoading(key);
@@ -43,124 +49,202 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-sm p-0 gap-0 overflow-hidden">
-        {/* Header */}
-        <div className="bg-primary/5 border-b border-border px-6 py-5">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Radio className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <DialogTitle className="text-base font-semibold">Welcome to Formstr</DialogTitle>
-          </div>
-          <DialogDescription className="text-xs text-muted-foreground ml-11">
-            A decentralized workspace powered by Nostr
-          </DialogDescription>
-        </div>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      PaperProps={{ sx: { width: "100%", maxWidth: 380, borderRadius: 2, overflow: "hidden" } }}
+    >
+      {/* Header */}
+      <Box
+        sx={{
+          bgcolor: "background.paper",
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          px: 3,
+          py: 2.5,
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.5 }}>
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              bgcolor: "text.primary",
+              borderRadius: "8px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <Radio size={16} style={{ color: theme.palette.background.default }} />
+          </Box>
+          <Typography variant="body1" fontWeight={600}>
+            Welcome to Formstr
+          </Typography>
+        </Box>
+        <Typography
+          variant="caption"
+          sx={{ color: "text.secondary", ml: "44px", display: "block" }}
+        >
+          A decentralised workspace powered by Nostr
+        </Typography>
+      </Box>
 
-        <div className="px-6 py-5 space-y-3">
-          {error && (
-            <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs text-destructive">
-              {error}
-            </div>
+      <DialogContent sx={{ px: 3, py: 2.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
+        {error && (
+          <Box
+            sx={{
+              bgcolor: "error.main",
+              color: "error.contrastText",
+              borderRadius: 1,
+              px: 2,
+              py: 1,
+              fontSize: 13,
+              opacity: 0.9,
+            }}
+          >
+            {error}
+          </Box>
+        )}
+
+        {/* NIP-07 Extension — primary */}
+        <Box
+          onClick={() => wrap("nip07", loginWithNip07)}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            border: `2px solid ${theme.palette.text.primary}`,
+            borderRadius: 1.5,
+            px: 2,
+            py: 1.5,
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.6 : 1,
+            bgcolor: "background.paper",
+            transition: "background 150ms",
+            "&:hover": { bgcolor: "action.hover" },
+          }}
+        >
+          <Puzzle size={20} style={{ color: theme.palette.text.primary, flexShrink: 0 }} />
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2" fontWeight={500}>
+              {loading === "nip07" ? "Connecting…" : "Browser Extension"}
+            </Typography>
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              NIP-07 (Alby, nos2x, …)
+            </Typography>
+          </Box>
+          {loading === "nip07" && (
+            <Box
+              sx={{
+                width: 16,
+                height: 16,
+                borderRadius: "50%",
+                border: "2px solid",
+                borderColor: "text.primary",
+                borderTopColor: "transparent",
+                animation: "spin 0.6s linear infinite",
+                "@keyframes spin": { to: { transform: "rotate(360deg)" } },
+              }}
+            />
           )}
+        </Box>
 
-          {/* NIP-07 Extension — Primary */}
-          <button
-            onClick={() => wrap("nip07", loginWithNip07)}
-            disabled={!!loading}
-            className={cn(
-              "w-full flex items-center gap-3 rounded-lg border-2 border-primary bg-primary/5 px-4 py-3",
-              "hover:bg-primary/10 transition-colors duration-150 cursor-pointer disabled:opacity-50",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            )}
+        <Divider />
+
+        {/* nsec — expandable */}
+        <Box>
+          <Box
+            onClick={() => setNsecExpanded((v) => !v)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1.5,
+              border: `1px solid ${theme.palette.divider}`,
+              borderRadius: nsecExpanded ? "6px 6px 0 0" : 1.5,
+              px: 2,
+              py: 1.5,
+              cursor: "pointer",
+              bgcolor: "background.default",
+              transition: "background 150ms",
+              "&:hover": { bgcolor: "action.hover" },
+            }}
           >
-            <Puzzle className="h-5 w-5 text-primary shrink-0" />
-            <div className="text-left flex-1">
-              <div className="text-sm font-medium text-foreground">
-                {loading === "nip07" ? "Connecting…" : "Browser Extension"}
-              </div>
-              <div className="text-xs text-muted-foreground">NIP-07 (Alby, nos2x, …)</div>
-            </div>
-            {loading === "nip07" && (
-              <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0" />
-            )}
-          </button>
+            <Key size={20} style={{ color: theme.palette.text.secondary, flexShrink: 0 }} />
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="body2" fontWeight={500}>
+                Private Key
+              </Typography>
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                nsec… or hex key
+              </Typography>
+            </Box>
+          </Box>
 
-          <Separator className="my-1" />
-
-          {/* nsec — Expandable */}
-          <div>
-            <button
-              onClick={() => setNsecExpanded((v) => !v)}
-              className={cn(
-                "w-full flex items-center gap-3 rounded-lg border border-border px-4 py-3",
-                "hover:bg-accent transition-colors duration-150 cursor-pointer",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                nsecExpanded && "rounded-b-none border-b-0",
-              )}
+          {nsecExpanded && (
+            <Box
+              sx={{
+                border: `1px solid ${theme.palette.divider}`,
+                borderTop: 0,
+                borderRadius: "0 0 6px 6px",
+                px: 2,
+                pb: 2,
+                pt: 1.5,
+                bgcolor: "background.paper",
+                display: "flex",
+                flexDirection: "column",
+                gap: 1.5,
+              }}
             >
-              <Key className="h-5 w-5 text-muted-foreground shrink-0" />
-              <div className="text-left flex-1">
-                <div className="text-sm font-medium text-foreground">Private Key</div>
-                <div className="text-xs text-muted-foreground">nsec… or hex key</div>
-              </div>
-            </button>
+              <TextField
+                size="small"
+                fullWidth
+                type={showNsec ? "text" : "password"}
+                placeholder="nsec1…"
+                value={nsec}
+                onChange={(e) => setNsec(e.target.value)}
+                autoComplete="off"
+                inputProps={{ style: { fontFamily: "monospace", fontSize: 13 } }}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        size="small"
+                        edge="end"
+                        onClick={() => setShowNsec((v) => !v)}
+                        aria-label={showNsec ? "Hide key" : "Show key"}
+                      >
+                        {showNsec ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+              <Button
+                variant="contained"
+                size="small"
+                fullWidth
+                disabled={!nsec.trim() || !!loading}
+                onClick={() => wrap("nsec", () => loginWithNsec(nsec))}
+              >
+                {loading === "nsec" ? "Signing in…" : "Sign in"}
+              </Button>
+            </Box>
+          )}
+        </Box>
 
-            {nsecExpanded && (
-              <div className="border border-t-0 border-border rounded-b-lg px-4 pb-4 pt-3 space-y-3 bg-accent/30">
-                <div className="space-y-1.5">
-                  <Label htmlFor="nsec-input" className="text-xs font-medium">
-                    Private Key
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="nsec-input"
-                      type={showNsec ? "text" : "password"}
-                      placeholder="nsec1…"
-                      value={nsec}
-                      onChange={(e) => setNsec(e.target.value)}
-                      className="pr-9 text-sm font-mono h-9"
-                      autoComplete="off"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNsec((v) => !v)}
-                      aria-label={showNsec ? "Hide key" : "Show key"}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {showNsec ? (
-                        <EyeOff className="h-3.5 w-3.5" />
-                      ) : (
-                        <Eye className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  className="w-full h-8"
-                  onClick={() => wrap("nsec", () => loginWithNsec(nsec))}
-                  disabled={!nsec.trim() || !!loading}
-                >
-                  {loading === "nsec" ? "Signing in…" : "Sign in"}
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Guest */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full h-9 gap-2 text-muted-foreground hover:text-foreground border border-dashed border-border hover:border-border"
-            onClick={() => wrap("guest", loginAsGuest)}
-            disabled={!!loading}
-          >
-            <UserRound className="h-4 w-4" />
-            {loading === "guest" ? "Creating account…" : "Continue as Guest"}
-          </Button>
-        </div>
+        {/* Guest */}
+        <Button
+          variant="outlined"
+          size="small"
+          fullWidth
+          startIcon={<UserRound size={16} />}
+          onClick={() => wrap("guest", loginAsGuest)}
+          disabled={!!loading}
+          sx={{ borderStyle: "dashed", borderColor: "divider", color: "text.secondary" }}
+        >
+          {loading === "guest" ? "Creating account…" : "Continue as Guest"}
+        </Button>
       </DialogContent>
     </Dialog>
   );
