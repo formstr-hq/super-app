@@ -93,7 +93,7 @@ export async function wrapEvent(
   return createWrap(seal, recipientPubkey, wrapKind);
 }
 
-/** Batch wrap for multiple recipients */
+/** Batch wrap for multiple recipients — each gets their own seal */
 export async function wrapManyEvents(
   event: Partial<EventTemplate> & { kind: number },
   signer: NostrSigner,
@@ -102,10 +102,10 @@ export async function wrapManyEvents(
 ): Promise<VerifiedEvent[]> {
   const rumor = createRumor(event);
   rumor.pubkey = await signer.getPublicKey();
-  const seal = await createSeal(rumor, signer, recipientPubkeys[0]);
 
   const wraps: VerifiedEvent[] = [];
   for (const pubkey of recipientPubkeys) {
+    const seal = await createSeal(rumor, signer, pubkey);
     const wrap = await createWrap(seal, pubkey, wrapKind);
     wraps.push(wrap);
   }
