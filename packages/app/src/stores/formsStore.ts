@@ -18,7 +18,7 @@ interface FormsStore {
   clearCurrent(): void;
 }
 
-export const useFormsStore = create<FormsStore>((set) => ({
+export const useFormsStore = create<FormsStore>((set, get) => ({
   myForms: [],
   currentForm: null,
   responses: [],
@@ -35,20 +35,23 @@ export const useFormsStore = create<FormsStore>((set) => ({
     }
   },
 
-  async loadForm(pubkey: string, formId: string) {
+  async loadForm(pubkey, formId) {
     set({ isLoading: true, error: null, currentForm: null });
     try {
-      const form = await formsService.fetchForm(pubkey, formId);
+      // Look up viewKey for this form from the cached list
+      const summary = get().myForms.find((f) => f.pubkey === pubkey && f.id === formId);
+      const form = await formsService.fetchForm(pubkey, formId, summary?.viewKey);
       set({ currentForm: form, isLoading: false });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to load form", isLoading: false });
     }
   },
 
-  async loadResponses(pubkey: string, formId: string) {
-    set({ isLoading: true, error: null });
+  async loadResponses(pubkey, formId) {
+    set({ isLoading: true, error: null, responses: [] });
     try {
-      const responses = await formsService.fetchResponses(pubkey, formId);
+      const summary = get().myForms.find((f) => f.pubkey === pubkey && f.id === formId);
+      const responses = await formsService.fetchResponses(pubkey, formId, summary?.signingKey);
       set({ responses, isLoading: false });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to load responses", isLoading: false });
@@ -59,25 +62,16 @@ export const useFormsStore = create<FormsStore>((set) => ({
     set({ error: null });
     try {
       const result = await formsService.createForm(params);
-
-      // Build a summary for the newly created form
       const newSummary: FormSummary = {
         id: result.formId,
         name: params.name,
         pubkey: result.pubkey,
         createdAt: Math.floor(Date.now() / 1000),
         isEncrypted: !!params.encrypt,
+        signingKey: result.signingKey,
+        viewKey: result.viewKey,
       };
-
-      // Optimistically add to local state
-      const updatedForms = [...useFormsStore.getState().myForms, newSummary];
-      set({ myForms: updatedForms });
-
-      // Persist the updated index to Nostr (kind 14083)
-      await formsService.saveToMyForms(updatedForms).catch(() => {
-        // Non-fatal: form was published, index update can be retried
-      });
-
+      set((state) => ({ myForms: [...state.myForms, newSummary] }));
       return result;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to create form" });

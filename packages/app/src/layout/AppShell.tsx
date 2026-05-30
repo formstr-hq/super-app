@@ -7,8 +7,7 @@ import { Outlet } from "react-router-dom";
 import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
 import { LoginDialog } from "../components/LoginDialog";
-import { hexToBytes } from "../services/forms/keys";
-import { useAuthStore, useSettingsStore, useFormsKeyStore } from "../stores";
+import { useAuthStore, useSettingsStore } from "../stores";
 
 import { Header } from "./Header";
 import { Sidebar, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from "./Sidebar";
@@ -22,41 +21,11 @@ export function AppShell() {
   useCommandPaletteHotkey(paletteOpen, setPaletteOpen);
 
   const theme = useTheme();
-  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const pubkey = useAuthStore((s) => s.pubkey);
-  const startFormsKeyStore = useFormsKeyStore((s) => s.start);
-  const stopFormsKeyStore = useFormsKeyStore((s) => s.stop);
-  const rememberViewKey = useFormsKeyStore((s) => s.remember);
-
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    startFormsKeyStore();
-    return () => stopFormsKeyStore();
-  }, [isLoggedIn, startFormsKeyStore, stopFormsKeyStore]);
-
   useEffect(() => {
     if (!pubkey) return;
     void relayManager.fetchUserRelays(pubkey);
   }, [pubkey]);
-
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash.startsWith("#view-key=")) return;
-    const payload = decodeURIComponent(hash.slice("#view-key=".length));
-    const lastColon = payload.lastIndexOf(":");
-    if (lastColon < 0) return;
-    const coordColon = payload.lastIndexOf(":", lastColon - 1);
-    if (coordColon < 0) return;
-    const coord = payload.slice(0, lastColon);
-    const hex = payload.slice(lastColon + 1);
-    if (!coord || !/^[0-9a-f]+$/i.test(hex)) return;
-    try {
-      rememberViewKey(coord, hexToBytes(hex));
-      history.replaceState(null, "", window.location.pathname + window.location.search);
-    } catch {
-      /* malformed hash */
-    }
-  }, [rememberViewKey]);
 
   useEffect(() => {
     const check = () => {

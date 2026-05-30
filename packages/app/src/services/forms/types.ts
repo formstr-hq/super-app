@@ -5,7 +5,6 @@ export const FORM_KINDS = {
   template: 30168,
   response: 1069,
   myFormsList: 14083,
-  /** NIP-59 gift-wrap kind; formsKeyStore listens on this with "#p" = self. */
   giftWrap: 1059,
 } as const;
 
@@ -126,4 +125,8 @@ export interface FormSummary {
   createdAt: number;
   responseCount?: number;
   isEncrypted: boolean;
+  /** Hex-encoded ephemeral signing key. Present only for forms you created. */
+  signingKey?: string;
+  /** Hex-encoded view key. Present only for encrypted forms you created. */
+  viewKey?: string;
 }
