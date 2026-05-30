@@ -3,6 +3,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "./layout";
+import { FillPage } from "./pages/FillPage";
 
 const FormsPage = lazy(() => import("./pages/FormsPage").then((m) => ({ default: m.FormsPage })));
 const CalendarPage = lazy(() =>
@@ -48,6 +49,7 @@ function LazyRoute({ children }: { children: ReactNode }) {
 }
 
 export const router = createBrowserRouter([
+  { path: "/forms/fill/:naddr", element: <FillPage /> },
   {
     path: "/",
     element: <AppShell />,

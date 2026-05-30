@@ -7,7 +7,7 @@ import {
   nip44SelfDecrypt,
   LocalSigner,
 } from "@formstr/core";
-import type { SubscriptionHandle } from "@formstr/core";
+import type { SubscriptionHandle, NostrSigner } from "@formstr/core";
 import type { EventTemplate, Event, Filter } from "nostr-tools";
 import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
 import { bytesToHex } from "nostr-tools/utils";
@@ -154,8 +154,9 @@ export async function submitResponse(
   formId: string,
   responses: FormResponse[],
   encrypt = false,
+  overrideSigner?: NostrSigner,
 ): Promise<void> {
-  const signer = await signerManager.getSigner();
+  const signer = overrideSigner ?? (await signerManager.getSigner());
 
   const responseTags = responses.map((r) => ["response", r.fieldId, r.answer, r.metadata ?? ""]);
   const tags: string[][] = [
