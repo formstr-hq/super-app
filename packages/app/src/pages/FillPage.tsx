@@ -9,6 +9,7 @@ import { FormFieldsRenderer } from "../components/forms/FormFieldsRenderer";
 import { ResponderIdentityBar, type IdentityMode } from "../components/forms/ResponderIdentityBar";
 import * as formsService from "../services/forms/service";
 import type { FormTemplate, FormResponse } from "../services/forms/types";
+import { AnswerType } from "../services/forms/types";
 import { useAuthStore } from "../stores";
 
 export function FillPage() {
@@ -19,6 +20,7 @@ export function FillPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [checkAnswers, setCheckAnswers] = useState<Record<string, Set<string>>>({});
   const [identityMode, setIdentityMode] = useState<IdentityMode>("anonymous");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -64,17 +66,29 @@ export function FillPage() {
       });
   }, [naddr]);
 
+  const toggleCheck = (fieldId: string, optionId: string) =>
+    setCheckAnswers((prev) => {
+      const set = new Set(prev[fieldId] ?? []);
+      if (set.has(optionId)) set.delete(optionId);
+      else set.add(optionId);
+      return { ...prev, [fieldId]: set };
+    });
+
   const handleSubmit = async () => {
     if (!form) return;
     setSubmitting(true);
     try {
-      const responses: FormResponse[] = Object.entries(values).map(([fieldId, answer]) => ({
-        fieldId,
-        answer,
-      }));
+      const responses: FormResponse[] = form.fields
+        .filter((f) => f.type !== AnswerType.label && f.type !== AnswerType.section)
+        .map((f) => {
+          if (f.type === AnswerType.checkboxes) {
+            return { fieldId: f.id, answer: JSON.stringify(Array.from(checkAnswers[f.id] ?? [])) };
+          }
+          return { fieldId: f.id, answer: values[f.id] ?? "" };
+        });
 
       if (identityMode === "me" && isLoggedIn) {
-        await formsService.submitResponse(form.pubkey, form.id, responses);
+        await formsService.submitResponse(form.pubkey, form.id, responses, form.isEncrypted);
       } else {
         // Anonymous: ephemeral key — sign and encrypt; discard key after publish
         const ephSk = generateSecretKey();
@@ -87,7 +101,13 @@ export function FillPage() {
             return nip44.v2.encrypt(plaintext, convKey);
           },
         };
-        await formsService.submitResponse(form.pubkey, form.id, responses, false, ephSigner);
+        await formsService.submitResponse(
+          form.pubkey,
+          form.id,
+          responses,
+          form.isEncrypted,
+          ephSigner,
+        );
       }
       setSubmitted(true);
     } finally {
@@ -158,7 +178,9 @@ export function FillPage() {
           <FormFieldsRenderer
             fields={form.fields}
             values={values}
+            checkAnswers={checkAnswers}
             onChange={(fieldId, value) => setValues((prev) => ({ ...prev, [fieldId]: value }))}
+            onToggleCheck={toggleCheck}
           />
           <Box sx={{ mt: 3 }}>
             <Button variant="contained" onClick={handleSubmit} disabled={submitting} fullWidth>

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import { nip19 } from "nostr-tools";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 
@@ -19,11 +19,21 @@ vi.mock("react-router-dom", () => ({
   useParams: vi.fn(() => ({ naddr: VALID_NADDR })),
 }));
 
-// Mock lucide-react icons used in ResponderIdentityBar (jsdom has no SVG support)
-vi.mock("lucide-react", () => ({
-  PersonStanding: () => <span data-testid="icon-person" />,
-  UserX: () => <span data-testid="icon-userx" />,
-}));
+// Mock lucide-react: jsdom has no SVG support. Any icon resolves to a stub span
+// (FieldInput + ResponderIdentityBar reference many icons). Guard `then`/symbols so
+// the mocked module is not mistaken for a thenable during module resolution.
+vi.mock("lucide-react", () => {
+  const Icon = () => <span />;
+  return new Proxy(
+    { __esModule: true },
+    {
+      get: (_target, prop) => {
+        if (prop === "then" || prop === "__esModule" || typeof prop === "symbol") return undefined;
+        return Icon;
+      },
+    },
+  );
+});
 
 // Mock @formstr/core — we only need decodeNKeys
 vi.mock("@formstr/core", () => ({
@@ -57,6 +67,7 @@ import { FillPage } from "./FillPage";
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const mockFetchForm = formsService.fetchForm as unknown as ReturnType<typeof vi.fn>;
+const mockSubmitResponse = formsService.submitResponse as unknown as ReturnType<typeof vi.fn>;
 const mockUseAuthStore = stores.useAuthStore as unknown as ReturnType<typeof vi.fn>;
 
 function makeForm(overrides: Partial<FormTemplate> = {}): FormTemplate {
@@ -151,5 +162,57 @@ describe("FillPage", () => {
 
     // The form field label should NOT be present
     expect(screen.queryAllByText("Your name").length).toBe(0);
+  });
+
+  it("submits encrypted when the form is encrypted (anonymous)", async () => {
+    mockFetchForm.mockResolvedValue(makeForm({ isEncrypted: true }));
+
+    render(<FillPage />);
+    await waitFor(() => expect(screen.getByText("Your name")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /^submit$/i }));
+
+    await waitFor(() => {
+      // 4th positional arg is `encrypt` — must be true for encrypted forms
+      expect(mockSubmitResponse).toHaveBeenCalledWith(
+        "a".repeat(64),
+        "form1",
+        expect.any(Array),
+        true,
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("serialises checkbox selections as a JSON array in the response", async () => {
+    mockFetchForm.mockResolvedValue(
+      makeForm({
+        fields: [
+          {
+            id: "c1",
+            type: AnswerType.checkboxes,
+            label: "Pick",
+            options: [
+              { id: "o1", label: "One" },
+              { id: "o2", label: "Two" },
+            ],
+          },
+        ],
+      }),
+    );
+
+    render(<FillPage />);
+    await waitFor(() => expect(screen.getByText("Pick")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText("One"));
+    fireEvent.click(screen.getByRole("button", { name: /^submit$/i }));
+
+    await waitFor(() => {
+      const responses = mockSubmitResponse.mock.calls[0][2] as {
+        fieldId: string;
+        answer: string;
+      }[];
+      expect(responses).toContainEqual({ fieldId: "c1", answer: JSON.stringify(["o1"]) });
+    });
   });
 });
