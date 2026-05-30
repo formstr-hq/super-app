@@ -263,16 +263,31 @@ export async function fetchResponses(
 
 // ── My Forms List (kind 14083) ──────────────────────────
 
+/**
+ * Fetch the user's kind-14083 list, choosing the newest across all relays.
+ *
+ * kind-14083 is a replaceable event; relays can diverge (e.g. one relay serves a
+ * stale copy while others have the latest). `fetchOne` resolves with whichever relay
+ * answers first, so it can return a stale list. Collecting from all relays and taking
+ * the highest `created_at` avoids that.
+ */
+async function fetchLatestMyFormsEvent(relays: string[], userPubkey: string): Promise<Event | null> {
+  const events = await nostrRuntime.querySync(relays, {
+    kinds: [FORM_KINDS.myFormsList],
+    authors: [userPubkey],
+  } as Filter);
+  return events.reduce<Event | null>(
+    (newest, e) => (!newest || e.created_at > newest.created_at ? e : newest),
+    null,
+  );
+}
+
 export async function fetchMyForms(): Promise<FormSummary[]> {
   const signer = await signerManager.getSigner();
   const userPubkey = await signer.getPublicKey();
   const relays = relayManager.getRelaysForModule("forms");
 
-  const listEvent = await nostrRuntime.fetchOne(relays, {
-    kinds: [FORM_KINDS.myFormsList],
-    authors: [userPubkey],
-    limit: 1,
-  } as Filter);
+  const listEvent = await fetchLatestMyFormsEvent(relays, userPubkey);
 
   let entries: string[][] = [];
   if (listEvent?.content) {
@@ -352,11 +367,9 @@ async function appendToMyFormsList(
   const userPubkey = await signer.getPublicKey();
   const relays = relayManager.getRelaysForModule("forms");
 
-  const existing = await nostrRuntime.fetchOne(relays, {
-    kinds: [FORM_KINDS.myFormsList],
-    authors: [userPubkey],
-    limit: 1,
-  } as Filter);
+  // Read the newest list across relays (not first-responder) so we never append to a
+  // stale copy and accidentally drop entries when republishing.
+  const existing = await fetchLatestMyFormsEvent(relays, userPubkey);
 
   let entries: string[][] = [];
   if (existing?.content) {
