@@ -1,9 +1,17 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 
 vi.mock("./FormAnalytics", () => ({
   FormAnalytics: () => <div data-testid="analytics">Analytics</div>,
 }));
+
+beforeAll(() => {
+  vi.useFakeTimers();
+});
+
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 import { AnswerType, type FormTemplate, type FormResponseEvent } from "../../services/forms/types";
 
