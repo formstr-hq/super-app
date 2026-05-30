@@ -121,6 +121,23 @@ describe("createForm — encrypted form", () => {
       expect.stringContaining(result.signingKey!),
     );
   });
+
+  it("includes a settings tag on the encrypted form event", async () => {
+    const mockFormSigner = { nip44Encrypt: vi.fn().mockResolvedValue("enc_fields") };
+    (LocalSigner as any).mockImplementationOnce(() => mockFormSigner);
+
+    await createForm({
+      name: "Secret",
+      fields: [{ id: "f1", type: "shortText" as any, label: "Q" }],
+      settings: { thankYouText: "Cheers", disallowAnonymous: true },
+      encrypt: true,
+    });
+
+    const formEvent = (nostrRuntime.publish as any).mock.calls[0][1];
+    const settingsTag = formEvent.tags.find((t: string[]) => t[0] === "settings");
+    expect(settingsTag).toBeTruthy();
+    expect(JSON.parse(settingsTag[1])).toMatchObject({ thankYouText: "Cheers" });
+  });
 });
 
 // ── fetchForm ─────────────────────────────────────────────────

@@ -136,13 +136,15 @@ export function FillPage() {
       <Box sx={{ textAlign: "center", pt: 8 }}>
         <Typography variant="h6">Response submitted!</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Thank you for filling out {form.name}.
+          {form.settings?.thankYouText || `Thank you for filling out ${form.name}.`}
         </Typography>
       </Box>
     );
   }
 
-  const requiresLogin = (form.settings?.allowedResponders?.length ?? 0) > 0;
+  const requiresLogin =
+    (form.settings?.disallowAnonymous ?? false) ||
+    (form.settings?.allowedResponders?.length ?? 0) > 0;
 
   return (
     <Container maxWidth="sm" sx={{ py: 4 }}>

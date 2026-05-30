@@ -133,7 +133,7 @@ export function FillFormDialog({ open, form, isLoading, onClose }: Props) {
             </Box>
             <Typography fontWeight={500}>Response submitted!</Typography>
             <Typography variant="body2" color="text.secondary">
-              Thank you for filling out this form.
+              {form?.settings?.thankYouText || "Thank you for filling out this form."}
             </Typography>
             <Button variant="outlined" size="small" onClick={onClose} sx={{ mt: 1 }}>
               Close

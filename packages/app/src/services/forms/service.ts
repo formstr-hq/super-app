@@ -72,14 +72,17 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
     const fieldTags = baseTags.filter((t) => t[0] === "field");
     const content = await formSigner.nip44Encrypt(viewPubkey, JSON.stringify(fieldTags));
 
+    const encTags: string[][] = [
+      ["d", formId],
+      ["name", params.name],
+      ["encryption", "view-key"],
+    ];
+    if (params.settings) encTags.push(["settings", JSON.stringify(params.settings)]);
+
     const event: EventTemplate = {
       kind: FORM_KINDS.template,
       created_at: Math.floor(Date.now() / 1000),
-      tags: [
-        ["d", formId],
-        ["name", params.name],
-        ["encryption", "view-key"],
-      ],
+      tags: encTags,
       content,
     };
     const signed = finalizeEvent(event, signingKey);

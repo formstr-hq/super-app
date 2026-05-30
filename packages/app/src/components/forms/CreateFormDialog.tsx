@@ -15,10 +15,11 @@ import { PlusCircle } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { moveItem } from "../../lib/array";
-import { AnswerType, type FormField } from "../../services/forms/types";
+import { AnswerType, type FormField, type FormSettings } from "../../services/forms/types";
 import { useFormsStore } from "../../stores";
 
 import { FieldEditorRow } from "./FieldEditorRow";
+import { FormSettingsSection } from "./FormSettingsSection";
 
 interface Props {
   open: boolean;
@@ -34,8 +35,12 @@ export function CreateFormDialog({ open, onClose }: Props) {
   const [description, setDescription] = useState("");
   const [fields, setFields] = useState<FormField[]>([]);
   const [encrypt, setEncrypt] = useState(false);
+  const [settings, setSettings] = useState<FormSettings>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+
+  const patchSettings = (patch: Partial<FormSettings>) =>
+    setSettings((prev) => ({ ...prev, ...patch }));
 
   const addField = () => {
     setFields([
@@ -105,13 +110,18 @@ export function CreateFormDialog({ open, onClose }: Props) {
       await createForm({
         name,
         fields,
-        settings: { publicForm: !encrypt, description: description || undefined },
+        settings: {
+          publicForm: !encrypt,
+          description: description || undefined,
+          ...settings,
+        },
         encrypt,
       });
       setName("");
       setDescription("");
       setFields([]);
       setEncrypt(false);
+      setSettings({});
       setDialogError(null);
       onClose();
     } catch (e) {
@@ -201,6 +211,8 @@ export function CreateFormDialog({ open, onClose }: Props) {
             Add question
           </Button>
         </Box>
+
+        <FormSettingsSection settings={settings} onChange={patchSettings} />
       </DialogContent>
 
       {dialogError && (
