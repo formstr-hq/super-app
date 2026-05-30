@@ -1,3 +1,4 @@
+import { encodeNKeys } from "@formstr/core";
 import { Box, Button, Snackbar, Typography } from "@mui/material";
 import { Plus } from "lucide-react";
 import { nip19 } from "nostr-tools";
@@ -64,9 +65,8 @@ export function FormsPage() {
       relays: [],
     });
     const base = `${window.location.origin}/forms/fill/${naddr}`;
-    const url = form.viewKey
-      ? `${base}?nkeys=${btoa(JSON.stringify({ viewKey: form.viewKey }))}`
-      : base;
+    // viewKey goes in the URL fragment (never sent to servers, not in Referer headers)
+    const url = form.viewKey ? `${base}#${encodeNKeys({ viewKey: form.viewKey })}` : base;
     navigator.clipboard.writeText(url).catch(() => {});
     setSnackbar("Link copied");
   }, []);

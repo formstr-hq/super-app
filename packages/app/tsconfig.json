@@ -7,7 +7,8 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "types": ["@testing-library/jest-dom"]
   },
   "include": ["src"],
   "exclude": ["src/ai/actionDispatcher.ts", "src/stores/invitationsStore.ts"],
