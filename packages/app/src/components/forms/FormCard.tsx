@@ -1,8 +1,10 @@
-import { Box, Card, CardContent, Chip, IconButton, Tooltip, Typography } from "@mui/material";
-import { BarChart3, Link, Pencil, Trash2, Lock } from "lucide-react";
+import { Box, Card, CardContent, Chip, Typography } from "@mui/material";
+import { Lock } from "lucide-react";
 import { useState } from "react";
 
 import type { FormSummary } from "../../services/forms/types";
+
+import { FormActions } from "./FormActions";
 
 interface Props {
   form: FormSummary;
@@ -41,26 +43,13 @@ export function FormCard({ form, onFill, onViewResponses, onDelete, onCopyLink }
 
         {hovered && (
           <Box sx={{ display: "flex", gap: 0.5, mt: 1 }} onClick={(e) => e.stopPropagation()}>
-            <Tooltip title="Fill form">
-              <IconButton size="small" onClick={() => onFill(form)}>
-                <Pencil size={14} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="View responses">
-              <IconButton size="small" onClick={() => onViewResponses(form)}>
-                <BarChart3 size={14} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Copy link">
-              <IconButton size="small" onClick={() => onCopyLink(form)}>
-                <Link size={14} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete">
-              <IconButton size="small" color="error" onClick={() => onDelete(form)}>
-                <Trash2 size={14} />
-              </IconButton>
-            </Tooltip>
+            <FormActions
+              form={form}
+              onFill={onFill}
+              onViewResponses={onViewResponses}
+              onDelete={onDelete}
+              onCopyLink={onCopyLink}
+            />
           </Box>
         )}
       </CardContent>

@@ -1,6 +1,14 @@
 import { encodeNKeys } from "@formstr/core";
-import { Box, Button, Snackbar, Typography } from "@mui/material";
-import { Plus } from "lucide-react";
+import {
+  Box,
+  Button,
+  Snackbar,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import { LayoutGrid, List, Plus } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import { useCallback, useEffect, useState } from "react";
 
@@ -9,7 +17,8 @@ import { FillFormDialog } from "../components/forms/FillFormDialog";
 import { FormListView } from "../components/forms/FormListView";
 import { ResponsesDialog } from "../components/forms/ResponsesDialog";
 import type { FormSummary } from "../services/forms/types";
-import { useFormsStore } from "../stores";
+import { useFormsStore, useSettingsStore } from "../stores";
+import type { FormsView } from "../stores/settingsStore";
 
 type ActiveDialog = "none" | "create" | "fill" | "responses";
 
@@ -25,6 +34,9 @@ export function FormsPage() {
     deleteForm,
     clearCurrent,
   } = useFormsStore();
+
+  const formsView = useSettingsStore((s) => s.formsView);
+  const setFormsView = useSettingsStore((s) => s.setFormsView);
 
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>("none");
   const [snackbar, setSnackbar] = useState("");
@@ -82,19 +94,39 @@ export function FormsPage() {
         <Typography variant="h6" fontWeight={600}>
           Forms
         </Typography>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<Plus size={16} />}
-          onClick={() => setActiveDialog("create")}
-        >
-          New Form
-        </Button>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={formsView}
+            onChange={(_, v: FormsView | null) => v && setFormsView(v)}
+          >
+            <ToggleButton value="grid" aria-label="Grid view">
+              <Tooltip title="Grid view">
+                <LayoutGrid size={16} />
+              </Tooltip>
+            </ToggleButton>
+            <ToggleButton value="list" aria-label="List view">
+              <Tooltip title="List view">
+                <List size={16} />
+              </Tooltip>
+            </ToggleButton>
+          </ToggleButtonGroup>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<Plus size={16} />}
+            onClick={() => setActiveDialog("create")}
+          >
+            New Form
+          </Button>
+        </Box>
       </Box>
 
       <FormListView
         forms={myForms}
         isLoading={isLoading}
+        view={formsView}
         onFill={handleFill}
         onViewResponses={handleViewResponses}
         onDelete={handleDelete}

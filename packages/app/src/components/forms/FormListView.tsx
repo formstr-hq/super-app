@@ -1,13 +1,16 @@
-import { Box, Button, Grid2 as MuiGrid, Skeleton, Typography } from "@mui/material";
-import { Plus } from "lucide-react";
+import { Box, Button, Chip, Grid2 as MuiGrid, Paper, Skeleton, Typography } from "@mui/material";
+import { Lock, Plus } from "lucide-react";
 
 import type { FormSummary } from "../../services/forms/types";
+import type { FormsView } from "../../stores/settingsStore";
 
+import { FormActions } from "./FormActions";
 import { FormCard } from "./FormCard";
 
 interface Props {
   forms: FormSummary[];
   isLoading: boolean;
+  view?: FormsView;
   onFill: (form: FormSummary) => void;
   onViewResponses: (form: FormSummary) => void;
   onDelete: (form: FormSummary) => void;
@@ -18,6 +21,7 @@ interface Props {
 export function FormListView({
   forms,
   isLoading,
+  view = "grid",
   onFill,
   onViewResponses,
   onDelete,
@@ -46,6 +50,59 @@ export function FormListView({
           New Form
         </Button>
       </Box>
+    );
+  }
+
+  if (view === "list") {
+    return (
+      <Paper variant="outlined" sx={{ borderRadius: 1.5, overflow: "hidden" }}>
+        {forms.map((form, i) => (
+          <Box
+            key={`${form.pubkey}:${form.id}`}
+            onClick={() => onFill(form)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1.5,
+              px: 2,
+              py: 1.25,
+              cursor: "pointer",
+              borderTop: i === 0 ? "none" : "1px solid",
+              borderColor: "divider",
+              "&:hover": { bgcolor: "action.hover" },
+            }}
+          >
+            <Typography variant="body2" fontWeight={500} noWrap sx={{ flex: 1, minWidth: 0 }}>
+              {form.name}
+            </Typography>
+            {form.isEncrypted && (
+              <Chip
+                icon={<Lock size={11} />}
+                label="Encrypted"
+                size="small"
+                variant="outlined"
+                sx={{ fontSize: 11 }}
+              />
+            )}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: { xs: "none", sm: "block" }, minWidth: 96, textAlign: "right" }}
+            >
+              {form.createdAt ? new Date(form.createdAt * 1000).toLocaleDateString() : "—"}
+            </Typography>
+            <Box sx={{ display: "flex", gap: 0.25 }} onClick={(e) => e.stopPropagation()}>
+              <FormActions
+                form={form}
+                onFill={onFill}
+                onViewResponses={onViewResponses}
+                onDelete={onDelete}
+                onCopyLink={onCopyLink}
+              />
+            </Box>
+          </Box>
+        ))}
+      </Paper>
     );
   }
 

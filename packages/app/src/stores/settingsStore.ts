@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 type ThemeMode = "light" | "dark";
 export type AIProviderType = "ollama" | "openai" | "anthropic";
+export type FormsView = "grid" | "list";
 
 function applyTheme(mode: ThemeMode) {
   if (mode === "dark") {
@@ -18,6 +19,7 @@ interface SettingsStore {
   themeMode: ThemeMode;
   sidebarOpen: boolean;
   sidebarCollapsed: boolean; // desktop: collapsed to icon-only
+  formsView: FormsView; // forms list layout: card grid vs dense list
 
   // AI settings
   aiProvider: AIProviderType;
@@ -30,6 +32,7 @@ interface SettingsStore {
   toggleSidebar(): void;
   setSidebarOpen(open: boolean): void;
   toggleSidebarCollapsed(): void;
+  setFormsView(view: FormsView): void;
   setAIConfig(
     config: Partial<Pick<SettingsStore, "aiProvider" | "aiEndpoint" | "aiModel" | "aiApiKey">>,
   ): void;
@@ -40,6 +43,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   themeMode: storedTheme,
   sidebarOpen: true,
   sidebarCollapsed: false,
+  formsView: (localStorage.getItem("formstr:forms-view") as FormsView) ?? "grid",
 
   aiProvider: (localStorage.getItem("formstr:ai-provider") as AIProviderType) ?? "ollama",
   aiEndpoint: localStorage.getItem("formstr:ai-endpoint") ?? "http://localhost:11434",
@@ -70,6 +74,11 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
 
   toggleSidebarCollapsed() {
     set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed }));
+  },
+
+  setFormsView(view: FormsView) {
+    localStorage.setItem("formstr:forms-view", view);
+    set({ formsView: view });
   },
 
   setAIConfig(config) {
