@@ -48,6 +48,8 @@ const mockSigner = {
     ),
   nip44Encrypt: vi.fn(),
   nip44Decrypt: vi.fn(),
+  encrypt: vi.fn().mockResolvedValue("nip04_enc"),
+  decrypt: vi.fn().mockResolvedValue("[]"),
 };
 
 beforeEach(() => {
@@ -111,7 +113,7 @@ describe("createForm — encrypted form", () => {
       expect.stringContaining('"field"'),
     );
 
-    // kind-14083 published
+    // kind-14083 published with NIP-44 self-encryption, keys serialised in payload
     const listEvent = calls[1][1];
     expect(listEvent.kind).toBe(14083);
     expect(nip44SelfEncrypt).toHaveBeenCalledWith(

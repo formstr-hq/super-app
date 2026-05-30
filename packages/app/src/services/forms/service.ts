@@ -274,7 +274,13 @@ export async function fetchMyForms(): Promise<FormSummary[]> {
   let entries: string[][] = [];
   if (listEvent?.content) {
     try {
-      const decrypted = await nip44SelfDecrypt(signer, listEvent.content);
+      let decrypted = "";
+      if (listEvent.content.includes("?iv=")) {
+        if (!signer.decrypt) throw new Error("Signer cannot decrypt");
+        decrypted = await signer.decrypt(userPubkey, listEvent.content);
+      } else {
+        decrypted = await nip44SelfDecrypt(signer, listEvent.content);
+      }
       const parsed = JSON.parse(decrypted);
       entries = Array.isArray(parsed) ? parsed : [];
     } catch {
@@ -352,7 +358,13 @@ async function appendToMyFormsList(
   let entries: string[][] = [];
   if (existing?.content) {
     try {
-      const decrypted = await nip44SelfDecrypt(signer, existing.content);
+      let decrypted = "";
+      if (existing.content.includes("?iv=")) {
+        if (!signer.decrypt) throw new Error("Signer cannot decrypt");
+        decrypted = await signer.decrypt(userPubkey, existing.content);
+      } else {
+        decrypted = await nip44SelfDecrypt(signer, existing.content);
+      }
       const parsed = JSON.parse(decrypted);
       entries = Array.isArray(parsed) ? parsed : [];
     } catch {
@@ -360,13 +372,22 @@ async function appendToMyFormsList(
     }
   }
 
+  // Normalise any legacy 3-element entries to the canonical 4-element shape.
+  // formstr.app's loader does `secretData.split(":")` on entry[3] with no guard,
+  // so a missing 4th element crashes its entire My-Forms load.
+  entries = entries.map((e) =>
+    e[0] === "f" && e.length < 4 ? ["f", e[1] ?? "", e[2] ?? "", ""] : e,
+  );
+
   const coordKey = `${formPubkey}:${formId}`;
   if (!entries.some((e) => e[1] === coordKey)) {
-    const entry: string[] = ["f", coordKey, relay];
-    if (signingKeyHex) entry.push(encodeFormKeys(signingKeyHex, viewKeyHex));
-    entries.push(entry);
+    // 4th segment: "signingKey:viewKey" for encrypted forms, "" for public ones.
+    const secrets = signingKeyHex ? encodeFormKeys(signingKeyHex, viewKeyHex) : "";
+    entries.push(["f", coordKey, relay, secrets]);
   }
 
+  // kind-14083 uses NIP-44 self-encryption — formstr.app decrypts the list with
+  // signer.nip44Decrypt(userPub, content); NIP-04 here breaks its loader.
   const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(entries));
   const listEvent: EventTemplate = {
     kind: FORM_KINDS.myFormsList,
@@ -383,12 +404,15 @@ export async function saveToMyForms(summaries: FormSummary[]): Promise<void> {
   const signer = await signerManager.getSigner();
   const relays = relayManager.getRelaysForModule("forms");
 
-  const entries: string[][] = summaries.map((s) => {
-    const entry: string[] = ["f", `${s.pubkey}:${s.id}`, ""];
-    if (s.signingKey) entry.push(encodeFormKeys(s.signingKey, s.viewKey));
-    return entry;
-  });
+  // Canonical 4-element entry: ["f", "pubkey:formId", relay, "signingKey:viewKey"|""].
+  const entries: string[][] = summaries.map((s) => [
+    "f",
+    `${s.pubkey}:${s.id}`,
+    "",
+    s.signingKey ? encodeFormKeys(s.signingKey, s.viewKey) : "",
+  ]);
 
+  // kind-14083 uses NIP-44 self-encryption — matches formstr.app's loader.
   const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(entries));
   const event: EventTemplate = {
     kind: FORM_KINDS.myFormsList,
