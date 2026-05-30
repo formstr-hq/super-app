@@ -193,6 +193,8 @@ export function CreateFormDialog({ open, onClose }: Props) {
                     <MenuItem value={AnswerType.time}>Time</MenuItem>
                     <MenuItem value={AnswerType.datetime}>Date &amp; time</MenuItem>
                     <MenuItem value={AnswerType.label}>Label</MenuItem>
+                    <MenuItem value={AnswerType.fileUpload}>File upload</MenuItem>
+                    <MenuItem value={AnswerType.signature}>Signature</MenuItem>
                   </Select>
                   <Tooltip title={field.required ? "Mark optional" : "Mark required"}>
                     <Box
