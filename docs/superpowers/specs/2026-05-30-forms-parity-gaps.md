@@ -14,7 +14,7 @@ Use this as the authoritative comparison baseline. Each row is marked with its s
 | --- | -------------------------------------------------------------------------------------------------- | ----------- | ------------------------ | -------------------- |
 | 1   | Create form (basic fields)                                                                         | ✅          | ✅                       | ✅ Done              |
 | 2   | Encrypted form (NIP-44, view key)                                                                  | ✅          | ✅                       | ✅ Done              |
-| 3   | My Forms list persistence (kind 14083, NIP-04)                                                     | ✅          | ✅                       | ✅ Fixed in week 3&4 |
+| 3   | My Forms list persistence (kind 14083, NIP-44)                                                     | ✅          | ✅                       | ✅ Fixed (PR4)       |
 | 4   | Fallback: discover forms by author query                                                           | ✅          | ✅                       | ✅ Done              |
 | 5   | Copy shareable link (naddr + viewKey in fragment)                                                  | ✅          | ✅                       | ✅ Done              |
 | 6   | Public fill page (`/forms/fill/:naddr`)                                                            | ✅          | ✅                       | ✅ Done              |
@@ -48,18 +48,22 @@ Use this as the authoritative comparison baseline. Each row is marked with its s
 
 ## Section 1 — Bugs (broken behaviour, high priority)
 
-### Bug #1 — [ALREADY FIXED] NIP-04 / NIP-44 kind-14083 incompatibility
+### Bug #1 — [FIXED] kind-14083 list incompatibility (encryption + entry shape)
 
-**What:** The initial description of this bug (super-app writing NIP-44 encrypted kind-14083 events that formstr.app couldn't read) was fixed during week 3&4 implementation.
+**What:** Forms did not sync between super-app and formstr.app. formstr.app's "My forms" even crashed on load (`Error loading forms: SyntaxError: "undefined" is not valid JSON`).
 
-**Why it was happening:** The original service.ts used `nip44SelfDecrypt` for both reading AND writing. NIP-04 uses a `?iv=` token in its ciphertext; NIP-44 does not.
+**Root cause (corrected — the original premise was wrong):** The note in `claude-context.md` claimed formstr.app encrypts the kind-14083 list with **NIP-04**. It does **not**. The live source — [formstr-hq/nostr-forms `MyFormsProvider.tsx`](https://github.com/formstr-hq/nostr-forms/blob/master/packages/formstr-app/src/provider/MyFormsProvider.tsx) — decrypts the list with **NIP-44**: `const decrypted = await signer.nip44Decrypt!(userPub, list.content); fetchFormEvents(JSON.parse(decrypted))`. A mid-cycle "fix" had switched super-app's _write_ to NIP-04 (`signer.encrypt`); formstr.app then `nip44Decrypt`-ed that NIP-04 blob, got `undefined`, and `JSON.parse(undefined)` threw — breaking its entire list load (display **and** the read-modify-write append, so new formstr.app forms never reached Nostr).
 
-**Current state:**
+Second incompatibility in the same file: `fetchFormEvents` does `const [secretKey, viewKey] = secretData.split(":")` on `entry[3]` with **no guard**. super-app wrote public-form entries as 3-element `["f", coord, relay]`, so `entry[3]` was `undefined` → `.split` crash.
 
-- Reading (`fetchMyForms`, `appendToMyFormsList`): detects NIP-04 via `content.includes("?iv=")`, falls back to NIP-44 for old super-app events.
-- Writing (`appendToMyFormsList`, `saveToMyForms`): always writes NIP-04 (`signer.encrypt`) — compatible with formstr.app.
+**Fix (super-app):**
 
-**Resolution:** No action needed. Verify end-to-end once formstr.app access is available.
+- Write the kind-14083 list with **NIP-44 self-encryption** (`nip44SelfEncrypt`), matching formstr.app. (Reading keeps the `?iv=`→NIP-04 fallback so legacy/corrupted NIP-04 lists are still readable and get migrated to NIP-44 on the next write.)
+- Always write **4-element entries** `["f", coord, relay, "signingKey:viewKey"|""]`, and normalise existing 3-element entries to 4 on read-modify-write, so formstr.app's `secretData.split` never sees `undefined`.
+
+**Recovery for an already-corrupted (NIP-04) list:** open super-app once and create/save any form → it rewrites the list as NIP-44 (4-element) → formstr.app can read it again.
+
+**Still NOT real-time:** sync is one-shot on Forms-page mount, cache-first, with a first-relay-wins `fetchOne` for the list. See Missing #15 / Compat #1.
 
 ---
 
