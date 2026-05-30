@@ -10,6 +10,11 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
+      thresholds: {
+        "src/services/forms/**": {
+          lines: 80,
+        },
+      },
     },
   },
   resolve: {
