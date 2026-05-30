@@ -12,8 +12,9 @@ import {
   Typography,
 } from "@mui/material";
 import { PlusCircle } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
+import { moveItem } from "../../lib/array";
 import { AnswerType, type FormField } from "../../services/forms/types";
 import { useFormsStore } from "../../stores";
 
@@ -62,6 +63,17 @@ export function CreateFormDialog({ open, onClose }: Props) {
   };
 
   const removeField = (index: number) => setFields(fields.filter((_, i) => i !== index));
+
+  const dragIndex = useRef<number | null>(null);
+  const handleDragStart = (index: number) => {
+    dragIndex.current = index;
+  };
+  const handleDrop = (index: number) => {
+    const from = dragIndex.current;
+    dragIndex.current = null;
+    if (from === null || from === index) return;
+    setFields((prev) => moveItem(prev, from, index));
+  };
 
   const addOption = (fieldIndex: number) => {
     const updated = [...fields];
@@ -173,6 +185,8 @@ export function CreateFormDialog({ open, onClose }: Props) {
                 onAddOption={addOption}
                 onUpdateOption={updateOption}
                 onRemoveOption={removeOption}
+                onDragStart={handleDragStart}
+                onDrop={handleDrop}
               />
             ))}
           </Box>

@@ -23,6 +23,8 @@ interface Props {
   onAddOption: (index: number) => void;
   onUpdateOption: (index: number, optIndex: number, label: string) => void;
   onRemoveOption: (index: number, optIndex: number) => void;
+  onDragStart: (index: number) => void;
+  onDrop: (index: number) => void;
 }
 
 export function FieldEditorRow({
@@ -33,9 +35,21 @@ export function FieldEditorRow({
   onAddOption,
   onUpdateOption,
   onRemoveOption,
+  onDragStart,
+  onDrop,
 }: Props) {
   return (
-    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1.5 }}>
+    <Paper
+      variant="outlined"
+      sx={{ p: 1.5, borderRadius: 1.5 }}
+      draggable
+      onDragStart={() => onDragStart(index)}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop(index);
+      }}
+    >
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <GripVertical size={14} color="var(--mui-palette-text-disabled)" />
         <TextField
