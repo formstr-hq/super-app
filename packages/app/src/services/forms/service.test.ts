@@ -29,7 +29,15 @@ import {
   LocalSigner,
 } from "@formstr/core";
 
-import { createForm, fetchForm, fetchResponses, fetchMyForms, deleteForm } from "./service";
+import {
+  createForm,
+  fetchForm,
+  fetchResponses,
+  fetchMyForms,
+  deleteForm,
+  saveToMyForms,
+  subscribeToResponses,
+} from "./service";
 
 const mockSigner = {
   getPublicKey: vi.fn().mockResolvedValue("aabbccdd"),
@@ -322,5 +330,134 @@ describe("deleteForm", () => {
     expect(event.kind).toBe(5);
     expect(event.tags).toContainEqual(["a", "30168:formpub:form1"]);
     expect(event.tags).toContainEqual(["k", "30168"]);
+  });
+});
+
+// ── saveToMyForms ─────────────────────────────────────────────
+
+describe("saveToMyForms", () => {
+  it("serialises FormSummary[] as tag-tuples and publishes kind-14083", async () => {
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
+
+    await saveToMyForms([
+      {
+        id: "f1",
+        name: "Form",
+        pubkey: "pub1",
+        createdAt: 0,
+        isEncrypted: true,
+        signingKey: "sk",
+        viewKey: "vk",
+      },
+      { id: "f2", name: "Public", pubkey: "pub2", createdAt: 0, isEncrypted: false },
+    ]);
+
+    expect(nip44SelfEncrypt).toHaveBeenCalledWith(mockSigner, expect.stringContaining("pub1:f1"));
+    const [, event] = (nostrRuntime.publish as any).mock.calls[0];
+    expect(event.kind).toBe(14083);
+  });
+});
+
+// ── fetchMyForms — fallback to author query ───────────────────
+
+describe("fetchMyForms — fallback to author query", () => {
+  it("calls querySync by author when no kind-14083 event exists", async () => {
+    // fetchOne returns null → entries empty → falls back to fetchMyFormsByAuthor
+    (nostrRuntime.fetchOne as any).mockResolvedValue(null);
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "fe",
+        pubkey: "aabbccdd",
+        kind: 30168,
+        created_at: 1000,
+        sig: "sig",
+        content: "",
+        tags: [
+          ["d", "form1"],
+          ["name", "Plain Form"],
+          ["field", "f1", "shortText", "Q", "[]", "{}"],
+        ],
+      } satisfies Event,
+    ]);
+
+    const forms = await fetchMyForms();
+    expect(forms).toHaveLength(1);
+    expect(forms[0].name).toBe("Plain Form");
+    expect(forms[0].isEncrypted).toBe(false);
+  });
+});
+
+// ── subscribeToResponses ──────────────────────────────────────
+
+describe("subscribeToResponses — plain response", () => {
+  it("calls onResponse immediately for plain (unencrypted) events", () => {
+    const handle = { unsub: vi.fn() };
+    let capturedOnEvent: ((e: Event) => void) | undefined;
+    (nostrRuntime.subscribe as any).mockImplementation((_relays: any, _filters: any, opts: any) => {
+      capturedOnEvent = opts.onEvent;
+      return handle;
+    });
+
+    const onResponse = vi.fn();
+    subscribeToResponses("formpub", "form1", onResponse);
+
+    const event: Event = {
+      id: "r1",
+      pubkey: "resp",
+      kind: 1069,
+      created_at: 0,
+      sig: "sig",
+      content: "",
+      tags: [
+        ["a", "30168:formpub:form1"],
+        ["response", "f1", "Alice", ""],
+      ],
+    };
+    capturedOnEvent!(event);
+
+    expect(onResponse).toHaveBeenCalledWith(expect.objectContaining({ wasEncrypted: false }));
+  });
+});
+
+describe("subscribeToResponses — encrypted response, with signingKey", () => {
+  it("decrypts and calls onResponse with answers", async () => {
+    const handle = { unsub: vi.fn() };
+    let capturedOnEvent: ((e: Event) => void) | undefined;
+    (nostrRuntime.subscribe as any).mockImplementation((_relays: any, _filters: any, opts: any) => {
+      capturedOnEvent = opts.onEvent;
+      return handle;
+    });
+
+    const mockFormSigner = {
+      nip44Decrypt: vi.fn().mockResolvedValue(JSON.stringify([["response", "f1", "Secret", ""]])),
+    };
+    (LocalSigner as any).mockImplementationOnce(() => mockFormSigner);
+
+    const onResponse = vi.fn();
+    subscribeToResponses(
+      "formpub",
+      "form1",
+      onResponse,
+      undefined,
+      "aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd",
+    );
+
+    const event: Event = {
+      id: "r1",
+      pubkey: "resp",
+      kind: 1069,
+      created_at: 0,
+      sig: "sig",
+      content: "enc_resp",
+      tags: [["a", "30168:formpub:form1"]],
+    };
+    capturedOnEvent!(event);
+
+    // Wait for async decrypt to resolve
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(onResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ responses: [expect.objectContaining({ answer: "Secret" })] }),
+    );
   });
 });
