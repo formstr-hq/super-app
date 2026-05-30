@@ -97,6 +97,12 @@ describe("createForm — encrypted form", () => {
       true,
     );
 
+    // formSigner.nip44Encrypt was called with viewPubkey and the field JSON
+    expect(mockFormSigner.nip44Encrypt).toHaveBeenCalledWith(
+      expect.any(String), // viewPubkey
+      expect.stringContaining('"field"'),
+    );
+
     // kind-14083 published
     const listEvent = calls[1][1];
     expect(listEvent.kind).toBe(14083);
