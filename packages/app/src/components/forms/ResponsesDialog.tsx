@@ -5,6 +5,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Skeleton,
   Tab,
   Table,
@@ -15,8 +16,16 @@ import {
   Tabs,
   Typography,
 } from "@mui/material";
+import { Copy, Download } from "lucide-react";
 import { useState } from "react";
 
+import {
+  downloadTextFile,
+  renderAnswer,
+  responsesToCsv,
+  responsesToJson,
+} from "../../lib/exportResponses";
+import { formatNpub } from "../../lib/npub";
 import { AnswerType, type FormResponseEvent, type FormTemplate } from "../../services/forms/types";
 
 import { FormAnalytics } from "./FormAnalytics";
@@ -31,6 +40,22 @@ interface Props {
 
 export function ResponsesDialog({ open, form, responses, isLoading, onClose }: Props) {
   const [tab, setTab] = useState(0);
+
+  const handleExportCsv = () => {
+    if (!form) return;
+    downloadTextFile(
+      `${form.name || "form"}-responses.csv`,
+      "text/csv",
+      responsesToCsv(form, responses),
+    );
+  };
+  const handleExportJson = () => {
+    downloadTextFile(
+      `${form?.name || "form"}-responses.json`,
+      "application/json",
+      responsesToJson(responses),
+    );
+  };
 
   return (
     <Dialog
@@ -80,6 +105,7 @@ export function ResponsesDialog({ open, form, responses, isLoading, onClose }: P
                 >
                   <TableCell>#</TableCell>
                   <TableCell>Date</TableCell>
+                  <TableCell>Responder</TableCell>
                   {form.fields
                     .filter((f) => f.type !== AnswerType.label)
                     .map((f) => (
@@ -103,11 +129,27 @@ export function ResponsesDialog({ open, form, responses, isLoading, onClose }: P
                           {new Date(r.createdAt * 1000).toLocaleString()}
                         </Typography>
                       </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                          <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                            {formatNpub(r.pubkey)}
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            onClick={() => navigator.clipboard?.writeText(r.pubkey).catch(() => {})}
+                            aria-label="Copy responder pubkey"
+                          >
+                            <Copy size={11} />
+                          </IconButton>
+                        </Box>
+                      </TableCell>
                       {form.fields
                         .filter((f) => f.type !== AnswerType.label)
                         .map((f) => (
                           <TableCell key={f.id}>
-                            <Typography variant="caption">{byId[f.id] ?? "—"}</Typography>
+                            <Typography variant="caption">
+                              {renderAnswer(f, byId[f.id] ?? "")}
+                            </Typography>
                           </TableCell>
                         ))}
                     </TableRow>
@@ -122,6 +164,23 @@ export function ResponsesDialog({ open, form, responses, isLoading, onClose }: P
       </DialogContent>
 
       <DialogActions>
+        <Button
+          size="small"
+          startIcon={<Download size={14} />}
+          onClick={handleExportCsv}
+          disabled={responses.length === 0}
+        >
+          CSV
+        </Button>
+        <Button
+          size="small"
+          startIcon={<Download size={14} />}
+          onClick={handleExportJson}
+          disabled={responses.length === 0}
+        >
+          JSON
+        </Button>
+        <Box sx={{ flex: 1 }} />
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
