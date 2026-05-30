@@ -1,3 +1,10 @@
+import {
+  signerManager,
+  nostrRuntime,
+  nip44SelfEncrypt,
+  nip44SelfDecrypt,
+  LocalSigner,
+} from "@formstr/core";
 import type { Event } from "nostr-tools";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -20,14 +27,6 @@ vi.mock("@formstr/core", () => ({
     signEvent: vi.fn(),
   })),
 }));
-
-import {
-  signerManager,
-  nostrRuntime,
-  nip44SelfEncrypt,
-  nip44SelfDecrypt,
-  LocalSigner,
-} from "@formstr/core";
 
 import {
   createForm,

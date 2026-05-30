@@ -38,6 +38,8 @@ export function FillFormDialog({ open, form, isLoading, onClose }: Props) {
       setSubmitted(false);
       setSubmitError(null);
     }
+    // Reset only when a different form is loaded (by id), not on every `form` identity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form?.id]);
 
   const setAnswer = (fieldId: string, value: string) =>
