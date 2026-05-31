@@ -23,7 +23,7 @@ export async function publishPublicCalendarEvent(
 ): Promise<CalendarEvent> {
   const signer = await signerManager.getSigner();
   const pubkey = await signer.getPublicKey();
-  const eventId = crypto.randomUUID().slice(0, 8);
+  const eventId = draft.existingId ?? crypto.randomUUID().slice(0, 8);
 
   const tags: string[][] = [
     ["d", eventId],
@@ -79,7 +79,7 @@ export async function publishPrivateCalendarEvent(
 ): Promise<CalendarEvent> {
   const signer = await signerManager.getSigner();
   const pubkey = await signer.getPublicKey();
-  const eventId = crypto.randomUUID().slice(0, 8);
+  const eventId = draft.existingId ?? crypto.randomUUID().slice(0, 8);
 
   const eventData: string[][] = [
     ["title", draft.title],

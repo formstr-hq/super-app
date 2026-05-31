@@ -12,7 +12,7 @@ vi.mock("@formstr/core", () => ({
   unwrapEvent: vi.fn(),
 }));
 
-import { fetchCalendarEventByCoordinate } from "./service";
+import { fetchCalendarEventByCoordinate, publishPublicCalendarEvent } from "./service";
 import { CALENDAR_KINDS } from "./types";
 
 const mockSigner = {
@@ -64,5 +64,32 @@ describe("fetchCalendarEventByCoordinate", () => {
 
   it("returns null on a malformed coordinate", async () => {
     expect(await fetchCalendarEventByCoordinate("garbage")).toBeNull();
+  });
+});
+
+describe("publishPublicCalendarEvent — update", () => {
+  it("reuses draft.existingId as the d-tag when provided", async () => {
+    await publishPublicCalendarEvent({
+      title: "Edited",
+      description: "",
+      begin: new Date(1700000000000),
+      end: new Date(1700003600000),
+      existingId: "keepme00",
+    });
+    const published = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(published.tags).toContainEqual(["d", "keepme00"]);
+  });
+
+  it("generates a fresh d-tag when existingId is absent", async () => {
+    await publishPublicCalendarEvent({
+      title: "New",
+      description: "",
+      begin: new Date(1700000000000),
+      end: new Date(1700003600000),
+    });
+    const published = (nostrRuntime.publish as any).mock.calls[0][1];
+    const dTag = published.tags.find((t: string[]) => t[0] === "d")?.[1];
+    expect(dTag).toBeTruthy();
+    expect(dTag).not.toBe("keepme00");
   });
 });
