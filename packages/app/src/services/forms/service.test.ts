@@ -1,3 +1,10 @@
+import {
+  signerManager,
+  nostrRuntime,
+  nip44SelfEncrypt,
+  nip44SelfDecrypt,
+  LocalSigner,
+} from "@formstr/core";
 import type { Event } from "nostr-tools";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -22,14 +29,6 @@ vi.mock("@formstr/core", () => ({
 }));
 
 import {
-  signerManager,
-  nostrRuntime,
-  nip44SelfEncrypt,
-  nip44SelfDecrypt,
-  LocalSigner,
-} from "@formstr/core";
-
-import {
   createForm,
   fetchForm,
   fetchResponses,
@@ -48,6 +47,8 @@ const mockSigner = {
     ),
   nip44Encrypt: vi.fn(),
   nip44Decrypt: vi.fn(),
+  encrypt: vi.fn().mockResolvedValue("nip04_enc"),
+  decrypt: vi.fn().mockResolvedValue("[]"),
 };
 
 beforeEach(() => {
@@ -111,13 +112,30 @@ describe("createForm — encrypted form", () => {
       expect.stringContaining('"field"'),
     );
 
-    // kind-14083 published
+    // kind-14083 published with NIP-44 self-encryption, keys serialised in payload
     const listEvent = calls[1][1];
     expect(listEvent.kind).toBe(14083);
     expect(nip44SelfEncrypt).toHaveBeenCalledWith(
       mockSigner,
       expect.stringContaining(result.signingKey!),
     );
+  });
+
+  it("includes a settings tag on the encrypted form event", async () => {
+    const mockFormSigner = { nip44Encrypt: vi.fn().mockResolvedValue("enc_fields") };
+    (LocalSigner as any).mockImplementationOnce(() => mockFormSigner);
+
+    await createForm({
+      name: "Secret",
+      fields: [{ id: "f1", type: "shortText" as any, label: "Q" }],
+      settings: { thankYouText: "Cheers", disallowAnonymous: true },
+      encrypt: true,
+    });
+
+    const formEvent = (nostrRuntime.publish as any).mock.calls[0][1];
+    const settingsTag = formEvent.tags.find((t: string[]) => t[0] === "settings");
+    expect(settingsTag).toBeTruthy();
+    expect(JSON.parse(settingsTag[1])).toMatchObject({ thankYouText: "Cheers" });
   });
 });
 
@@ -285,39 +303,82 @@ describe("fetchResponses — encrypted, no signingKey", () => {
 
 describe("fetchMyForms — parses tag-tuples and returns keys", () => {
   it("returns FormSummary[] with signingKey and viewKey from kind-14083", async () => {
-    (nostrRuntime.fetchOne as any).mockResolvedValueOnce({
-      id: "list",
-      pubkey: "aabbccdd",
-      kind: 14083,
-      created_at: 1000,
-      sig: "sig",
-      content: "enc_list",
-      tags: [],
-    } satisfies Event);
+    // 1st querySync call = kind-14083 list read (newest-wins); 2nd = batch form events
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([
+        {
+          id: "list",
+          pubkey: "aabbccdd",
+          kind: 14083,
+          created_at: 1000,
+          sig: "sig",
+          content: "enc_list",
+          tags: [],
+        } satisfies Event,
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "fe",
+          pubkey: "formpub",
+          kind: 30168,
+          created_at: 1000,
+          sig: "sig",
+          content: "enc",
+          tags: [
+            ["d", "form1"],
+            ["name", "Enc Form"],
+            ["encryption", "view-key"],
+          ],
+        } satisfies Event,
+      ]);
     (nip44SelfDecrypt as any).mockResolvedValue(
       JSON.stringify([["f", "formpub:form1", "wss://relay.test", "sigKey:viewKey"]]),
     );
-    (nostrRuntime.querySync as any).mockResolvedValue([
-      {
-        id: "fe",
-        pubkey: "formpub",
-        kind: 30168,
-        created_at: 1000,
-        sig: "sig",
-        content: "enc",
-        tags: [
-          ["d", "form1"],
-          ["name", "Enc Form"],
-          ["encryption", "view-key"],
-        ],
-      } satisfies Event,
-    ]);
 
     const forms = await fetchMyForms();
     expect(forms).toHaveLength(1);
     expect(forms[0].signingKey).toBe("sigKey");
     expect(forms[0].viewKey).toBe("viewKey");
     expect(forms[0].isEncrypted).toBe(true);
+  });
+});
+
+// ── fetchMyForms — newest-wins (anti-staleness) ───────────────
+
+describe("fetchMyForms — picks the newest kind-14083 across relays", () => {
+  it("uses the list event with the highest created_at when relays diverge", async () => {
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([
+        { id: "stale", pubkey: "aabbccdd", kind: 14083, created_at: 1000, sig: "s", content: "stale_enc", tags: [] },
+        { id: "fresh", pubkey: "aabbccdd", kind: 14083, created_at: 2000, sig: "s", content: "fresh_enc", tags: [] },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "fe",
+          pubkey: "formpub",
+          kind: 30168,
+          created_at: 2000,
+          sig: "s",
+          content: "",
+          tags: [
+            ["d", "newform"],
+            ["name", "Fresh Form"],
+            ["field", "f1", "shortText", "Q", "[]", "{}"],
+          ],
+        },
+      ]);
+    (nip44SelfDecrypt as any).mockImplementation((_s: unknown, content: string) =>
+      Promise.resolve(
+        content === "fresh_enc"
+          ? JSON.stringify([["f", "formpub:newform", "", ""]])
+          : JSON.stringify([["f", "formpub:oldform", "", ""]]),
+      ),
+    );
+
+    const forms = await fetchMyForms();
+    // Decrypted the FRESH list, not the stale one
+    expect(nip44SelfDecrypt).toHaveBeenCalledWith(mockSigner, "fresh_enc");
+    expect(forms.map((f) => f.id)).toEqual(["newform"]);
   });
 });
 
@@ -362,23 +423,24 @@ describe("saveToMyForms", () => {
 
 describe("fetchMyForms — fallback to author query", () => {
   it("calls querySync by author when no kind-14083 event exists", async () => {
-    // fetchOne returns null → entries empty → falls back to fetchMyFormsByAuthor
-    (nostrRuntime.fetchOne as any).mockResolvedValue(null);
-    (nostrRuntime.querySync as any).mockResolvedValue([
-      {
-        id: "fe",
-        pubkey: "aabbccdd",
-        kind: 30168,
-        created_at: 1000,
-        sig: "sig",
-        content: "",
-        tags: [
-          ["d", "form1"],
-          ["name", "Plain Form"],
-          ["field", "f1", "shortText", "Q", "[]", "{}"],
-        ],
-      } satisfies Event,
-    ]);
+    // 1st querySync = kind-14083 list read → none; falls back to author query (2nd querySync)
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "fe",
+          pubkey: "aabbccdd",
+          kind: 30168,
+          created_at: 1000,
+          sig: "sig",
+          content: "",
+          tags: [
+            ["d", "form1"],
+            ["name", "Plain Form"],
+            ["field", "f1", "shortText", "Q", "[]", "{}"],
+          ],
+        } satisfies Event,
+      ]);
 
     const forms = await fetchMyForms();
     expect(forms).toHaveLength(1);

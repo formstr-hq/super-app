@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("../services/forms/service", () => ({
   fetchMyForms: vi.fn(),
   fetchForm: vi.fn(),
-  fetchResponses: vi.fn(),
+  subscribeToResponses: vi.fn(),
   createForm: vi.fn(),
   deleteForm: vi.fn(),
   saveToMyForms: vi.fn(),
@@ -96,7 +96,7 @@ describe("loadForm", () => {
 });
 
 describe("loadResponses", () => {
-  it("passes signingKey from myForms to fetchResponses", async () => {
+  it("subscribes with signingKey from myForms and accumulates responses (deduped)", () => {
     useFormsStore.setState({
       myForms: [
         {
@@ -110,25 +110,52 @@ describe("loadResponses", () => {
         },
       ],
     });
-    (formsService.fetchResponses as any).mockResolvedValue([]);
 
-    await useFormsStore.getState().loadResponses("pub", "f1");
+    let captured: ((r: any) => void) | undefined;
+    const handle = { unsub: vi.fn() };
+    (formsService.subscribeToResponses as any).mockImplementation(
+      (_pub: string, _id: string, onResponse: (r: any) => void) => {
+        captured = onResponse;
+        return handle;
+      },
+    );
 
-    expect(formsService.fetchResponses).toHaveBeenCalledWith("pub", "f1", "sk");
+    void useFormsStore.getState().loadResponses("pub", "f1");
+
+    expect(formsService.subscribeToResponses).toHaveBeenCalledWith(
+      "pub",
+      "f1",
+      expect.any(Function),
+      expect.any(Function),
+      "sk",
+    );
+
+    captured!({ id: "r1", pubkey: "x", responses: [], createdAt: 0, event: {} });
+    captured!({ id: "r1", pubkey: "x", responses: [], createdAt: 0, event: {} }); // duplicate
+    expect(useFormsStore.getState().responses).toHaveLength(1);
   });
 
-  it("clears stale responses before fetching", async () => {
+  it("clears stale responses immediately on load", () => {
     useFormsStore.setState({
       responses: [{ id: "old", pubkey: "x", responses: [], createdAt: 0, event: {} as any }],
     });
-    (formsService.fetchResponses as any).mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve([]), 10)),
-    );
+    (formsService.subscribeToResponses as any).mockReturnValue({ unsub: vi.fn() });
 
-    const loadPromise = useFormsStore.getState().loadResponses("pub", "f1");
-    // Immediately after calling, stale responses should be cleared
+    void useFormsStore.getState().loadResponses("pub", "f1");
     expect(useFormsStore.getState().responses).toHaveLength(0);
-    await loadPromise;
+  });
+});
+
+describe("clearCurrent", () => {
+  it("unsubscribes the active responses subscription", () => {
+    const handle = { unsub: vi.fn() };
+    (formsService.subscribeToResponses as any).mockReturnValue(handle);
+
+    void useFormsStore.getState().loadResponses("pub", "f1");
+    useFormsStore.getState().clearCurrent();
+
+    expect(handle.unsub).toHaveBeenCalled();
+    expect(useFormsStore.getState().responses).toHaveLength(0);
   });
 });
 

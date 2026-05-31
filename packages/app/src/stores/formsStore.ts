@@ -1,7 +1,10 @@
+import type { SubscriptionHandle } from "@formstr/core";
 import { create } from "zustand";
 
 import type { FormSummary, FormTemplate, FormResponseEvent } from "../services/forms";
 import * as formsService from "../services/forms/service";
+
+let responsesSub: SubscriptionHandle | null = null;
 
 interface FormsStore {
   myForms: FormSummary[];
@@ -47,15 +50,26 @@ export const useFormsStore = create<FormsStore>((set, get) => ({
     }
   },
 
-  async loadResponses(pubkey, formId) {
-    set({ isLoading: true, error: null, responses: [] });
-    try {
-      const summary = get().myForms.find((f) => f.pubkey === pubkey && f.id === formId);
-      const responses = await formsService.fetchResponses(pubkey, formId, summary?.signingKey);
-      set({ responses, isLoading: false });
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Failed to load responses", isLoading: false });
+  loadResponses(pubkey, formId) {
+    if (responsesSub) {
+      responsesSub.unsub();
+      responsesSub = null;
     }
+    set({ isLoading: true, error: null, responses: [] });
+    const summary = get().myForms.find((f) => f.pubkey === pubkey && f.id === formId);
+    responsesSub = formsService.subscribeToResponses(
+      pubkey,
+      formId,
+      (resp) =>
+        set((state) =>
+          state.responses.some((r) => r.id === resp.id)
+            ? state
+            : { responses: [...state.responses, resp] },
+        ),
+      () => set({ isLoading: false }),
+      summary?.signingKey,
+    );
+    return Promise.resolve();
   },
 
   async createForm(params) {
@@ -91,6 +105,10 @@ export const useFormsStore = create<FormsStore>((set, get) => ({
   },
 
   clearCurrent() {
+    if (responsesSub) {
+      responsesSub.unsub();
+      responsesSub = null;
+    }
     set({ currentForm: null, responses: [] });
   },
 }));
