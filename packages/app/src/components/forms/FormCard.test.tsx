@@ -26,7 +26,7 @@ describe("FormCard", () => {
         onCopyLink={vi.fn()}
       />,
     );
-    expect(screen.getByText(/encrypted/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/encrypted/i)).toBeInTheDocument();
   });
 
   it("does not show encrypted chip when isEncrypted=false", () => {
@@ -43,9 +43,9 @@ describe("FormCard", () => {
     expect(screen.queryByText("Encrypted")).not.toBeInTheDocument();
   });
 
-  it("calls onFill with the form when card is clicked", () => {
+  it("calls onFill with the form when Fill Form button is clicked", () => {
     const onFill = vi.fn();
-    const { container } = render(
+    render(
       <FormCard
         form={base}
         onFill={onFill}
@@ -54,9 +54,7 @@ describe("FormCard", () => {
         onCopyLink={vi.fn()}
       />,
     );
-    // Click the MuiCard element directly so the onClick handler fires
-    const card = container.querySelector(".MuiCard-root")!;
-    fireEvent.click(card);
+    fireEvent.click(screen.getByText("Fill Form"));
     expect(onFill).toHaveBeenCalledWith(base);
   });
 

@@ -1,4 +1,4 @@
-import { Box, Button, Chip, Grid2 as MuiGrid, Paper, Skeleton, Typography } from "@mui/material";
+import { Box, Button, Grid2 as MuiGrid, Paper, Skeleton, Tooltip, Typography } from "@mui/material";
 import { Lock, Plus } from "lucide-react";
 
 import type { FormSummary } from "../../services/forms/types";
@@ -76,13 +76,14 @@ export function FormListView({
               {form.name}
             </Typography>
             {form.isEncrypted && (
-              <Chip
-                icon={<Lock size={11} />}
-                label="Encrypted"
-                size="small"
-                variant="outlined"
-                sx={{ fontSize: 11 }}
-              />
+              <Tooltip title="Encrypted">
+                <Box
+                  component="span"
+                  sx={{ color: "text.disabled", display: "flex", alignItems: "center" }}
+                >
+                  <Lock size={13} />
+                </Box>
+              </Tooltip>
             )}
             <Typography
               variant="caption"
