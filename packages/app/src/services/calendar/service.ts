@@ -188,6 +188,30 @@ export async function fetchCalendarEventsSync(
   return parsed.filter((e: CalendarEvent | null): e is CalendarEvent => e !== null);
 }
 
+/**
+ * Fetch + parse a single calendar event referenced by an addressable
+ * coordinate `kind:pubkey:dTag`. Returns null on a malformed coordinate or miss.
+ */
+export async function fetchCalendarEventByCoordinate(
+  coordinate: string,
+): Promise<CalendarEvent | null> {
+  const [kindStr, pubkey, dTag] = coordinate.split(":");
+  const kind = Number(kindStr);
+  if (!kind || !pubkey || !dTag) return null;
+
+  const relays = relayManager.getRelaysForModule("calendar");
+  const events = await nostrRuntime.querySync(relays, {
+    kinds: [kind],
+    authors: [pubkey],
+    "#d": [dTag],
+  } as Filter);
+  if (events.length === 0) return null;
+
+  // Newest-wins (addressable events can diverge across relays).
+  const newest = events.reduce((a, b) => (b.created_at > a.created_at ? b : a));
+  return parseCalendarEvent(newest);
+}
+
 // ── Calendar List CRUD ──────────────────────────────────
 
 export async function createCalendarList(
@@ -294,7 +318,7 @@ export async function deleteCalendarEvent(eventId: string, coordinate?: string):
 
 // ── Helpers ─────────────────────────────────────────────
 
-async function parseCalendarEvent(event: Event): Promise<CalendarEvent | null> {
+export async function parseCalendarEvent(event: Event): Promise<CalendarEvent | null> {
   const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
   const isPrivate = event.kind !== CALENDAR_KINDS.publicEvent;
 
