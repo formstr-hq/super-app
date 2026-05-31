@@ -7,7 +7,7 @@ import { Outlet } from "react-router-dom";
 import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
 import { LoginDialog } from "../components/LoginDialog";
-import { useAuthStore, useSettingsStore } from "../stores";
+import { useAuthStore, useSettingsStore, useInvitationsStore } from "../stores";
 
 import { Header } from "./Header";
 import { Sidebar, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from "./Sidebar";
@@ -25,6 +25,8 @@ export function AppShell() {
   useEffect(() => {
     if (!pubkey) return;
     void relayManager.fetchUserRelays(pubkey);
+    void useInvitationsStore.getState().start();
+    return () => useInvitationsStore.getState().stop();
   }, [pubkey]);
 
   useEffect(() => {
