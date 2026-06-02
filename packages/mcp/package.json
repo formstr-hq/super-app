@@ -22,7 +22,7 @@
     "@formstr/app": "workspace:*",
     "@formstr/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "nostr-tools": "^2.16.0",
+    "nostr-tools": "^2.23.3",
     "ws": "^8.18.0",
     "zod": "^3.24.0"
   },

@@ -8,6 +8,7 @@ export default defineConfig({
   bundle: true,
   noExternal: ["@formstr/app", "@formstr/core"],
   banner: { js: "#!/usr/bin/env node" },
+  dts: false,
   clean: true,
   sourcemap: true,
 });
