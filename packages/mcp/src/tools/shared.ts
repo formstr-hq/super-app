@@ -46,3 +46,7 @@ export function aiFieldsToFormFields(value: unknown): FormField[] {
     gridCols: f.gridCols,
   }));
 }
+
+export interface RegisterCtx {
+  allowWrites: boolean;
+}
