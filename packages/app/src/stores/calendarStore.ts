@@ -17,6 +17,8 @@ interface CalendarStore {
   createEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
   createCalendar(title: string, color: string): Promise<CalendarList>;
   deleteEvent(eventId: string, coordinate?: string): Promise<void>;
+  ingestEvent(event: CalendarEvent): void;
+  updateEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
 }
 
 export const useCalendarStore = create<CalendarStore>((set, get) => ({
@@ -54,6 +56,28 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
         error: e instanceof Error ? e.message : "Failed to fetch calendars",
         isLoadingCalendars: false,
       });
+    }
+  },
+
+  ingestEvent(event) {
+    set((state) =>
+      state.events.some((e) => e.id === event.id) ? state : { events: [...state.events, event] },
+    );
+  },
+
+  async updateEvent(draft) {
+    set({ error: null });
+    try {
+      const event = draft.isPrivate
+        ? await calendarService.publishPrivateCalendarEvent(draft, draft.calendarId ?? "default")
+        : await calendarService.publishPublicCalendarEvent(draft);
+      set((state) => ({
+        events: state.events.map((e) => (e.id === event.id ? event : e)),
+      }));
+      return event;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to update event" });
+      throw e;
     }
   },
 
