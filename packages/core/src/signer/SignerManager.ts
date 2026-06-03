@@ -6,7 +6,14 @@ import { DeferredSigner } from "./DeferredSigner";
 import { SignerUnavailableError } from "./errors";
 import { LocalSigner } from "./LocalSigner";
 import { NIP07Signer } from "./NIP07Signer";
-import type { NostrSigner, SignerMethod, SignerState, SignerObserver } from "./types";
+import type {
+  NostrSigner,
+  SignerMethod,
+  SignerState,
+  SignerObserver,
+  Nip46Connection,
+  Nip46Builder,
+} from "./types";
 
 const STORAGE_PREFIX = "formstr:";
 const KEY_METHOD = `${STORAGE_PREFIX}signer-method`;
@@ -98,6 +105,17 @@ export class SignerManager {
     const signer = new LocalSigner(decoded.data);
     await this.setSigner(signer, "local");
     localStorage.setItem(KEY_SECRET, bytesToHex(decoded.data));
+  }
+
+  /**
+   * Log in with a NIP-46 remote signer. The bunker connection is environment-specific
+   * (needs a relay pool + WebSocket impl), so the caller injects a `build` function that
+   * returns a connected signer (e.g. `new NIP46Signer(bunker)`). The user's key never
+   * enters this process — only the ephemeral client session lives here.
+   */
+  async loginWithNip46(conn: Nip46Connection, build: Nip46Builder): Promise<void> {
+    const signer = await build(conn);
+    await this.setSigner(signer, "nip46");
   }
 
   async loginWithNip07(): Promise<void> {

@@ -6,6 +6,7 @@ export {
   signerManager,
   LocalSigner,
   NIP07Signer,
+  NIP46Signer,
   DeferredSigner,
   createDriveSignerAdapter,
   SignerUnavailableError,
@@ -15,6 +16,9 @@ export type {
   SignerMethod,
   SignerState,
   SignerObserver,
+  Nip46Connection,
+  Nip46Builder,
+  BunkerLike,
   DriveSignerAdapter,
 } from "./signer";
 

@@ -4,6 +4,7 @@ import {
   nip44SelfEncrypt,
   nip44SelfDecrypt,
   LocalSigner,
+  wrapManyEvents,
 } from "@formstr/core";
 import type { Event } from "nostr-tools";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -20,6 +21,8 @@ vi.mock("@formstr/core", () => ({
   nip44Encrypt: vi.fn(),
   nip44SelfEncrypt: vi.fn(),
   nip44SelfDecrypt: vi.fn(),
+  wrapManyEvents: vi.fn(),
+  createRef: vi.fn(() => "naddr1mockref"),
   LocalSigner: vi.fn().mockImplementation(() => ({
     nip44Encrypt: vi.fn(),
     nip44Decrypt: vi.fn(),
@@ -36,6 +39,10 @@ import {
   deleteForm,
   saveToMyForms,
   subscribeToResponses,
+  updateForm,
+  shareForm,
+  fetchFormSummaryFromRef,
+  importForm,
 } from "./service";
 
 const mockSigner = {
@@ -349,8 +356,24 @@ describe("fetchMyForms — picks the newest kind-14083 across relays", () => {
   it("uses the list event with the highest created_at when relays diverge", async () => {
     (nostrRuntime.querySync as any)
       .mockResolvedValueOnce([
-        { id: "stale", pubkey: "aabbccdd", kind: 14083, created_at: 1000, sig: "s", content: "stale_enc", tags: [] },
-        { id: "fresh", pubkey: "aabbccdd", kind: 14083, created_at: 2000, sig: "s", content: "fresh_enc", tags: [] },
+        {
+          id: "stale",
+          pubkey: "aabbccdd",
+          kind: 14083,
+          created_at: 1000,
+          sig: "s",
+          content: "stale_enc",
+          tags: [],
+        },
+        {
+          id: "fresh",
+          pubkey: "aabbccdd",
+          kind: 14083,
+          created_at: 2000,
+          sig: "s",
+          content: "fresh_enc",
+          tags: [],
+        },
       ])
       .mockResolvedValueOnce([
         {
@@ -424,23 +447,21 @@ describe("saveToMyForms", () => {
 describe("fetchMyForms — fallback to author query", () => {
   it("calls querySync by author when no kind-14083 event exists", async () => {
     // 1st querySync = kind-14083 list read → none; falls back to author query (2nd querySync)
-    (nostrRuntime.querySync as any)
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          id: "fe",
-          pubkey: "aabbccdd",
-          kind: 30168,
-          created_at: 1000,
-          sig: "sig",
-          content: "",
-          tags: [
-            ["d", "form1"],
-            ["name", "Plain Form"],
-            ["field", "f1", "shortText", "Q", "[]", "{}"],
-          ],
-        } satisfies Event,
-      ]);
+    (nostrRuntime.querySync as any).mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: "fe",
+        pubkey: "aabbccdd",
+        kind: 30168,
+        created_at: 1000,
+        sig: "sig",
+        content: "",
+        tags: [
+          ["d", "form1"],
+          ["name", "Plain Form"],
+          ["field", "f1", "shortText", "Q", "[]", "{}"],
+        ],
+      } satisfies Event,
+    ]);
 
     const forms = await fetchMyForms();
     expect(forms).toHaveLength(1);
@@ -478,6 +499,151 @@ describe("subscribeToResponses — plain response", () => {
     capturedOnEvent!(event);
 
     expect(onResponse).toHaveBeenCalledWith(expect.objectContaining({ wasEncrypted: false }));
+  });
+});
+
+// ── updateForm ────────────────────────────────────────────────
+
+describe("updateForm — public form", () => {
+  it("republishes kind-30168 with the new name and field set", async () => {
+    (nostrRuntime.fetchOne as any).mockResolvedValue({
+      id: "eid",
+      pubkey: "aabbccdd",
+      kind: 30168,
+      created_at: 1000,
+      sig: "sig",
+      content: "",
+      tags: [
+        ["d", "form1"],
+        ["name", "Old Name"],
+        ["field", "f1", "shortText", "Q", "[]", "{}"],
+      ],
+    } satisfies Event);
+
+    await updateForm({
+      formId: "form1",
+      pubkey: "aabbccdd",
+      name: "New Name",
+      fields: [
+        { id: "f1", type: "shortText" as any, label: "Q1" },
+        { id: "f2", type: "shortText" as any, label: "Q2" },
+      ],
+    });
+
+    const [, event] = (nostrRuntime.publish as any).mock.calls.at(-1);
+    expect(event.kind).toBe(30168);
+    expect(event.tags).toContainEqual(["name", "New Name"]);
+    expect(event.tags.filter((t: string[]) => t[0] === "field")).toHaveLength(2);
+  });
+});
+
+// ── shareForm ─────────────────────────────────────────────────
+
+describe("shareForm — distributes the view key via NIP-59 gift-wrap", () => {
+  it("publishes one wrap per recipient and reports the count", async () => {
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([
+        {
+          id: "list",
+          pubkey: "aabbccdd",
+          kind: 14083,
+          created_at: 1000,
+          sig: "s",
+          content: "enc_list",
+          tags: [],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "fe",
+          pubkey: "formpub",
+          kind: 30168,
+          created_at: 1000,
+          sig: "s",
+          content: "enc",
+          tags: [
+            ["d", "form1"],
+            ["name", "Enc"],
+            ["encryption", "view-key"],
+          ],
+        },
+      ]);
+    (nip44SelfDecrypt as any).mockResolvedValue(
+      JSON.stringify([["f", "formpub:form1", "wss://relay.test", "sigKeyHex:viewKeyHex"]]),
+    );
+    (wrapManyEvents as any).mockResolvedValue([{ kind: 1059, id: "w1" }]);
+
+    const result = await shareForm({
+      formId: "form1",
+      formPubkey: "formpub",
+      recipients: ["recipA", "recipB"],
+    });
+
+    expect(result).toEqual({ published: 2, failed: [] });
+    expect(wrapManyEvents).toHaveBeenCalledTimes(2);
+    const wrapPublishes = (nostrRuntime.publish as any).mock.calls.filter(
+      (c: any[]) => c[1]?.kind === 1059,
+    );
+    expect(wrapPublishes).toHaveLength(2);
+  });
+
+  it("throws when the user does not hold the form view key", async () => {
+    await expect(shareForm({ formId: "nope", formPubkey: "x", recipients: ["a"] })).rejects.toThrow(
+      "view key",
+    );
+  });
+});
+
+// ── fetchFormSummaryFromRef / importForm ──────────────────────
+
+describe("fetchFormSummaryFromRef", () => {
+  it("returns null when the form is not found", async () => {
+    (nostrRuntime.fetchOne as any).mockResolvedValue(null);
+    expect(await fetchFormSummaryFromRef("pub", "id")).toBeNull();
+  });
+
+  it("returns a summary for a found form", async () => {
+    (nostrRuntime.fetchOne as any).mockResolvedValue({
+      id: "eid",
+      pubkey: "formpub",
+      kind: 30168,
+      created_at: 1000,
+      sig: "s",
+      content: "",
+      tags: [
+        ["d", "form1"],
+        ["name", "My Form"],
+        ["field", "f1", "shortText", "Q", "[]", "{}"],
+      ],
+    } satisfies Event);
+
+    const s = await fetchFormSummaryFromRef("formpub", "form1");
+    expect(s).toMatchObject({
+      id: "form1",
+      name: "My Form",
+      pubkey: "formpub",
+      isEncrypted: false,
+    });
+  });
+});
+
+describe("importForm", () => {
+  it("appends a new form to the kind-14083 list", async () => {
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
+
+    await importForm({
+      id: "f9",
+      name: "Imported",
+      pubkey: "pubX",
+      createdAt: 0,
+      isEncrypted: false,
+    });
+
+    const listPublishes = (nostrRuntime.publish as any).mock.calls.filter(
+      (c: any[]) => c[1]?.kind === 14083,
+    );
+    expect(listPublishes.length).toBeGreaterThanOrEqual(1);
+    expect(nip44SelfEncrypt).toHaveBeenCalledWith(mockSigner, expect.stringContaining("pubX:f9"));
   });
 });
 

@@ -170,7 +170,11 @@ export function generateShareLink(address: string, viewKey: string, editKey?: st
   if (editKey) keys["editKey"] = editKey;
 
   const nkeysFragment = encodeNKeys(keys);
-  const url = `${window.location.origin}/pages/${address}#${nkeysFragment}`;
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://formstr.app";
+  const url = `${origin}/pages/${address}#${nkeysFragment}`;
 
   return { url, address, viewKey, editKey };
 }
