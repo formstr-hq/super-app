@@ -1,8 +1,9 @@
-import { relayManager, signerManager } from "@formstr/core";
+import { relayManager, signerManager, nostrRuntime } from "@formstr/core";
 import { useWebSocketImplementation as setWebSocketImplementation } from "nostr-tools/pool";
 import WebSocket from "ws";
 
-import type { ResolvedConfig } from "./config";
+import { type Credential } from "./auth/credential";
+import { buildNip46Signer } from "./auth/login";
 
 function installLocalStorageShim(): void {
   const store = new Map<string, string>();
@@ -34,9 +35,29 @@ function overrideRelays(relays: string[]): void {
   relayManager.getRelaysForModule = () => [...relays];
 }
 
-export async function bootstrap(cfg: Pick<ResolvedConfig, "nsec" | "relays">): Promise<void> {
+export interface BootstrapInput {
+  credential: Credential;
+  relays?: string[];
+}
+
+export async function bootstrap(input: BootstrapInput): Promise<void> {
   installLocalStorageShim();
   setWebSocketImplementation(WebSocket);
-  if (cfg.relays?.length) overrideRelays(cfg.relays);
-  await signerManager.loginWithNsec(cfg.nsec);
+  // When bundled into a single CJS file, nostr-tools/pool's module-level _WebSocket
+  // variable (used by SimplePool's constructor) is a different binding than the one
+  // setWebSocketImplementation writes to. Patch the pool instance directly so relay
+  // connections work in Node environments that lack a native WebSocket (Node < 22).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (nostrRuntime.pool as any)._WebSocket = WebSocket;
+  if (input.relays?.length) overrideRelays(input.relays);
+
+  if (input.credential.method === "local") {
+    await signerManager.loginWithNsec(input.credential.nsec);
+  } else {
+    const { clientSecretKey, remoteSignerPubkey, relays, secret } = input.credential;
+    await signerManager.loginWithNip46(
+      { clientSecretKey, remoteSignerPubkey, relays, secret },
+      buildNip46Signer,
+    );
+  }
 }

@@ -1,35 +1,94 @@
-import { describe, it, expect } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+import { type Credential } from "../src/auth/credential";
+import { type Keystore } from "../src/auth/keystore";
+import { type Cli } from "../src/cli";
 import { resolveConfig, redact } from "../src/config";
 
 const NSEC = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
 
+const baseCli = (over: Partial<Cli> = {}): Cli => ({ command: "run", allowWrites: false, ...over });
+
+const emptyKeystore = (): Keystore => ({
+  get: async () => null,
+  set: async () => {},
+  remove: async () => {},
+  list: async () => [],
+});
+
+const keystoreWith = (cred: Credential): Keystore => ({
+  get: async () => cred,
+  set: async () => {},
+  remove: async () => {},
+  list: async () => [cred.pubkey],
+});
+
+// A config dir guaranteed to contain no config.json, so the file path can't interfere.
+const HERMETIC = { FORMSTR_MCP_CONFIG_DIR: mkdtempSync(join(tmpdir(), "fmcp-")) };
+
 describe("resolveConfig", () => {
-  it("reads nsec from env", () => {
-    const cfg = resolveConfig({ argv: [], env: { FORMSTR_NSEC: NSEC } });
-    expect(cfg.nsec).toBe(NSEC);
-    expect(cfg.allowWrites).toBe(false);
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  it("CLI flag overrides env for nsec and enables writes", () => {
-    const cfg = resolveConfig({
-      argv: ["--nsec", NSEC, "--allow-writes"],
-      env: { FORMSTR_NSEC: "nsec1ignored" },
-    });
-    expect(cfg.nsec).toBe(NSEC);
+  it("uses a plaintext nsec from env and warns loudly", async () => {
+    const cfg = await resolveConfig(
+      baseCli(),
+      { ...HERMETIC, FORMSTR_NSEC: NSEC },
+      emptyKeystore(),
+    );
+    expect(cfg.source).toBe("plaintext");
+    expect(cfg.credential.method).toBe("local");
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("PLAINTEXT"));
+  });
+
+  it("CLI nsec overrides env and enables writes", async () => {
+    const cfg = await resolveConfig(
+      baseCli({ nsec: NSEC, allowWrites: true }),
+      { ...HERMETIC, FORMSTR_NSEC: "nsec1ignored" },
+      emptyKeystore(),
+    );
     expect(cfg.allowWrites).toBe(true);
+    expect(cfg.source).toBe("plaintext");
   });
 
-  it("parses comma-separated relays from env", () => {
-    const cfg = resolveConfig({
-      argv: [],
-      env: { FORMSTR_NSEC: NSEC, FORMSTR_RELAYS: "wss://a.example , wss://b.example" },
-    });
+  it("parses comma-separated relays from env", async () => {
+    const cfg = await resolveConfig(
+      baseCli(),
+      { ...HERMETIC, FORMSTR_NSEC: NSEC, FORMSTR_RELAYS: "wss://a.example , wss://b.example" },
+      emptyKeystore(),
+    );
     expect(cfg.relays).toEqual(["wss://a.example", "wss://b.example"]);
   });
 
-  it("throws a clear error when nsec is missing", () => {
-    expect(() => resolveConfig({ argv: [], env: {} })).toThrow(/nsec/i);
+  it("falls back to the keystore credential when no plaintext key is present", async () => {
+    const cred: Credential = { method: "local", pubkey: "ab".repeat(32), nsec: NSEC };
+    const cfg = await resolveConfig(baseCli(), { ...HERMETIC }, keystoreWith(cred));
+    expect(cfg.source).toBe("keystore");
+    expect(cfg.credential.pubkey).toBe(cred.pubkey);
+  });
+
+  it("uses the keystore nip46 relays when none are configured", async () => {
+    const cred: Credential = {
+      method: "nip46",
+      pubkey: "ab".repeat(32),
+      clientSecretKey: "00".repeat(32),
+      remoteSignerPubkey: "cd".repeat(32),
+      relays: ["wss://signer.example"],
+    };
+    const cfg = await resolveConfig(baseCli(), { ...HERMETIC }, keystoreWith(cred));
+    expect(cfg.relays).toEqual(["wss://signer.example"]);
+  });
+
+  it("throws a clear 'login' error when nothing is available", async () => {
+    await expect(resolveConfig(baseCli(), { ...HERMETIC }, emptyKeystore())).rejects.toThrow(
+      /login/i,
+    );
   });
 
   it("redact hides all but the prefix", () => {
