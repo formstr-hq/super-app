@@ -5,9 +5,8 @@ import WebSocket from "ws";
 import type { ResolvedConfig } from "./config";
 
 function installLocalStorageShim(): void {
-  if (typeof globalThis.localStorage !== "undefined") return;
   const store = new Map<string, string>();
-  globalThis.localStorage = {
+  const shim = {
     getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
     setItem: (k: string, v: string) => void store.set(k, String(v)),
     removeItem: (k: string) => void store.delete(k),
@@ -17,6 +16,16 @@ function installLocalStorageShim(): void {
       return store.size;
     },
   } as Storage;
+  try {
+    Object.defineProperty(globalThis, "localStorage", {
+      value: shim,
+      writable: true,
+      configurable: true,
+    });
+  } catch {
+    // A non-configurable localStorage already exists (e.g. Node's experimental
+    // Web Storage); leave it in place.
+  }
 }
 
 function overrideRelays(relays: string[]): void {

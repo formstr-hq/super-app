@@ -15,9 +15,10 @@ interface ConfigInput {
   env: NodeJS.ProcessEnv;
 }
 
-const fileSchema = z
-  .object({ nsec: z.string().optional(), relays: z.array(z.string()).optional() })
-  .partial();
+const fileSchema = z.object({
+  nsec: z.string().optional(),
+  relays: z.array(z.string()).optional(),
+});
 
 function parseFlags(argv: string[]): { nsec?: string; relays?: string[]; allowWrites: boolean } {
   let nsec: string | undefined;
@@ -53,7 +54,7 @@ export function resolveConfig(input: ConfigInput): ResolvedConfig {
   const flags = parseFlags(input.argv);
   const file = readConfigFile();
   const nsec = flags.nsec ?? input.env.FORMSTR_NSEC ?? file.nsec;
-  const relays = flags.relays ?? splitRelays(input.env.FORMSTR_RELAYS) ?? file.relays ?? undefined;
+  const relays = flags.relays ?? splitRelays(input.env.FORMSTR_RELAYS) ?? file.relays;
   const allowWrites = flags.allowWrites || input.env.FORMSTR_ALLOW_WRITES === "true";
 
   if (!nsec) {

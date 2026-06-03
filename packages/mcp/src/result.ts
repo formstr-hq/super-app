@@ -1,9 +1,9 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-export function ok(message: string, data?: unknown): CallToolResult {
+export function ok(message: string, data?: Record<string, unknown>): CallToolResult {
   return {
     content: [{ type: "text", text: message }],
-    structuredContent: data === undefined ? undefined : (data as Record<string, unknown>),
+    ...(data !== undefined && { structuredContent: data }),
   };
 }
 
