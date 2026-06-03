@@ -4,12 +4,12 @@ vi.mock("@formstr/app/services", () => ({
   forms: {
     createForm: vi.fn(),
     fetchMyForms: vi.fn(),
-    saveToMyForms: vi.fn(),
     fetchForm: vi.fn(),
     fetchResponses: vi.fn(),
     deleteForm: vi.fn(),
     submitResponse: vi.fn(),
   },
+  FORM_KINDS: { template: 30168, response: 30169, myFormsList: 14083 },
 }));
 
 import { forms } from "@formstr/app/services";
@@ -41,14 +41,13 @@ describe("forms tools", () => {
     expect(rw.tools.has("submit_form_response")).toBe(true);
   });
 
-  it("create_form creates then persists to the forms list", async () => {
+  it("create_form creates the form", async () => {
     (forms.createForm as any).mockResolvedValue({
       formId: "abc",
       pubkey: "pk",
       signingKey: "sk",
       viewKey: "vk",
     });
-    (forms.fetchMyForms as any).mockResolvedValue([]);
     const { server, tools } = fakeServer();
     registerForms(server, { allowWrites: false });
 
@@ -59,7 +58,6 @@ describe("forms tools", () => {
     });
 
     expect(forms.createForm).toHaveBeenCalledOnce();
-    expect(forms.saveToMyForms).toHaveBeenCalledOnce();
     expect(res.isError).toBeFalsy();
     expect(res.structuredContent.formId).toBe("abc");
   });

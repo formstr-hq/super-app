@@ -1,5 +1,4 @@
-import { forms } from "@formstr/app/services";
-import type { FormSummary } from "@formstr/app/services";
+import { forms, FORM_KINDS } from "@formstr/app/services";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -56,6 +55,7 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
       inputSchema: { formAuthorPubkey: z.string(), formId: z.string() },
     },
     async ({ formAuthorPubkey, formId }) => {
+      // Decrypt with the form's signing key only if it's in the user's own forms list.
       const mine = await forms.fetchMyForms();
       const signingKey = mine.find(
         (f) => f.pubkey === formAuthorPubkey && f.id === formId,
@@ -95,6 +95,9 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
       const allowedResponders = normalizePubkeyList(args.allowedResponders);
       const collaborators = normalizePubkeyList(args.collaborators);
       const notifyNpubs = normalizePubkeyList(args.notifyNpubs);
+      // createForm publishes the kind-30168 template AND registers it in the user's
+      // kind-14083 "my forms" list (persisting signing/view keys for encrypted forms),
+      // so there is no separate persist step here.
       const result = await forms.createForm({
         name: args.name,
         fields,
@@ -108,21 +111,7 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
         },
       });
 
-      // Read-modify-write the kind-14083 list so the form appears in lists and
-      // (if encrypted) its keys persist for later response decryption.
-      const existing = await forms.fetchMyForms();
-      const summary: FormSummary = {
-        id: result.formId,
-        name: args.name,
-        pubkey: result.pubkey,
-        createdAt: Math.floor(Date.now() / 1000),
-        isEncrypted: encrypt,
-        signingKey: result.signingKey,
-        viewKey: result.viewKey,
-      };
-      await forms.saveToMyForms([...existing, summary]);
-
-      const coordinate = `30168:${result.pubkey}:${result.formId}`;
+      const coordinate = `${FORM_KINDS.template}:${result.pubkey}:${result.formId}`;
       return ok(`Created form "${args.name}" with ${fields.length} field(s).`, {
         formId: result.formId,
         pubkey: result.pubkey,
@@ -131,6 +120,8 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
     },
   );
 
+  // Read tools and constructive creates (above) are always available; only
+  // destructive/outward actions below are gated behind --allow-writes.
   if (!ctx.allowWrites) return;
 
   server.registerTool(
