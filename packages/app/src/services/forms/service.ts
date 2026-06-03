@@ -6,13 +6,21 @@ import {
   nip44SelfEncrypt,
   nip44SelfDecrypt,
   LocalSigner,
+  wrapManyEvents,
+  createRef,
 } from "@formstr/core";
 import type { SubscriptionHandle, NostrSigner } from "@formstr/core";
 import type { EventTemplate, Event, Filter } from "nostr-tools";
 import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
 import { bytesToHex } from "nostr-tools/utils";
 
-import { encodeFormKeys, decodeFormKeys, makeViewKeySigner, makeSigningKeySigner } from "./keys";
+import {
+  encodeFormKeys,
+  decodeFormKeys,
+  makeViewKeySigner,
+  makeSigningKeySigner,
+  hexToBytes,
+} from "./keys";
 import {
   FORM_KINDS,
   type FormField,
@@ -51,11 +59,7 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
   ];
   if (params.settings) baseTags.push(["settings", JSON.stringify(params.settings)]);
   for (const field of params.fields) {
-    const options = field.options
-      ? JSON.stringify(field.options.map((o) => [o.id, o.label]))
-      : "[]";
-    const config = JSON.stringify({ required: field.required, placeholder: field.placeholder });
-    baseTags.push(["field", field.id, field.type, field.label, options, config]);
+    baseTags.push(buildFieldTag(field));
   }
 
   if (params.encrypt) {
@@ -271,7 +275,10 @@ export async function fetchResponses(
  * answers first, so it can return a stale list. Collecting from all relays and taking
  * the highest `created_at` avoids that.
  */
-async function fetchLatestMyFormsEvent(relays: string[], userPubkey: string): Promise<Event | null> {
+async function fetchLatestMyFormsEvent(
+  relays: string[],
+  userPubkey: string,
+): Promise<Event | null> {
   const events = await nostrRuntime.querySync(relays, {
     kinds: [FORM_KINDS.myFormsList],
     authors: [userPubkey],
@@ -483,7 +490,169 @@ export async function deleteForm(formId: string, formPubkey: string): Promise<vo
   await nostrRuntime.publish(relays, signed);
 }
 
+// ── Update Form ─────────────────────────────────────────
+
+export interface UpdateFormParams {
+  formId: string;
+  /** Form author pubkey (the user's pubkey for public forms; the signing pubkey for encrypted). */
+  pubkey: string;
+  name?: string;
+  fields?: FormField[];
+  settings?: FormSettings;
+}
+
+/**
+ * Republish a form's kind-30168 (a replaceable event keyed by `d`=formId), merging the
+ * provided changes over the current definition. Public forms are signed with the user's
+ * key; encrypted forms re-encrypt fields to the view key and are signed with the form's
+ * signing key (looked up from the user's my-forms list — fails if the user isn't the owner).
+ */
+export async function updateForm(params: UpdateFormParams): Promise<void> {
+  const relays = relayManager.getRelaysForModule("forms");
+  const existing = await fetchForm(params.pubkey, params.formId);
+  if (!existing) throw new Error(`Form not found: ${params.formId}`);
+
+  const name = params.name ?? existing.name;
+  const settings: FormSettings = { ...existing.settings, ...params.settings };
+  const fields = params.fields ?? existing.fields;
+
+  if (existing.isEncrypted) {
+    const summary = (await fetchMyForms()).find(
+      (f) => f.id === params.formId && f.pubkey === params.pubkey,
+    );
+    if (!summary?.signingKey || !summary?.viewKey) {
+      throw new Error("Not the form owner or signing key unavailable");
+    }
+    const signingKeyBytes = hexToBytes(summary.signingKey);
+    const formSigner = makeSigningKeySigner(summary.signingKey);
+    const viewPubkey = getPublicKey(hexToBytes(summary.viewKey));
+    const fieldTags = fields.map(buildFieldTag);
+    const content = await formSigner.nip44Encrypt!(viewPubkey, JSON.stringify(fieldTags));
+
+    const tags: string[][] = [
+      ["d", params.formId],
+      ["name", name],
+      ["encryption", "view-key"],
+      ["settings", JSON.stringify(settings)],
+    ];
+    const event: EventTemplate = {
+      kind: FORM_KINDS.template,
+      created_at: Math.floor(Date.now() / 1000),
+      tags,
+      content,
+    };
+    await nostrRuntime.publish(relays, finalizeEvent(event, signingKeyBytes));
+    return;
+  }
+
+  // Public form — signed with the user's own key.
+  const signer = await signerManager.getSigner();
+  const tags: string[][] = [
+    ["d", params.formId],
+    ["name", name],
+    ["settings", JSON.stringify(settings)],
+  ];
+  for (const field of fields) tags.push(buildFieldTag(field));
+  if (settings.publicForm) tags.push(["t", "public"]);
+  const event: EventTemplate = {
+    kind: FORM_KINDS.template,
+    created_at: Math.floor(Date.now() / 1000),
+    tags,
+    content: "",
+  };
+  await nostrRuntime.publish(relays, await signer.signEvent(event));
+}
+
+// ── Share Form (NIP-59 view-key gift-wrap) ──────────────
+
+export interface ShareFormParams {
+  formId: string;
+  formPubkey: string;
+  /** Hex pubkeys of collaborators who should be able to decrypt the form. */
+  recipients: string[];
+}
+
+export interface ShareFormResult {
+  published: number;
+  /** Recipients whose gift-wrap failed to publish. */
+  failed: string[];
+}
+
+/**
+ * Distribute an encrypted form's **view key** to collaborators via NIP-59 gift-wrap.
+ * Each recipient receives a kind-1059 wrap carrying a rumor with the form coordinate and
+ * view key, so their client can decrypt the fields. Only the view key is shared — never
+ * the signing key (collaborators can read, not edit/delete).
+ */
+export async function shareForm(params: ShareFormParams): Promise<ShareFormResult> {
+  const relays = relayManager.getRelaysForModule("forms");
+  const summary = (await fetchMyForms()).find(
+    (f) => f.id === params.formId && f.pubkey === params.formPubkey,
+  );
+  if (!summary?.viewKey) {
+    throw new Error("Not the form owner or view key unavailable");
+  }
+
+  const coordinate = `${FORM_KINDS.template}:${params.formPubkey}:${params.formId}`;
+  const naddr = createRef("forms", FORM_KINDS.template, params.formPubkey, params.formId);
+  const signer = await signerManager.getSigner();
+  const rumor = {
+    kind: 14,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ["a", coordinate],
+      ["viewKey", summary.viewKey],
+    ],
+    content: `Formstr form view key for ${naddr}`,
+  };
+
+  const failed: string[] = [];
+  let published = 0;
+  for (const recipient of params.recipients) {
+    try {
+      const wraps = await wrapManyEvents(rumor, signer, [recipient]);
+      for (const wrap of wraps) await nostrRuntime.publish(relays, wrap);
+      published++;
+    } catch {
+      failed.push(recipient);
+    }
+  }
+  return { published, failed };
+}
+
+// ── Import Form (by ref → my-forms list) ────────────────
+
+/** Resolve a public form by author+id into a FormSummary (read-only; carries no keys). */
+export async function fetchFormSummaryFromRef(
+  pubkey: string,
+  formId: string,
+): Promise<FormSummary | null> {
+  const tpl = await fetchForm(pubkey, formId);
+  if (!tpl) return null;
+  return {
+    id: tpl.id,
+    name: tpl.name,
+    pubkey: tpl.pubkey,
+    createdAt: tpl.createdAt,
+    isEncrypted: tpl.isEncrypted,
+  };
+}
+
+/** Append an externally-discovered form to the user's kind-14083 list (idempotent). */
+export async function importForm(summary: FormSummary): Promise<void> {
+  const current = await fetchMyForms();
+  if (current.some((f) => f.id === summary.id && f.pubkey === summary.pubkey)) return;
+  await saveToMyForms([...current, summary]);
+}
+
 // ── Helpers ─────────────────────────────────────────────
+
+/** Build a kind-30168 `field` tag: ["field", id, type, label, optionsJSON, configJSON]. */
+function buildFieldTag(field: FormField): string[] {
+  const options = field.options ? JSON.stringify(field.options.map((o) => [o.id, o.label])) : "[]";
+  const config = JSON.stringify({ required: field.required, placeholder: field.placeholder });
+  return ["field", field.id, field.type, field.label, options, config];
+}
 
 function parseFormEvent(event: Event): FormTemplate {
   const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
