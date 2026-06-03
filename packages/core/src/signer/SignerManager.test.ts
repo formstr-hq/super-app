@@ -32,6 +32,25 @@ describe("SignerManager", () => {
     });
   });
 
+  it("loginWithNip46 sets signer + pubkey + method from the injected builder", async () => {
+    const mgr = new SignerManager();
+    const fakeSigner = {
+      getPublicKey: async () => "remotePk",
+      signEvent: async () => ({}) as any,
+    } as any;
+    const build = vi.fn().mockResolvedValue(fakeSigner);
+
+    await mgr.loginWithNip46(
+      { clientSecretKey: "00".repeat(32), remoteSignerPubkey: "rs", relays: ["wss://r"] },
+      build,
+    );
+
+    expect(build).toHaveBeenCalledOnce();
+    expect(mgr.getState().method).toBe("nip46");
+    expect(mgr.getPublicKey()).toBe("remotePk");
+    expect(mgr.getSignerIfAvailable()).toBe(fakeSigner);
+  });
+
   it("loginWithNsec persists method+pubkey and notifies observers", async () => {
     const mgr = new SignerManager();
     const observer = vi.fn();
