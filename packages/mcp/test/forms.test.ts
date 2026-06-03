@@ -3,13 +3,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@formstr/app/services", () => ({
   forms: {
     createForm: vi.fn(),
-    fetchMyForms: vi.fn(),
+    fetchMyForms: vi.fn().mockResolvedValue([]),
     fetchForm: vi.fn(),
-    fetchResponses: vi.fn(),
+    fetchResponses: vi.fn().mockResolvedValue([]),
     deleteForm: vi.fn(),
     submitResponse: vi.fn(),
+    updateForm: vi.fn(),
+    shareForm: vi.fn().mockResolvedValue({ published: 0, failed: [] }),
+    fetchFormSummaryFromRef: vi.fn(),
+    importForm: vi.fn(),
   },
-  FORM_KINDS: { template: 30168, response: 30169, myFormsList: 14083 },
+  FORM_KINDS: { template: 30168, response: 1069, myFormsList: 14083 },
+  AnswerType: { shortText: "shortText" },
 }));
 
 import { forms } from "@formstr/app/services";

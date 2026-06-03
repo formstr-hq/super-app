@@ -27,13 +27,18 @@ describe("smoke: stdio handshake", () => {
     const names = await toolNames([]);
     expect(names.has("list_forms")).toBe(true);
     expect(names.has("create_form")).toBe(true);
+    expect(names.has("import_form_from_naddr")).toBe(true); // writes only to your own list
     expect(names.has("delete_form")).toBe(false);
     expect(names.has("submit_form_response")).toBe(false);
+    expect(names.has("update_form")).toBe(false);
+    expect(names.has("share_form")).toBe(false);
   }, 30_000);
 
   it("--allow-writes exposes gated tools", async () => {
     const names = await toolNames(["--allow-writes"]);
     expect(names.has("delete_form")).toBe(true);
+    expect(names.has("update_form")).toBe(true);
+    expect(names.has("share_form")).toBe(true);
     expect(names.has("rsvp_event")).toBe(true);
     expect(names.has("submit_poll_response")).toBe(true);
   }, 30_000);

@@ -22,9 +22,38 @@ describe("shared transforms", () => {
       { label: "Color", type: "radioButton", options: ["Red", "Blue"] },
     ]);
     expect(fields[0]).toMatchObject({ id: "f0", label: "Name", required: true });
+    expect(fields[1].type).toBe("radioButton");
     expect(fields[1].options).toEqual([
       { id: "o0", label: "Red" },
       { id: "o1", label: "Blue" },
     ]);
+  });
+
+  it("supports the full field set: object options, grids, validation, file config", () => {
+    const [grid, file] = aiFieldsToFormFields([
+      {
+        label: "Rate",
+        type: "multiChoiceGrid",
+        gridRows: ["Speed", "Price"],
+        gridCols: ["Bad", "Good"],
+        options: [{ id: "x", label: "Custom" }],
+      },
+      {
+        label: "Upload",
+        type: "fileUpload",
+        validation: { required: true, max: 5 },
+        fileConfig: { maxBytes: 1024, mimeTypes: ["image/"] },
+      },
+    ]);
+    expect(grid.type).toBe("multiChoiceGrid");
+    expect(grid.gridRows).toEqual(["Speed", "Price"]);
+    expect(grid.options).toEqual([{ id: "x", label: "Custom" }]);
+    expect(file.type).toBe("fileUpload");
+    expect(file.validation).toEqual({ required: true, max: 5 });
+    expect(file.fileConfig).toEqual({ maxBytes: 1024, mimeTypes: ["image/"] });
+  });
+
+  it("coerces unknown field types to shortText", () => {
+    expect(aiFieldsToFormFields([{ label: "x", type: "bogus" }])[0].type).toBe("shortText");
   });
 });
