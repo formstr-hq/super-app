@@ -1,21 +1,44 @@
 {
   "name": "@formstr/mcp",
-  "version": "0.0.1",
-  "private": true,
+  "version": "2.0.0",
+  "description": "Model Context Protocol server for the Formstr super-app — drive Nostr forms (and more) from any MCP host, with secure keychain/NIP-46 login.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "nostr",
+    "formstr",
+    "forms",
+    "ai-tools"
+  ],
+  "homepage": "https://github.com/formstr-hq/super-app/tree/main/packages/mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/formstr-hq/super-app.git",
+    "directory": "packages/mcp"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "formstr-mcp": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "test": "vitest run",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "@formstr/app": "workspace:*",

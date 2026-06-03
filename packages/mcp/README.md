@@ -1,81 +1,120 @@
 # @formstr/mcp
 
-A standalone Model Context Protocol (MCP) server that exposes the Formstr super-app
-(forms, calendar, pages, drive, polls) to any MCP host — Claude Code/Desktop, Cursor,
-Odysseus, and others. It builds on `@formstr/core` and the super-app's service layer and
-talks to Nostr relays directly. Transport: stdio.
+A standalone [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that
+exposes the **Formstr** super-app (forms, calendar, pages, drive, polls) to any MCP host —
+Claude Code/Desktop, Cursor, and others. It builds on `@formstr/core` and the super-app's
+service layer and talks to Nostr relays directly. Transport: **stdio**.
+
+v2 adds a **secure login flow** (your key lives in the OS keychain or a remote NIP-46
+signer — never in your host config or the chat) and the **complete forms tool surface**.
 
 ## Quick start
 
 ```bash
-pnpm --filter @formstr/mcp build
-node packages/mcp/dist/index.js --nsec nsec1...                  # read + create tools
-node packages/mcp/dist/index.js --nsec nsec1... --allow-writes   # + destructive/outward tools
+# 1. Sign in once (opens a browser; key is stored in your OS keychain)
+npx -y @formstr/mcp login
+
+# 2. Point your MCP host at the server (see "Host configuration")
+#    No key in the config — it's read from the keychain at startup.
 ```
 
-Configuration precedence: CLI flag > env var > `~/.config/formstr-mcp/config.json`
-(`{ "nsec": "...", "relays": ["wss://..."] }`, recommend `chmod 0600`).
+Subcommands: `formstr-mcp login` · `formstr-mcp whoami` · `formstr-mcp logout` ·
+`formstr-mcp` (run the stdio server, the default).
 
-| Variable                    | Meaning                                   |
-| --------------------------- | ----------------------------------------- |
-| `FORMSTR_NSEC`              | signing key (required)                    |
-| `FORMSTR_RELAYS`            | comma-separated relay override (optional) |
-| `FORMSTR_ALLOW_WRITES=true` | enable gated tools (optional)             |
+## Sign-in
 
-CLI flags: `--nsec <nsec>`, `--relays <wss://a,wss://b>`, `--allow-writes`.
+`formstr-mcp login` starts a one-shot localhost page (it also prints the URL for
+headless/SSH use) offering the same choices as the super-app:
+
+| Method                      | What happens                                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Paste nsec**              | Validated locally; the key is stored in your OS keychain.                                                                      |
+| **Create guest**            | A fresh Nostr key is generated and stored in your keychain.                                                                    |
+| **Connect signer (NIP-46)** | Scan/paste a `nostrconnect://` URI in Amber / nsec.app / nsecbunker. Your key stays there; the MCP keeps only a session token. |
+
+**Where the key lives:** the OS keychain (macOS Keychain / Windows Credential Manager /
+Linux Secret Service via `@napi-rs/keyring`). On hosts without a keychain (e.g. headless
+Linux), set `FORMSTR_MCP_PASSPHRASE` to use an AES-256-GCM encrypted file at
+`~/.config/formstr-mcp/credentials.enc` (mode `0600`). Multiple identities are supported;
+select one with `--account <pubkey>`.
+
+**The agent never sees your key.** No tool returns key material, and login happens
+out-of-band, so secrets never enter the chat transcript.
 
 ## Host configuration
+
+After `login`, no key belongs in the config:
 
 ```json
 {
   "mcpServers": {
     "formstr": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/super-app/packages/mcp/dist/index.js"],
-      "env": { "FORMSTR_NSEC": "nsec1..." }
+      "command": "npx",
+      "args": ["-y", "@formstr/mcp"]
     }
   }
 }
 ```
 
-Add `"--allow-writes"` to `args` to enable the gated tools.
+Add `"--allow-writes"` to `args` to enable the gated (destructive/outward) tools, and
+`"--relays", "wss://a,wss://b"` to override relays.
+
+## Headless / CI
+
+For unattended use where no keychain or browser is available, provide a plaintext key.
+The server **prints a prominent security warning** when you do this — prefer `login`.
+
+| Variable                    | Meaning                                             |
+| --------------------------- | --------------------------------------------------- |
+| `FORMSTR_NSEC`              | signing key (plaintext)                             |
+| `FORMSTR_RELAYS`            | comma-separated relay override (optional)           |
+| `FORMSTR_ALLOW_WRITES=true` | enable gated tools (optional)                       |
+| `FORMSTR_MCP_PASSPHRASE`    | passphrase for the encrypted-file keystore fallback |
+
+CLI flags: `--nsec <nsec>`, `--relays <wss://a,wss://b>`, `--allow-writes`, `--account <pubkey>`.
+Precedence: plaintext flag/env/`config.json` → keychain → "run `formstr-mcp login`".
+
+## Forms tools
+
+The forms module is fully implemented — the MCP can create **every** field type the
+service supports (more than the super-app builder UI currently exposes).
+
+**Read (always on)**
+
+- `list_forms` — your forms with ids, encryption status, and naddr coordinates.
+- `get_form` — a form's fields, settings, and encryption status (pass `viewKey` for encrypted forms).
+- `fetch_form_responses` — submissions with responder npub and per-field answers.
+
+**Create / import (always on)**
+
+- `create_form` — name, description, fields (short/paragraph/choice/dropdown/number/date/
+  time/grid/file/signature/section), per-field `validation`, title/cover images, thank-you
+  text, `publicForm`, `encrypted`, `allowedResponders`, `collaborators`, `notifyNpubs`.
+- `import_form_from_naddr` — add a form by `naddr1…` / `pubkey:formId` to your forms list.
+
+**Gated (require `--allow-writes` + `confirm: true`)**
+
+- `update_form` — republish a form's name/fields/description.
+- `share_form` — gift-wrap (NIP-59) an encrypted form's view key to collaborators.
+- `delete_form` — publish a NIP-09 deletion.
+- `submit_form_response` — submit a response on your identity.
+
+Other modules (calendar, pages, polls, drive) expose the v1 read/create tools and gated
+actions; see the source under `src/tools/`.
 
 ## Safety model
 
 Destructive / outward tools are **not registered** unless `--allow-writes` (or
 `FORMSTR_ALLOW_WRITES=true`) is set, AND each such call additionally requires
-`"confirm": true` in its arguments. Without `confirm`, the tool returns a structured
-"confirmation required" message naming the irreversible effect instead of executing.
-
-## Tools
-
-**Read (always on):** `list_forms`, `get_form`, `fetch_form_responses`, `list_pages`,
-`list_polls`, `get_poll`, `fetch_poll_results`, `browse_files`, `list_calendar_events`.
-
-**Create (always on):** `create_form`, `create_page`, `save_private_note`, `create_poll`,
-`create_calendar_event` (public events).
-
-**Gated (require `--allow-writes` + `confirm: true`):** `delete_form`,
-`delete_calendar_event`, `submit_form_response`, `submit_poll_response`, `rsvp_event`.
-
-### Deferred (not implemented in v1)
-
-`update_form`, `update_event`, `share_form`, `share_page`, `import_form_from_naddr`,
-`attach_form_to_event`, **private (encrypted) calendar events** (need a calendar list),
-and **drive uploads/downloads/deletes** (`browse_files` is read-only in v1). These need
-store-level orchestration (gift-wrap key distribution, calendar lists, Blossom uploads)
-not yet exposed by the service layer.
-
-## Security
-
-The server holds your `nsec` in-process on your own machine. Treat the key as a
-local-trust secret — prefer env injection or a `0600` config file. A NIP-46 "bunker"
-mode (no key in the server process) is the planned sovereign upgrade. The server never
-exposes per-file drive decryption keys.
+`"confirm": true`. Without `confirm`, the tool returns a structured "confirmation
+required" message naming the irreversible effect instead of executing. `share_form`
+distributes only the view key (read access) — never the signing key. Logging goes to
+stderr (stdout is the MCP transport).
 
 ## Tests
 
 ```bash
 pnpm --filter @formstr/mcp test       # unit + stdio smoke test
 pnpm --filter @formstr/mcp typecheck
+pnpm --filter @formstr/mcp build      # single-file CJS bundle (keychain dep stays external)
 ```
