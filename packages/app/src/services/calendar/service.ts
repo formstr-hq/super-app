@@ -9,6 +9,7 @@ import {
 import type { SubscriptionHandle } from "@formstr/core";
 import type { EventTemplate, Event, Filter } from "nostr-tools";
 
+import { extractInvitationFromWrap, type InvitationRumor } from "./rsvp";
 import {
   CALENDAR_KINDS,
   type CalendarEvent,
@@ -405,4 +406,36 @@ export async function parseCalendarEvent(event: Event): Promise<CalendarEvent | 
     registrationFormRef,
     event,
   };
+}
+
+export interface InvitationWithEvent extends InvitationRumor {
+  event?: CalendarEvent;
+}
+
+/**
+ * Stateless fetch of NIP-59 calendar invitations addressed to the current user.
+ * Mirrors the live `invitationsStore` subscription but as a one-shot query so
+ * non-UI callers (e.g. the MCP server) can list invitations.
+ */
+export async function fetchInvitationsSync(): Promise<InvitationWithEvent[]> {
+  const signer = await signerManager.getSigner();
+  const pubkey = await signer.getPublicKey();
+  const relays = relayManager.getRelaysForModule("calendar");
+
+  const wraps = await nostrRuntime.querySync(relays, {
+    kinds: [CALENDAR_KINDS.giftWrap, CALENDAR_KINDS.rsvpGiftWrap],
+    "#p": [pubkey],
+  } as Filter);
+
+  const seen = new Set<string>();
+  const out: InvitationWithEvent[] = [];
+  for (const wrap of wraps) {
+    if (seen.has(wrap.id)) continue;
+    seen.add(wrap.id);
+    const invitation = await extractInvitationFromWrap(wrap);
+    if (!invitation) continue;
+    const event = await fetchCalendarEventByCoordinate(invitation.eventCoordinate);
+    out.push({ ...invitation, event: event ?? undefined });
+  }
+  return out;
 }

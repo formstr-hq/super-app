@@ -4,6 +4,7 @@ import {
   nip44SelfDecrypt,
   nip44SelfEncrypt,
   wrapEvent,
+  unwrapEvent,
 } from "@formstr/core";
 import type { Event } from "nostr-tools";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -24,6 +25,7 @@ import {
   fetchCalendarEventByCoordinate,
   fetchCalendarEventsSync,
   fetchCalendarLists,
+  fetchInvitationsSync,
   publishPrivateCalendarEvent,
   publishPublicCalendarEvent,
   updateCalendarList,
@@ -344,5 +346,48 @@ describe("fetchCalendarLists", () => {
     (nip44SelfDecrypt as any).mockRejectedValue(new Error("decrypt fail"));
     const lists = await fetchCalendarLists();
     expect(lists).toHaveLength(0);
+  });
+});
+
+describe("fetchInvitationsSync", () => {
+  it("unwraps gift-wraps, resolves the referenced event, and dedupes by wrapId", async () => {
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([
+        {
+          id: "w1",
+          pubkey: "sender",
+          kind: CALENDAR_KINDS.giftWrap,
+          created_at: 5,
+          sig: "s",
+          content: "x",
+          tags: [],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "eid",
+          pubkey: "author",
+          kind: CALENDAR_KINDS.privateEvent,
+          created_at: 5,
+          sig: "s",
+          content: "",
+          tags: [
+            ["d", "abc12345"],
+            ["title", "Invited Event"],
+            ["start", "1700000000"],
+            ["end", "1700003600"],
+          ],
+        },
+      ]);
+    (unwrapEvent as any).mockResolvedValue({
+      kind: CALENDAR_KINDS.rumor,
+      pubkey: "author",
+      content: JSON.stringify({ eventId: "abc12345" }),
+    });
+
+    const invites = await fetchInvitationsSync();
+    expect(invites).toHaveLength(1);
+    expect(invites[0].eventCoordinate).toBe("32678:author:abc12345");
+    expect(invites[0].event?.title).toBe("Invited Event");
   });
 });
