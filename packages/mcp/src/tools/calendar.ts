@@ -132,6 +132,38 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
     },
   );
 
+  server.registerTool(
+    "fetch_event_rsvps",
+    {
+      description: "List public RSVPs for an event coordinate kind:pubkey:d.",
+      inputSchema: { coordinate: z.string() },
+    },
+    async ({ coordinate }) => {
+      const rsvps = await calendarRsvp.fetchRsvpsForEvent(coordinate);
+      return ok(`Found ${rsvps.length} RSVP(s).`, {
+        rsvps: rsvps.map((r) => ({ pubkey: r.pubkey, status: r.status })),
+      });
+    },
+  );
+
+  server.registerTool(
+    "list_invitations",
+    {
+      description: "List calendar invitations received via NIP-59 gift-wrap.",
+      inputSchema: {},
+    },
+    async () => {
+      const invitations = await calendar.fetchInvitationsSync();
+      return ok(`Found ${invitations.length} invitation(s).`, {
+        invitations: invitations.map((i) => ({
+          coordinate: i.eventCoordinate,
+          title: i.event?.title ?? null,
+          begin: i.event?.begin ?? null,
+        })),
+      });
+    },
+  );
+
   // Read tools and constructive creates (above) are always available; only
   // destructive/outward actions below are gated behind --allow-writes.
   if (!ctx.allowWrites) return;

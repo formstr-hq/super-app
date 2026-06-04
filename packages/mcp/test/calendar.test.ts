@@ -128,6 +128,36 @@ describe("calendar tools", () => {
     expect(created.isError).toBeFalsy();
   });
 
+  it("fetch_event_rsvps returns public RSVPs", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    (calendarRsvp.fetchRsvpsForEvent as any).mockResolvedValue([
+      { pubkey: "p1", status: "accepted" },
+    ]);
+    const res = await tools.get("fetch_event_rsvps")!.handler({ coordinate: "31923:p:d" });
+    expect(res.structuredContent.rsvps).toEqual([{ pubkey: "p1", status: "accepted" }]);
+  });
+
+  it("list_invitations summarizes received invitations", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    (calendar.fetchInvitationsSync as any).mockResolvedValue([
+      {
+        wrapId: "w1",
+        eventCoordinate: "32678:a:d",
+        authorPubkey: "a",
+        kind: 32678,
+        receivedAt: 0,
+        event: { title: "P", begin: 123 },
+      },
+    ]);
+    const res = await tools.get("list_invitations")!.handler({});
+    expect(res.structuredContent.invitations[0]).toMatchObject({
+      coordinate: "32678:a:d",
+      title: "P",
+    });
+  });
+
   it("update_calendar_event is gated and requires confirm, then republishes", async () => {
     const ro = fakeServer();
     registerCalendar(ro.server, { allowWrites: false });
