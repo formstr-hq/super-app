@@ -105,6 +105,33 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
     },
   );
 
+  server.registerTool(
+    "list_calendars",
+    { description: "List the user's calendar lists.", inputSchema: {} },
+    async () => {
+      const lists = await calendar.fetchCalendarLists();
+      return ok(`Found ${lists.length} calendar(s).`, {
+        calendars: lists.map((c) => ({ id: c.id, title: c.title, color: c.color })),
+      });
+    },
+  );
+
+  server.registerTool(
+    "create_calendar",
+    {
+      description: "Create a calendar list with a title and optional hex color.",
+      inputSchema: {
+        title: z.string(),
+        color: z.string().optional(),
+        description: z.string().optional(),
+      },
+    },
+    async ({ title, color, description }) => {
+      const list = await calendar.createCalendarList(title, color ?? "#334155", description ?? "");
+      return ok(`Created calendar "${title}".`, { id: list.id });
+    },
+  );
+
   // Read tools and constructive creates (above) are always available; only
   // destructive/outward actions below are gated behind --allow-writes.
   if (!ctx.allowWrites) return;

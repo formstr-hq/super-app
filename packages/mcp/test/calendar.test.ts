@@ -113,6 +113,21 @@ describe("calendar tools", () => {
     expect(hit.isError).toBeFalsy();
   });
 
+  it("list_calendars and create_calendar are available without writes", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    (calendar.fetchCalendarLists as any).mockResolvedValue([
+      { id: "c1", title: "Work", color: "#fff" },
+    ]);
+    const list = await tools.get("list_calendars")!.handler({});
+    expect(list.structuredContent.calendars).toHaveLength(1);
+
+    (calendar.createCalendarList as any).mockResolvedValue({ id: "c2" });
+    const created = await tools.get("create_calendar")!.handler({ title: "Personal" });
+    expect(calendar.createCalendarList).toHaveBeenCalledWith("Personal", "#334155", "");
+    expect(created.isError).toBeFalsy();
+  });
+
   it("update_calendar_event is gated and requires confirm, then republishes", async () => {
     const ro = fakeServer();
     registerCalendar(ro.server, { allowWrites: false });
