@@ -1,6 +1,6 @@
-import { Box, Button, Checkbox, Divider, Typography } from "@mui/material";
+import { Box, Checkbox, Divider, IconButton, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { Plus } from "lucide-react";
+import { Plus, Settings2 } from "lucide-react";
 
 import type { CalendarList } from "../../services/calendar";
 
@@ -9,6 +9,8 @@ interface CalendarSidebarProps {
   visibleCalendarIds: Set<string>;
   onToggleCalendar: (id: string) => void;
   onNewCalendar: () => void;
+  /** Per-row edit control; the gear only renders when provided. */
+  onEditCalendar?: (calendar: CalendarList) => void;
   showAllPublic: boolean;
   onToggleShowAllPublic: (value: boolean) => void;
 }
@@ -18,6 +20,7 @@ export function CalendarSidebar({
   visibleCalendarIds,
   onToggleCalendar,
   onNewCalendar,
+  onEditCalendar,
   showAllPublic,
   onToggleShowAllPublic,
 }: CalendarSidebarProps) {
@@ -34,67 +37,99 @@ export function CalendarSidebar({
         display: { xs: "none", sm: "block" },
       }}
     >
-      <Typography
-        variant="caption"
+      <Box
         sx={{
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          color: "text.secondary",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
           px: 0.5,
           mb: 1,
-          display: "block",
         }}
       >
-        My Calendars
-      </Typography>
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            color: "text.secondary",
+          }}
+        >
+          My Calendars
+        </Typography>
+        <IconButton
+          size="small"
+          aria-label="New calendar"
+          onClick={onNewCalendar}
+          sx={{ color: "text.secondary", p: 0.25 }}
+        >
+          <Plus size={15} />
+        </IconButton>
+      </Box>
 
       <Box
         sx={{
-          maxHeight: 256,
+          maxHeight: 280,
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
           gap: 0.25,
-          mb: 1,
         }}
       >
-        {calendars.map((cal) => (
-          <Box
-            key={cal.id}
-            component="label"
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              px: 0.5,
-              py: 0.75,
-              borderRadius: 1,
-              cursor: "pointer",
-              "&:hover": { bgcolor: "action.hover" },
-            }}
-          >
-            <Checkbox
-              size="small"
-              checked={visibleCalendarIds.has(cal.id)}
-              onChange={() => onToggleCalendar(cal.id)}
-              sx={{ p: 0 }}
-            />
+        {calendars.map((cal) => {
+          const visible = visibleCalendarIds.has(cal.id);
+          return (
             <Box
-              component="span"
+              key={cal.id}
+              onClick={() => onToggleCalendar(cal.id)}
               sx={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                flexShrink: 0,
-                bgcolor: cal.color || "primary.main",
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                px: 0.5,
+                py: 0.75,
+                borderRadius: 1,
+                cursor: "pointer",
+                "&:hover": { bgcolor: "action.hover" },
+                "&:hover .cal-edit": { opacity: 1 },
               }}
-            />
-            <Typography variant="caption" noWrap>
-              {cal.title || "Untitled"}
-            </Typography>
-          </Box>
-        ))}
+            >
+              <Box
+                component="span"
+                sx={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  flexShrink: 0,
+                  bgcolor: visible ? cal.color || "primary.main" : "transparent",
+                  border: `2px solid ${cal.color || theme.palette.text.secondary}`,
+                  boxSizing: "border-box",
+                }}
+              />
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{ flex: 1, color: visible ? "text.primary" : "text.secondary" }}
+              >
+                {cal.title || "Untitled"}
+              </Typography>
+              {onEditCalendar && (
+                <IconButton
+                  className="cal-edit"
+                  size="small"
+                  aria-label={`Edit ${cal.title || "Untitled"}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditCalendar(cal);
+                  }}
+                  sx={{ p: 0.25, opacity: 0, color: "text.secondary" }}
+                >
+                  <Settings2 size={13} />
+                </IconButton>
+              )}
+            </Box>
+          );
+        })}
         {calendars.length === 0 && (
           <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
             No calendars yet
@@ -102,23 +137,7 @@ export function CalendarSidebar({
         )}
       </Box>
 
-      <Button
-        size="small"
-        variant="text"
-        startIcon={<Plus size={12} />}
-        onClick={onNewCalendar}
-        sx={{
-          color: "text.secondary",
-          fontSize: 12,
-          justifyContent: "flex-start",
-          px: 0.5,
-          mb: 0.5,
-        }}
-      >
-        New Calendar
-      </Button>
-
-      <Divider sx={{ my: 0.75 }} />
+      <Divider sx={{ my: 1 }} />
 
       <Box
         component="label"
@@ -139,7 +158,7 @@ export function CalendarSidebar({
           onChange={(e) => onToggleShowAllPublic(e.target.checked)}
           sx={{ p: 0 }}
         />
-        <Typography variant="caption">Show All Public</Typography>
+        <Typography variant="caption">Show all public</Typography>
       </Box>
     </Box>
   );
