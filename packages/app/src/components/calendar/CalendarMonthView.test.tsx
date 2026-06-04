@@ -56,4 +56,18 @@ describe("CalendarMonthView", () => {
     );
     expect(screen.getByText("Wed")).toBeInTheDocument();
   });
+
+  it("shows the event start time in the chip", () => {
+    render(
+      <CalendarMonthView
+        events={[evt()]}
+        year={2026}
+        month={5}
+        calendars={[]}
+        onEventClick={vi.fn()}
+        onDeleteEvent={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/9:00/)).toBeInTheDocument();
+  });
 });

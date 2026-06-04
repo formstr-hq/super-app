@@ -198,7 +198,11 @@ export function CalendarPage() {
         )}
 
         {viewMode === "list" && (
-          <CalendarListView events={filteredEvents} onEventClick={setDetailEvent} />
+          <CalendarListView
+            events={filteredEvents}
+            calendars={calendars}
+            onEventClick={setDetailEvent}
+          />
         )}
       </Box>
 

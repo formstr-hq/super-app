@@ -122,27 +122,37 @@ export function CalendarMonthView({
               <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
                 {dayEvents.slice(0, 2).map((evtItem) => {
                   const calColor = colorFor(evtItem);
+                  const chipTime = new Date(evtItem.begin).toLocaleTimeString(undefined, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  });
                   return (
                     <Box
                       key={`${evtItem.eventId}-${evtItem.begin}`}
                       onClick={() => onEventClick(evtItem)}
+                      style={{ borderLeft: `3px solid ${calColor}` }}
                       sx={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 0.25,
+                        gap: 0.5,
                         borderRadius: 0.5,
-                        px: 0.5,
+                        pl: 0.5,
+                        pr: 0.25,
                         py: 0.25,
                         fontSize: 10,
                         fontWeight: 500,
                         lineHeight: 1.3,
                         cursor: "pointer",
-                        bgcolor: calColor + "22",
-                        color: calColor,
+                        bgcolor: "action.hover",
+                        color: "text.primary",
+                        "&:hover": { bgcolor: "action.selected" },
                         "&:hover .evt-del": { opacity: 1 },
                       }}
                     >
                       {evtItem.isPrivate && <Lock size={8} />}
+                      <Box component="span" sx={{ color: "text.secondary", flexShrink: 0 }}>
+                        {chipTime}
+                      </Box>
                       <Box
                         component="span"
                         sx={{

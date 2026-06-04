@@ -1,16 +1,19 @@
 import { Box, Typography } from "@mui/material";
 
 import { expandEvents } from "../../lib/rrule";
-import type { CalendarEvent } from "../../services/calendar";
+import type { CalendarEvent, CalendarList } from "../../services/calendar";
 
 import { EventCard } from "./EventCard";
 
 interface CalendarListViewProps {
   events: CalendarEvent[];
   onEventClick: (event: CalendarEvent) => void;
+  calendars?: CalendarList[];
 }
 
-export function CalendarListView({ events, onEventClick }: CalendarListViewProps) {
+export function CalendarListView({ events, onEventClick, calendars = [] }: CalendarListViewProps) {
+  const colorFor = (e: CalendarEvent) =>
+    e.calendarId ? calendars.find((c) => c.id === e.calendarId)?.color : undefined;
   const now = Date.now();
   const horizon = new Date(now + 1000 * 60 * 60 * 24 * 90);
   const upcoming = expandEvents(events, new Date(now), horizon)
@@ -49,6 +52,7 @@ export function CalendarListView({ events, onEventClick }: CalendarListViewProps
               <EventCard
                 key={`${e.eventId}-${e.begin}`}
                 event={e}
+                color={colorFor(e)}
                 onClick={() => onEventClick(e)}
               />
             ))}
