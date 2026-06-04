@@ -303,16 +303,12 @@ describe("updateCalendarList", () => {
 
 describe("fetchCalendarLists", () => {
   it("decrypts and returns calendar lists", async () => {
-    const listData = {
-      id: "l1",
-      eventId: "",
-      title: "Fetched",
-      description: "",
-      color: "#aabbcc",
-      eventRefs: [],
-      createdAt: 100,
-      isVisible: true,
-    };
+    // Content is the standalone-compatible NIP tags array, not a JSON object.
+    const listTags = [
+      ["title", "Fetched"],
+      ["content", ""],
+      ["color", "#aabbcc"],
+    ];
     (nostrRuntime.querySync as any).mockResolvedValue([
       {
         id: "evt1",
@@ -324,10 +320,11 @@ describe("fetchCalendarLists", () => {
         tags: [["d", "l1"]],
       },
     ]);
-    (nip44SelfDecrypt as any).mockResolvedValue(JSON.stringify(listData));
+    (nip44SelfDecrypt as any).mockResolvedValue(JSON.stringify(listTags));
     const lists = await fetchCalendarLists();
     expect(lists).toHaveLength(1);
     expect(lists[0].title).toBe("Fetched");
+    expect(lists[0].id).toBe("l1");
     expect(lists[0].eventId).toBe("evt1");
   });
 
@@ -389,5 +386,60 @@ describe("fetchInvitationsSync", () => {
     expect(invites).toHaveLength(1);
     expect(invites[0].eventCoordinate).toBe("32678:author:abc12345");
     expect(invites[0].event?.title).toBe("Invited Event");
+  });
+});
+
+describe("calendar list CRUD interop", () => {
+  it("createCalendarList encrypts a tags ARRAY, not an object", async () => {
+    let captured = "";
+    (nip44SelfEncrypt as any).mockImplementation((_s: unknown, plain: string) => {
+      captured = plain;
+      return "enc";
+    });
+    await createCalendarList("Work", "#4285f4", "desc");
+    const parsed = JSON.parse(captured);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed).toContainEqual(["title", "Work"]);
+    expect(parsed).toContainEqual(["color", "#4285f4"]);
+  });
+
+  it("fetchCalendarLists decodes a tags-array payload", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "evt1",
+        pubkey: "aabbccdd",
+        kind: CALENDAR_KINDS.calendarList,
+        created_at: 5,
+        content: "enc",
+        tags: [["d", "cal1"]],
+        sig: "s",
+      },
+    ]);
+    (nip44SelfDecrypt as any).mockResolvedValue(
+      JSON.stringify([
+        ["title", "Team"],
+        ["color", "#0b8043"],
+      ]),
+    );
+    const lists = await fetchCalendarLists();
+    expect(lists[0].title).toBe("Team");
+    expect(lists[0].id).toBe("cal1");
+    expect(lists[0].eventId).toBe("evt1");
+  });
+
+  it("fetchCalendarLists skips a non-array (legacy object) payload without throwing", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "evt2",
+        pubkey: "aabbccdd",
+        kind: CALENDAR_KINDS.calendarList,
+        created_at: 5,
+        content: "enc",
+        tags: [["d", "cal2"]],
+        sig: "s",
+      },
+    ]);
+    (nip44SelfDecrypt as any).mockResolvedValue(JSON.stringify({ id: "cal2", title: "old" }));
+    await expect(fetchCalendarLists()).resolves.toEqual([]);
   });
 });

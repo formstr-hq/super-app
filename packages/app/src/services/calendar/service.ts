@@ -9,6 +9,7 @@ import {
 import type { SubscriptionHandle } from "@formstr/core";
 import type { EventTemplate, Event, Filter } from "nostr-tools";
 
+import { encodeCalendarList, decodeCalendarList } from "./calendarListCodec";
 import { extractInvitationFromWrap, type InvitationRumor } from "./rsvp";
 import {
   CALENDAR_KINDS,
@@ -256,7 +257,7 @@ export async function createCalendarList(
     isVisible: true,
   };
 
-  const content = await nip44SelfEncrypt(signer, JSON.stringify(calendarData));
+  const content = await nip44SelfEncrypt(signer, JSON.stringify(encodeCalendarList(calendarData)));
 
   const event: EventTemplate = {
     kind: CALENDAR_KINDS.calendarList,
@@ -275,7 +276,7 @@ export async function createCalendarList(
 export async function updateCalendarList(calendarList: CalendarList): Promise<CalendarList> {
   const signer = await signerManager.getSigner();
 
-  const content = await nip44SelfEncrypt(signer, JSON.stringify(calendarList));
+  const content = await nip44SelfEncrypt(signer, JSON.stringify(encodeCalendarList(calendarList)));
 
   const event: EventTemplate = {
     kind: CALENDAR_KINDS.calendarList,
@@ -307,9 +308,13 @@ export async function fetchCalendarLists(): Promise<CalendarList[]> {
   for (const event of events) {
     try {
       const decrypted = await nip44SelfDecrypt(signer, event.content);
-      const data = JSON.parse(decrypted) as CalendarList;
-      data.eventId = event.id;
-      lists.push(data);
+      const parsed = JSON.parse(decrypted);
+      // The standalone (and now we) store the list as a NIP tags array.
+      // Skip a legacy object payload rather than throwing — keeps a mixed
+      // account loading and matches the standalone's defensive intent.
+      if (!Array.isArray(parsed)) continue;
+      const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
+      lists.push(decodeCalendarList(parsed as string[][], dTag, event.id));
     } catch {
       // Skip corrupted entries
     }
