@@ -15,7 +15,7 @@ interface CalendarStore {
   fetchEvents(params?: calendarService.FetchCalendarEventsParams): Promise<void>;
   fetchCalendars(): Promise<void>;
   createEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
-  createCalendar(title: string, color: string): Promise<CalendarList>;
+  createCalendar(title: string, color: string, description?: string): Promise<CalendarList>;
   deleteEvent(id: string, coordinate?: string): Promise<void>;
   ingestEvent(event: CalendarEvent): void;
   updateEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
@@ -116,10 +116,10 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     }
   },
 
-  async createCalendar(title, color) {
+  async createCalendar(title, color, description) {
     set({ error: null });
     try {
-      const calendar = await calendarService.createCalendarList(title, color);
+      const calendar = await calendarService.createCalendarList(title, color, description);
       set((state) => ({ calendars: [...state.calendars, calendar] }));
       return calendar;
     } catch (e) {

@@ -10,9 +10,9 @@ import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { CalendarListView } from "../components/calendar/CalendarListView";
+import { CalendarManageDialog } from "../components/calendar/CalendarManageDialog";
 import { CalendarMonthView } from "../components/calendar/CalendarMonthView";
 import { CalendarSidebar } from "../components/calendar/CalendarSidebar";
-import { CreateCalendarDialog } from "../components/calendar/CreateCalendarDialog";
 import { EventDetailsDialog } from "../components/calendar/EventDetailsDialog";
 import { EventDialog } from "../components/calendar/EventDialog";
 import { InvitationInbox } from "../components/calendar/InvitationInbox";
@@ -209,10 +209,10 @@ export function CalendarPage() {
         calendars={calendars}
         event={editEvent}
       />
-      <CreateCalendarDialog
+      <CalendarManageDialog
         open={createCalOpen}
         onClose={() => setCreateCalOpen(false)}
-        onCreate={createCalendar}
+        onSave={({ title, color, description }) => createCalendar(title, color, description)}
       />
       <EventDetailsDialog
         event={detailEvent}

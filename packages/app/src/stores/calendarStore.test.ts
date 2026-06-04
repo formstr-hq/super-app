@@ -58,6 +58,14 @@ describe("deleteEvent", () => {
   });
 });
 
+describe("createCalendar", () => {
+  it("forwards title, color and description to the service", async () => {
+    (calendarService.createCalendarList as any).mockResolvedValue({ id: "c1", title: "Work" });
+    await useCalendarStore.getState().createCalendar("Work", "#4285f4", "desc");
+    expect(calendarService.createCalendarList).toHaveBeenCalledWith("Work", "#4285f4", "desc");
+  });
+});
+
 describe("updateEvent", () => {
   it("re-publishes with existingId and replaces the event in place", async () => {
     useCalendarStore.setState({ events: [evt({ id: "x", title: "Old" })] });
