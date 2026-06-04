@@ -17,6 +17,7 @@ import {
   type CalendarList,
   type CalendarEventDraft,
 } from "./types";
+import { generateViewKey, encryptWithViewKey } from "./viewKey";
 
 // ── Publish Public Event ────────────────────────────────
 
@@ -113,8 +114,11 @@ export async function publishPrivateCalendarEvent(
   }
   if (draft.registrationFormRef) eventData.push(["form", draft.registrationFormRef]);
 
-  // Encrypt content with self-encryption
-  const content = await nip44SelfEncrypt(signer, JSON.stringify(eventData));
+  // Encrypt the content with a per-event viewKey (shareable with invitees),
+  // matching the standalone. On edit we re-use the supplied key so existing
+  // invitees keep access; on create we mint a fresh one.
+  const viewKeyNsec = draft.viewKey ?? generateViewKey().nsec;
+  const content = await encryptWithViewKey(viewKeyNsec, JSON.stringify(eventData));
 
   const event: EventTemplate = {
     kind: CALENDAR_KINDS.privateEvent,
@@ -127,11 +131,23 @@ export async function publishPrivateCalendarEvent(
   const relays = relayManager.getRelaysForModule("calendar");
   await nostrRuntime.publish(relays, signed);
 
-  // Send gift wraps to participants
+  const relayHint = relays[0] ?? "";
+  const coordinate = `${CALENDAR_KINDS.privateEvent}:${pubkey}:${eventId}`;
+
+  // Send NIP-59 invitations: a gift-wrapped rumor carrying the addressable
+  // coordinate (+ relay hint) and the viewKey nsec, exactly as the standalone
+  // expects (see upstream getDetailsFromGiftWrap). Empty content; data is in tags.
   if (draft.participants?.length) {
     for (const participant of draft.participants) {
       const wrap = await wrapEvent(
-        { kind: CALENDAR_KINDS.rumor, content: JSON.stringify({ eventId, calendarId }), tags: [] },
+        {
+          kind: CALENDAR_KINDS.rumor,
+          content: "",
+          tags: [
+            ["a", coordinate, relayHint],
+            ["viewKey", viewKeyNsec],
+          ],
+        },
         signer,
         participant,
         CALENDAR_KINDS.giftWrap,
@@ -155,6 +171,7 @@ export async function publishPrivateCalendarEvent(
     website: draft.website ?? "",
     user: pubkey,
     isPrivate: true,
+    viewKey: viewKeyNsec,
     calendarId,
     repeat: { rrule: draft.rrule ?? null },
     startTzid: draft.startTzid,

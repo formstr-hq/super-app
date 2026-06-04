@@ -17,6 +17,11 @@ vi.mock("@formstr/core", () => ({
   nip44SelfDecrypt: vi.fn(),
   wrapEvent: vi.fn(),
   unwrapEvent: vi.fn(),
+  LocalSigner: class {
+    nip44Encrypt = vi.fn();
+    nip44Decrypt = vi.fn();
+    getPublicKey = vi.fn();
+  },
 }));
 
 import {
@@ -31,6 +36,7 @@ import {
   updateCalendarList,
 } from "./service";
 import { CALENDAR_KINDS } from "./types";
+import { generateViewKey } from "./viewKey";
 
 const mockSigner = {
   getPublicKey: vi.fn().mockResolvedValue("aabbccdd"),
@@ -176,6 +182,52 @@ describe("publishPrivateCalendarEvent — recurrence/tz/form in encrypted payloa
     expect(rows).toContainEqual(["l", "FREQ=WEEKLY", "rrule"]);
     expect(rows).toContainEqual(["start_tzid", "Asia/Tokyo"]);
     expect(rows).toContainEqual(["form", "naddr1priv"]);
+  });
+});
+
+describe("publishPrivateCalendarEvent — viewKey model (standalone interop)", () => {
+  it("gift-wraps a rumor carrying an 'a' coordinate and a 'viewKey' nsec", async () => {
+    let rumor: { content: string; tags: string[][] } | undefined;
+    (wrapEvent as any).mockImplementation((r: typeof rumor) => {
+      rumor = r;
+      return Promise.resolve({ id: "wrap", kind: CALENDAR_KINDS.giftWrap });
+    });
+    const result = await publishPrivateCalendarEvent(
+      {
+        title: "Secret",
+        description: "",
+        begin: new Date(1700000000000),
+        end: new Date(1700003600000),
+        participants: ["deadbeef"],
+        isPrivate: true,
+      },
+      "cal1",
+    );
+    const aTag = rumor!.tags.find((t) => t[0] === "a");
+    const vkTag = rumor!.tags.find((t) => t[0] === "viewKey");
+    expect(rumor!.content).toBe("");
+    expect(aTag?.[1]).toMatch(/^32678:/);
+    expect(vkTag?.[1]).toMatch(/^nsec1/);
+    // The published event exposes its viewKey so the owner's calendar list can ref it.
+    expect(result.viewKey).toBe(vkTag?.[1]);
+  });
+
+  it("reuses an existing viewKey when editing (so prior invitees keep access)", async () => {
+    (wrapEvent as any).mockResolvedValue({ id: "wrap", kind: CALENDAR_KINDS.giftWrap });
+    const existing = generateViewKey().nsec;
+    const result = await publishPrivateCalendarEvent(
+      {
+        title: "Secret",
+        description: "",
+        begin: new Date(1700000000000),
+        end: new Date(1700003600000),
+        isPrivate: true,
+        existingId: "keepid",
+        viewKey: existing,
+      },
+      "cal1",
+    );
+    expect(result.viewKey).toBe(existing);
   });
 });
 

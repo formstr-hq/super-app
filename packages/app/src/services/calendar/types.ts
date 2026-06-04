@@ -98,4 +98,9 @@ export interface CalendarEventDraft {
   website?: string;
   /** When updating, re-use the same addressable `d` identifier. */
   existingId?: string;
+  /**
+   * When editing a private event, re-use its existing viewKey (nsec) so prior
+   * invitees keep decryption access. Omitted on create → a fresh key is minted.
+   */
+  viewKey?: string;
 }
