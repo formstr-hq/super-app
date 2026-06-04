@@ -3,7 +3,7 @@ import { signerManager } from "@formstr/core";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { ok } from "../result";
+import { ok, fail } from "../result";
 import { requireConfirm } from "../safety";
 
 import type { RegisterCtx } from "./shared";
@@ -40,30 +40,67 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
     "create_calendar_event",
     {
       description:
-        "Schedule a PUBLIC calendar event. start/end are ISO 8601. (Private events are deferred in v1.)",
+        "Schedule a calendar event. start/end are ISO 8601. Set isPrivate:true for an encrypted event; participants receive NIP-59 invitations.",
       inputSchema: {
         title: z.string(),
         description: z.string().optional(),
         start: z.string(),
         end: z.string().optional(),
         location: z.string().optional(),
+        isPrivate: z.boolean().optional(),
+        participants: z.array(z.string()).optional(),
+        rrule: z.string().optional(),
+        startTzid: z.string().optional(),
+        registrationFormRef: z.string().optional(),
       },
     },
     async (args) => {
       const begin = new Date(args.start);
       const end = args.end ? new Date(args.end) : new Date(begin.getTime() + 3_600_000);
-      const event = await calendar.publishPublicCalendarEvent({
+      const draft = {
         title: args.title,
         description: args.description ?? "",
         begin,
         end,
         location: args.location,
-      });
+        participants: args.participants,
+        isPrivate: Boolean(args.isPrivate),
+        rrule: args.rrule,
+        startTzid: args.startTzid,
+        registrationFormRef: args.registrationFormRef,
+      };
+      const event = args.isPrivate
+        ? await calendar.publishPrivateCalendarEvent(draft, "default")
+        : await calendar.publishPublicCalendarEvent(draft);
       const coordinate = `${event.kind}:${event.user}:${event.id}`;
-      return ok(`Created event "${args.title}".`, {
+      return ok(`Created ${args.isPrivate ? "private" : "public"} event "${args.title}".`, {
         id: event.id,
         eventId: event.eventId,
         coordinate,
+      });
+    },
+  );
+
+  server.registerTool(
+    "get_calendar_event",
+    {
+      description: "Fetch a single calendar event by its addressable coordinate kind:pubkey:d.",
+      inputSchema: { coordinate: z.string() },
+    },
+    async ({ coordinate }) => {
+      const event = await calendar.fetchCalendarEventByCoordinate(coordinate);
+      if (!event) return fail(`No event found for ${coordinate}.`, "NOT_FOUND");
+      return ok(`Event "${event.title}".`, {
+        event: {
+          id: event.id,
+          title: event.title,
+          begin: event.begin,
+          end: event.end,
+          location: event.location,
+          isPrivate: event.isPrivate,
+          rrule: event.repeat?.rrule ?? null,
+          participants: event.participants,
+        },
       });
     },
   );

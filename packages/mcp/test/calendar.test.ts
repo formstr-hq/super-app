@@ -3,11 +3,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@formstr/app/services", () => ({
   calendar: {
     fetchCalendarEventsSync: vi.fn(),
+    fetchCalendarEventByCoordinate: vi.fn(),
     publishPublicCalendarEvent: vi.fn(),
+    publishPrivateCalendarEvent: vi.fn(),
     deleteCalendarEvent: vi.fn(),
+    fetchCalendarLists: vi.fn(),
+    createCalendarList: vi.fn(),
+    fetchInvitationsSync: vi.fn(),
   },
   calendarRsvp: {
     rsvpToEvent: vi.fn(),
+    fetchRsvpsForEvent: vi.fn(),
   },
 }));
 
@@ -71,5 +77,39 @@ describe("calendar tools", () => {
       .handler({ title: "Standup", start: "2026-06-10T10:00:00Z" });
     expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledOnce();
     expect(res.structuredContent.coordinate).toBe("31923:pk:d1");
+  });
+
+  it("create_calendar_event routes to private publish when isPrivate", async () => {
+    (calendar.publishPrivateCalendarEvent as any).mockResolvedValue({
+      id: "d9",
+      eventId: "ev9",
+      kind: 32678,
+      user: "pk",
+    });
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    await tools.get("create_calendar_event")!.handler({
+      title: "Secret",
+      start: "2026-06-10T10:00:00Z",
+      isPrivate: true,
+      participants: ["pubA"],
+    });
+    expect(calendar.publishPrivateCalendarEvent).toHaveBeenCalledOnce();
+  });
+
+  it("get_calendar_event returns the event or NOT_FOUND", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValueOnce(null);
+    const miss = await tools.get("get_calendar_event")!.handler({ coordinate: "31923:p:d" });
+    expect(miss.isError).toBe(true);
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValueOnce({
+      id: "d",
+      title: "Found",
+      kind: 31923,
+      user: "p",
+    });
+    const hit = await tools.get("get_calendar_event")!.handler({ coordinate: "31923:p:d" });
+    expect(hit.isError).toBeFalsy();
   });
 });
