@@ -16,7 +16,7 @@ interface CalendarStore {
   fetchCalendars(): Promise<void>;
   createEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
   createCalendar(title: string, color: string): Promise<CalendarList>;
-  deleteEvent(eventId: string, coordinate?: string): Promise<void>;
+  deleteEvent(id: string, coordinate?: string): Promise<void>;
   ingestEvent(event: CalendarEvent): void;
   updateEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
 }
@@ -128,10 +128,10 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     }
   },
 
-  async deleteEvent(eventId, coordinate) {
+  async deleteEvent(id, coordinate) {
     try {
-      await calendarService.deleteCalendarEvent(eventId, coordinate);
-      set((state) => ({ events: state.events.filter((e) => e.eventId !== eventId) }));
+      await calendarService.deleteCalendarEvent(id, coordinate);
+      set((state) => ({ events: state.events.filter((e) => e.id !== id) }));
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to delete event" });
     }

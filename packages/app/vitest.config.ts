@@ -14,6 +14,9 @@ export default defineConfig({
         "src/services/forms/**": {
           lines: 80,
         },
+        "src/services/calendar/**": {
+          lines: 80,
+        },
       },
     },
   },

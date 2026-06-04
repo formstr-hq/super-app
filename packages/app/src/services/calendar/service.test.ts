@@ -4,6 +4,7 @@ import {
   nip44SelfDecrypt,
   nip44SelfEncrypt,
   wrapEvent,
+  unwrapEvent,
 } from "@formstr/core";
 import type { Event } from "nostr-tools";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -24,6 +25,7 @@ import {
   fetchCalendarEventByCoordinate,
   fetchCalendarEventsSync,
   fetchCalendarLists,
+  fetchInvitationsSync,
   publishPrivateCalendarEvent,
   publishPublicCalendarEvent,
   updateCalendarList,
@@ -152,6 +154,31 @@ describe("publishPrivateCalendarEvent — gift wraps", () => {
   });
 });
 
+describe("publishPrivateCalendarEvent — recurrence/tz/form in encrypted payload", () => {
+  it("includes rrule/tzid/form rows in the data passed to nip44SelfEncrypt", async () => {
+    (wrapEvent as any).mockResolvedValue({ id: "wrap", kind: CALENDAR_KINDS.giftWrap });
+    await publishPrivateCalendarEvent(
+      {
+        title: "SecretRepeat",
+        description: "",
+        begin: new Date(1700000000000),
+        end: new Date(1700003600000),
+        isPrivate: true,
+        rrule: "FREQ=WEEKLY",
+        startTzid: "Asia/Tokyo",
+        registrationFormRef: "naddr1priv",
+      },
+      "default",
+    );
+    const encryptedArg = (nip44SelfEncrypt as any).mock.calls[0][1];
+    const rows = JSON.parse(encryptedArg) as string[][];
+    expect(rows).toContainEqual(["L", "rrule"]);
+    expect(rows).toContainEqual(["l", "FREQ=WEEKLY", "rrule"]);
+    expect(rows).toContainEqual(["start_tzid", "Asia/Tokyo"]);
+    expect(rows).toContainEqual(["form", "naddr1priv"]);
+  });
+});
+
 describe("fetchCalendarEventsSync", () => {
   it("parses returned events", async () => {
     (nostrRuntime.querySync as any).mockResolvedValue([
@@ -176,12 +203,70 @@ describe("fetchCalendarEventsSync", () => {
   });
 });
 
+describe("publishPublicCalendarEvent — recurrence/tz/form round-trip", () => {
+  it("emits rrule label-pair, start_tzid and form tags", async () => {
+    await publishPublicCalendarEvent({
+      title: "Repeat",
+      description: "",
+      begin: new Date(1700000000000),
+      end: new Date(1700003600000),
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      startTzid: "America/New_York",
+      registrationFormRef: "naddr1abc",
+    });
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.tags).toContainEqual(["L", "rrule"]);
+    expect(e.tags).toContainEqual(["l", "FREQ=WEEKLY;BYDAY=MO", "rrule"]);
+    expect(e.tags).toContainEqual(["start_tzid", "America/New_York"]);
+    expect(e.tags).toContainEqual(["form", "naddr1abc"]);
+  });
+});
+
+describe("parseCalendarEvent (via fetchCalendarEventByCoordinate) — reads recurrence/tz/form", () => {
+  it("recovers rrule, startTzid and registrationFormRef from tags", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "eid",
+        pubkey: "p",
+        kind: CALENDAR_KINDS.publicEvent,
+        created_at: 1000,
+        sig: "sig",
+        content: "",
+        tags: [
+          ["d", "abc12345"],
+          ["title", "R"],
+          ["start", "1700000000"],
+          ["end", "1700003600"],
+          ["L", "rrule"],
+          ["l", "FREQ=DAILY", "rrule"],
+          ["start_tzid", "Europe/Paris"],
+          ["form", "naddr1xyz"],
+        ],
+      } satisfies Event,
+    ]);
+    const ev = await fetchCalendarEventByCoordinate("31923:p:abc12345");
+    expect(ev!.repeat.rrule).toBe("FREQ=DAILY");
+    expect(ev!.startTzid).toBe("Europe/Paris");
+    expect(ev!.registrationFormRef).toBe("naddr1xyz");
+  });
+});
+
 describe("deleteCalendarEvent", () => {
-  it("publishes kind-5 with the a-tag coordinate", async () => {
+  it("publishes kind-5 with the a-tag coordinate and matching k-tag", async () => {
     await deleteCalendarEvent("e1", "31923:p:d1");
     const e = (nostrRuntime.publish as any).mock.calls[0][1];
     expect(e.kind).toBe(5);
     expect(e.tags).toContainEqual(["a", "31923:p:d1"]);
+    expect(e.tags).toContainEqual(["k", "31923"]);
+  });
+
+  it("derives the k-tag for private events from the coordinate kind", async () => {
+    await deleteCalendarEvent("d2", "32678:p:d2");
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.tags).toContainEqual(["k", "32678"]);
+    expect(e.tags).toContainEqual(["a", "32678:p:d2"]);
+    // d-tag id "d2" is not a 64-hex nostr id → no e-tag
+    expect(e.tags.find((t: string[]) => t[0] === "e")).toBeUndefined();
   });
 });
 
@@ -261,5 +346,48 @@ describe("fetchCalendarLists", () => {
     (nip44SelfDecrypt as any).mockRejectedValue(new Error("decrypt fail"));
     const lists = await fetchCalendarLists();
     expect(lists).toHaveLength(0);
+  });
+});
+
+describe("fetchInvitationsSync", () => {
+  it("unwraps gift-wraps, resolves the referenced event, and dedupes by wrapId", async () => {
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([
+        {
+          id: "w1",
+          pubkey: "sender",
+          kind: CALENDAR_KINDS.giftWrap,
+          created_at: 5,
+          sig: "s",
+          content: "x",
+          tags: [],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "eid",
+          pubkey: "author",
+          kind: CALENDAR_KINDS.privateEvent,
+          created_at: 5,
+          sig: "s",
+          content: "",
+          tags: [
+            ["d", "abc12345"],
+            ["title", "Invited Event"],
+            ["start", "1700000000"],
+            ["end", "1700003600"],
+          ],
+        },
+      ]);
+    (unwrapEvent as any).mockResolvedValue({
+      kind: CALENDAR_KINDS.rumor,
+      pubkey: "author",
+      content: JSON.stringify({ eventId: "abc12345" }),
+    });
+
+    const invites = await fetchInvitationsSync();
+    expect(invites).toHaveLength(1);
+    expect(invites[0].eventCoordinate).toBe("32678:author:abc12345");
+    expect(invites[0].event?.title).toBe("Invited Event");
   });
 });

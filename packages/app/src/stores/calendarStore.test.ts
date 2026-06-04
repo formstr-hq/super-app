@@ -48,6 +48,16 @@ describe("ingestEvent", () => {
   });
 });
 
+describe("deleteEvent", () => {
+  it("removes the event by id and forwards the coordinate to the service", async () => {
+    useCalendarStore.setState({ events: [evt({ id: "d1" }), evt({ id: "d2", eventId: "e2" })] });
+    await useCalendarStore.getState().deleteEvent("d1", "31923:pub:d1");
+    expect(calendarService.deleteCalendarEvent).toHaveBeenCalledWith("d1", "31923:pub:d1");
+    const ids = useCalendarStore.getState().events.map((e) => e.id);
+    expect(ids).toEqual(["d2"]);
+  });
+});
+
 describe("updateEvent", () => {
   it("re-publishes with existingId and replaces the event in place", async () => {
     useCalendarStore.setState({ events: [evt({ id: "x", title: "Old" })] });

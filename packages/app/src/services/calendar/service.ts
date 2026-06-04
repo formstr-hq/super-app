@@ -9,6 +9,7 @@ import {
 import type { SubscriptionHandle } from "@formstr/core";
 import type { EventTemplate, Event, Filter } from "nostr-tools";
 
+import { extractInvitationFromWrap, type InvitationRumor } from "./rsvp";
 import {
   CALENDAR_KINDS,
   type CalendarEvent,
@@ -40,6 +41,14 @@ export async function publishPublicCalendarEvent(
   for (const cat of draft.categories ?? []) tags.push(["t", cat]);
   for (const p of draft.participants ?? []) tags.push(["p", p]);
 
+  if (draft.startTzid) tags.push(["start_tzid", draft.startTzid]);
+  if (draft.endTzid) tags.push(["end_tzid", draft.endTzid]);
+  if (draft.rrule) {
+    tags.push(["L", "rrule"]);
+    tags.push(["l", draft.rrule, "rrule"]);
+  }
+  if (draft.registrationFormRef) tags.push(["form", draft.registrationFormRef]);
+
   const event: EventTemplate = {
     kind: CALENDAR_KINDS.publicEvent,
     created_at: Math.floor(Date.now() / 1000),
@@ -66,7 +75,10 @@ export async function publishPublicCalendarEvent(
     website: draft.website ?? "",
     user: pubkey,
     isPrivate: false,
-    repeat: { rrule: null },
+    repeat: { rrule: draft.rrule ?? null },
+    startTzid: draft.startTzid,
+    endTzid: draft.endTzid,
+    registrationFormRef: draft.registrationFormRef,
     event: signed,
   };
 }
@@ -91,6 +103,14 @@ export async function publishPrivateCalendarEvent(
   if (draft.location) eventData.push(["location", draft.location]);
   for (const cat of draft.categories ?? []) eventData.push(["t", cat]);
   for (const p of draft.participants ?? []) eventData.push(["p", p]);
+
+  if (draft.startTzid) eventData.push(["start_tzid", draft.startTzid]);
+  if (draft.endTzid) eventData.push(["end_tzid", draft.endTzid]);
+  if (draft.rrule) {
+    eventData.push(["L", "rrule"]);
+    eventData.push(["l", draft.rrule, "rrule"]);
+  }
+  if (draft.registrationFormRef) eventData.push(["form", draft.registrationFormRef]);
 
   // Encrypt content with self-encryption
   const content = await nip44SelfEncrypt(signer, JSON.stringify(eventData));
@@ -135,7 +155,10 @@ export async function publishPrivateCalendarEvent(
     user: pubkey,
     isPrivate: true,
     calendarId,
-    repeat: { rrule: null },
+    repeat: { rrule: draft.rrule ?? null },
+    startTzid: draft.startTzid,
+    endTzid: draft.endTzid,
+    registrationFormRef: draft.registrationFormRef,
     event: signed,
   };
 }
@@ -300,9 +323,13 @@ export async function fetchCalendarLists(): Promise<CalendarList[]> {
 export async function deleteCalendarEvent(eventId: string, coordinate?: string): Promise<void> {
   const signer = await signerManager.getSigner();
 
-  const tags: string[][] = [["k", String(CALENDAR_KINDS.publicEvent)]];
-  if (eventId) tags.push(["e", eventId]);
+  const kindFromCoord = coordinate ? Number(coordinate.split(":")[0]) : NaN;
+  const kind =
+    Number.isFinite(kindFromCoord) && kindFromCoord ? kindFromCoord : CALENDAR_KINDS.publicEvent;
+
+  const tags: string[][] = [["k", String(kind)]];
   if (coordinate) tags.push(["a", coordinate]);
+  if (eventId && /^[0-9a-f]{64}$/i.test(eventId)) tags.push(["e", eventId]);
 
   const event: EventTemplate = {
     kind: 5,
@@ -349,6 +376,13 @@ export async function parseCalendarEvent(event: Event): Promise<CalendarEvent | 
   const participants = tags.filter((t) => t[0] === "p").map((t) => t[1]);
   const image = tags.find((t) => t[0] === "image")?.[1];
   const website = tags.find((t) => t[0] === "r")?.[1] ?? "";
+  const rrule =
+    tags.find((t) => t[0] === "l" && t[2] === "rrule")?.[1] ??
+    tags.find((t) => t[0] === "rrule")?.[1] ??
+    null;
+  const startTzid = tags.find((t) => t[0] === "start_tzid")?.[1];
+  const endTzid = tags.find((t) => t[0] === "end_tzid")?.[1];
+  const registrationFormRef = tags.find((t) => t[0] === "form")?.[1];
 
   return {
     id: dTag,
@@ -366,7 +400,42 @@ export async function parseCalendarEvent(event: Event): Promise<CalendarEvent | 
     website,
     user: event.pubkey,
     isPrivate,
-    repeat: { rrule: null },
+    repeat: { rrule },
+    startTzid,
+    endTzid,
+    registrationFormRef,
     event,
   };
+}
+
+export interface InvitationWithEvent extends InvitationRumor {
+  event?: CalendarEvent;
+}
+
+/**
+ * Stateless fetch of NIP-59 calendar invitations addressed to the current user.
+ * Mirrors the live `invitationsStore` subscription but as a one-shot query so
+ * non-UI callers (e.g. the MCP server) can list invitations.
+ */
+export async function fetchInvitationsSync(): Promise<InvitationWithEvent[]> {
+  const signer = await signerManager.getSigner();
+  const pubkey = await signer.getPublicKey();
+  const relays = relayManager.getRelaysForModule("calendar");
+
+  const wraps = await nostrRuntime.querySync(relays, {
+    kinds: [CALENDAR_KINDS.giftWrap, CALENDAR_KINDS.rsvpGiftWrap],
+    "#p": [pubkey],
+  } as Filter);
+
+  const seen = new Set<string>();
+  const out: InvitationWithEvent[] = [];
+  for (const wrap of wraps) {
+    if (seen.has(wrap.id)) continue;
+    seen.add(wrap.id);
+    const invitation = await extractInvitationFromWrap(wrap);
+    if (!invitation) continue;
+    const event = await fetchCalendarEventByCoordinate(invitation.eventCoordinate);
+    out.push({ ...invitation, event: event ?? undefined });
+  }
+  return out;
 }
