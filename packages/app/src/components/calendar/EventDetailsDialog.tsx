@@ -2,7 +2,6 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -11,12 +10,14 @@ import {
   Divider,
   Typography,
 } from "@mui/material";
-import { Check, CircleHelp, Lock, Pencil, Trash2, X } from "lucide-react";
+import { Lock, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { formatNpub } from "../../lib/npub";
 import type { CalendarEvent, RSVPResponse } from "../../services/calendar";
 import { fetchRsvpsForEvent, rsvpToEvent } from "../../services/calendar/rsvp";
+
+import { RSVPBar, type RSVPBarPayload, type RSVPBarStatus } from "./RSVPBar";
 
 interface EventDetailsDialogProps {
   event: CalendarEvent | null;
@@ -26,6 +27,13 @@ interface EventDetailsDialogProps {
   onDelete: (event: CalendarEvent) => void;
 }
 
+const formatTime = (unixSec: number) =>
+  new Date(unixSec * 1000).toLocaleString(undefined, {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
 export function EventDetailsDialog({
   event,
   currentUserPubkey,
@@ -34,7 +42,7 @@ export function EventDetailsDialog({
   onDelete,
 }: EventDetailsDialogProps) {
   const [rsvps, setRsvps] = useState<RSVPResponse[]>([]);
-  const [rsvpBusy, setRsvpBusy] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const coordinate = event ? `${event.kind}:${event.user}:${event.id}` : "";
   const isAuthor = !!event && event.user === currentUserPubkey;
@@ -71,14 +79,18 @@ export function EventDetailsDialog({
     ...(event.repeat.rrule ? [{ label: "Repeats", value: event.repeat.rrule }] : []),
   ];
 
-  const sendRsvp = async (status: "accepted" | "declined" | "tentative") => {
-    setRsvpBusy(status);
+  const myStatus = currentUserPubkey
+    ? (rsvps.find((r) => r.pubkey === currentUserPubkey)?.status as RSVPBarStatus | undefined)
+    : undefined;
+
+  const submitRsvp = async (payload: RSVPBarPayload) => {
+    setSubmitting(true);
     try {
-      await rsvpToEvent(coordinate, status, event.isPrivate);
+      await rsvpToEvent(coordinate, payload.status, event.isPrivate, payload);
       const refreshed = await fetchRsvpsForEvent(coordinate);
       setRsvps(refreshed);
     } finally {
-      setRsvpBusy(null);
+      setSubmitting(false);
     }
   };
 
@@ -103,6 +115,14 @@ export function EventDetailsDialog({
           ))}
 
           <Divider />
+          <RSVPBar
+            event={event}
+            myStatus={myStatus}
+            isSubmitting={submitting}
+            onSubmit={submitRsvp}
+          />
+
+          <Divider />
           <Typography variant="caption" fontWeight={600} color="text.secondary">
             Attendees ({rsvps.length})
           </Typography>
@@ -112,20 +132,30 @@ export function EventDetailsDialog({
             </Typography>
           )}
           {rsvps.map((r) => (
-            <Box
-              key={r.pubkey}
-              sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-            >
-              <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                {formatNpub(r.pubkey)}
-              </Typography>
-              <Chip label={r.status} size="small" />
+            <Box key={r.pubkey} sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                  {formatNpub(r.pubkey)}
+                </Typography>
+                <Chip label={r.status} size="small" />
+              </Box>
+              {r.comment && (
+                <Typography variant="caption" color="text.secondary">
+                  “{r.comment}”
+                </Typography>
+              )}
+              {r.suggestedStart && (
+                <Typography variant="caption" color="text.secondary">
+                  suggests {formatTime(r.suggestedStart)}
+                  {r.suggestedEnd ? ` – ${formatTime(r.suggestedEnd)}` : ""}
+                </Typography>
+              )}
             </Box>
           ))}
         </Box>
       </DialogContent>
       <DialogActions>
-        {isAuthor ? (
+        {isAuthor && (
           <>
             <Button
               color="error"
@@ -142,55 +172,9 @@ export function EventDetailsDialog({
             >
               Edit
             </Button>
-            <Button onClick={onClose}>Close</Button>
-          </>
-        ) : (
-          <>
-            <Button
-              variant="contained"
-              startIcon={
-                rsvpBusy === "accepted" ? (
-                  <CircularProgress size={12} color="inherit" />
-                ) : (
-                  <Check size={14} />
-                )
-              }
-              disabled={!!rsvpBusy}
-              onClick={() => sendRsvp("accepted")}
-            >
-              Accept
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={
-                rsvpBusy === "tentative" ? (
-                  <CircularProgress size={12} color="inherit" />
-                ) : (
-                  <CircleHelp size={14} />
-                )
-              }
-              disabled={!!rsvpBusy}
-              onClick={() => sendRsvp("tentative")}
-            >
-              Maybe
-            </Button>
-            <Button
-              variant="text"
-              startIcon={
-                rsvpBusy === "declined" ? (
-                  <CircularProgress size={12} color="inherit" />
-                ) : (
-                  <X size={14} />
-                )
-              }
-              disabled={!!rsvpBusy}
-              onClick={() => sendRsvp("declined")}
-            >
-              Decline
-            </Button>
-            <Button onClick={onClose}>Close</Button>
           </>
         )}
+        <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
   );
