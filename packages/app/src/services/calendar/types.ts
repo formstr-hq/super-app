@@ -77,6 +77,11 @@ export interface RSVPResponse {
   status: RSVPStatus;
   eventCoordinate: string;
   createdAt: number;
+  /** Unix seconds — responder's "suggest a new time" proposal. */
+  suggestedStart?: number;
+  suggestedEnd?: number;
+  /** Free-text note the responder attached to their RSVP. */
+  comment?: string;
 }
 
 export interface CalendarEventDraft {

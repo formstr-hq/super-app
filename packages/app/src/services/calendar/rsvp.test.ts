@@ -48,6 +48,41 @@ describe("rsvpToEvent", () => {
   });
 });
 
+describe("rsvpToEvent wire format (suggested time + note)", () => {
+  it("adds start/end tags and puts the comment in content (public)", async () => {
+    await rsvpToEvent("31923:author:abc12345", "accepted", false, {
+      suggestedStart: 1000,
+      suggestedEnd: 2000,
+      comment: "running late",
+    });
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.tags).toContainEqual(["start", "1000"]);
+    expect(e.tags).toContainEqual(["end", "2000"]);
+    expect(e.content).toBe("running late");
+  });
+
+  it("omits start/end and uses empty content when no extras are given", async () => {
+    await rsvpToEvent("31923:author:abc12345", "accepted", false);
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.tags.find((t: string[]) => t[0] === "start")).toBeUndefined();
+    expect(e.tags.find((t: string[]) => t[0] === "end")).toBeUndefined();
+    expect(e.content).toBe("");
+  });
+
+  it("carries the questionnaire into the wrapped rumor for a private RSVP", async () => {
+    (wrapEvent as any).mockResolvedValue({ id: "wrap1", kind: CALENDAR_KINDS.rsvpGiftWrap });
+    await rsvpToEvent("32678:author:abc12345", "tentative", true, {
+      suggestedStart: 1000,
+      suggestedEnd: 2000,
+      comment: "maybe",
+    });
+    const rumor = (wrapEvent as any).mock.calls[0][0];
+    expect(rumor.tags).toContainEqual(["start", "1000"]);
+    expect(rumor.tags).toContainEqual(["end", "2000"]);
+    expect(rumor.content).toBe("maybe");
+  });
+});
+
 describe("fetchRsvpsForEvent", () => {
   it("returns deduplicated RSVPs keyed by pubkey", async () => {
     (nostrRuntime.querySync as any).mockResolvedValue([
@@ -99,6 +134,32 @@ describe("fetchRsvpsForEvent", () => {
     ]);
     const rsvps = await fetchRsvpsForEvent("31923:author:abc");
     expect(rsvps).toHaveLength(0);
+  });
+
+  it("parses suggested times and the comment", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "r1",
+        pubkey: "u1",
+        kind: CALENDAR_KINDS.publicRsvp,
+        created_at: 9,
+        sig: "s",
+        content: "ok?",
+        tags: [
+          ["status", "tentative"],
+          ["start", "1000"],
+          ["end", "2000"],
+        ],
+      },
+    ]);
+    const rsvps = await fetchRsvpsForEvent("31923:author:abc");
+    expect(rsvps[0]).toMatchObject({
+      pubkey: "u1",
+      status: "tentative",
+      suggestedStart: 1000,
+      suggestedEnd: 2000,
+      comment: "ok?",
+    });
   });
 });
 

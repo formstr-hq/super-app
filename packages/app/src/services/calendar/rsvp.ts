@@ -15,10 +15,18 @@ import { CALENDAR_KINDS, type RSVPResponse } from "./types";
  * inbox's `onInvitation` resolver is expected to fetch and ingest the event
  * *before* letting the UI trigger an RSVP.
  */
+/** Optional questionnaire extras: a "suggest a new time" proposal and/or a note. */
+export interface RSVPExtra {
+  suggestedStart?: number; // unix seconds
+  suggestedEnd?: number; // unix seconds
+  comment?: string;
+}
+
 export async function rsvpToEvent(
   eventCoordinate: string,
   status: "accepted" | "declined" | "tentative",
   isPrivate = false,
+  extra?: RSVPExtra,
 ): Promise<void> {
   const signer = await signerManager.getSigner();
   const [kindStr, authorPubkey, d] = eventCoordinate.split(":");
@@ -33,13 +41,18 @@ export async function rsvpToEvent(
     ["status", status],
     ["p", authorPubkey],
   ];
+  // Suggested-time proposal: standalone parity (start/end in unix seconds).
+  if (extra?.suggestedStart) tags.push(["start", String(extra.suggestedStart)]);
+  if (extra?.suggestedEnd) tags.push(["end", String(extra.suggestedEnd)]);
+  // The free-text note rides in content, matching the standalone's RSVP reader.
+  const content = extra?.comment ?? "";
 
   const kind = isPrivate ? CALENDAR_KINDS.privateRsvp : CALENDAR_KINDS.publicRsvp;
   const template: EventTemplate = {
     kind,
     created_at: Math.floor(Date.now() / 1000),
     tags,
-    content: "",
+    content,
   };
 
   const relays = relayManager.getRelaysForModule("calendar");
@@ -48,7 +61,7 @@ export async function rsvpToEvent(
     const wrap = await wrapEvent(
       {
         kind: CALENDAR_KINDS.rsvpRumor,
-        content: JSON.stringify({ eventCoordinate, status }),
+        content,
         tags,
       },
       signer,
@@ -78,11 +91,16 @@ export async function fetchRsvpsForEvent(eventCoordinate: string): Promise<RSVPR
     if (!status) continue;
     const existing = latestByPubkey.get(evt.pubkey);
     if (existing && existing.createdAt >= evt.created_at) continue;
+    const start = evt.tags.find((t: string[]) => t[0] === "start")?.[1];
+    const end = evt.tags.find((t: string[]) => t[0] === "end")?.[1];
     latestByPubkey.set(evt.pubkey, {
       pubkey: evt.pubkey,
       status,
       eventCoordinate,
       createdAt: evt.created_at,
+      suggestedStart: start ? Number(start) : undefined,
+      suggestedEnd: end ? Number(end) : undefined,
+      comment: evt.content || undefined,
     });
   }
   return Array.from(latestByPubkey.values());
