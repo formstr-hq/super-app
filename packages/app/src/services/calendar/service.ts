@@ -40,6 +40,14 @@ export async function publishPublicCalendarEvent(
   for (const cat of draft.categories ?? []) tags.push(["t", cat]);
   for (const p of draft.participants ?? []) tags.push(["p", p]);
 
+  if (draft.startTzid) tags.push(["start_tzid", draft.startTzid]);
+  if (draft.endTzid) tags.push(["end_tzid", draft.endTzid]);
+  if (draft.rrule) {
+    tags.push(["L", "rrule"]);
+    tags.push(["l", draft.rrule, "rrule"]);
+  }
+  if (draft.registrationFormRef) tags.push(["form", draft.registrationFormRef]);
+
   const event: EventTemplate = {
     kind: CALENDAR_KINDS.publicEvent,
     created_at: Math.floor(Date.now() / 1000),
@@ -66,7 +74,10 @@ export async function publishPublicCalendarEvent(
     website: draft.website ?? "",
     user: pubkey,
     isPrivate: false,
-    repeat: { rrule: null },
+    repeat: { rrule: draft.rrule ?? null },
+    startTzid: draft.startTzid,
+    endTzid: draft.endTzid,
+    registrationFormRef: draft.registrationFormRef,
     event: signed,
   };
 }
@@ -349,6 +360,13 @@ export async function parseCalendarEvent(event: Event): Promise<CalendarEvent | 
   const participants = tags.filter((t) => t[0] === "p").map((t) => t[1]);
   const image = tags.find((t) => t[0] === "image")?.[1];
   const website = tags.find((t) => t[0] === "r")?.[1] ?? "";
+  const rrule =
+    tags.find((t) => t[0] === "l" && t[2] === "rrule")?.[1] ??
+    tags.find((t) => t[0] === "rrule")?.[1] ??
+    null;
+  const startTzid = tags.find((t) => t[0] === "start_tzid")?.[1];
+  const endTzid = tags.find((t) => t[0] === "end_tzid")?.[1];
+  const registrationFormRef = tags.find((t) => t[0] === "form")?.[1];
 
   return {
     id: dTag,
@@ -366,7 +384,10 @@ export async function parseCalendarEvent(event: Event): Promise<CalendarEvent | 
     website,
     user: event.pubkey,
     isPrivate,
-    repeat: { rrule: null },
+    repeat: { rrule },
+    startTzid,
+    endTzid,
+    registrationFormRef,
     event,
   };
 }

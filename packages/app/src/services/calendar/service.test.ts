@@ -176,6 +176,54 @@ describe("fetchCalendarEventsSync", () => {
   });
 });
 
+describe("publishPublicCalendarEvent — recurrence/tz/form round-trip", () => {
+  it("emits rrule label-pair, start_tzid and form tags", async () => {
+    await publishPublicCalendarEvent({
+      title: "Repeat",
+      description: "",
+      begin: new Date(1700000000000),
+      end: new Date(1700003600000),
+      rrule: "FREQ=WEEKLY;BYDAY=MO",
+      startTzid: "America/New_York",
+      registrationFormRef: "naddr1abc",
+    });
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.tags).toContainEqual(["L", "rrule"]);
+    expect(e.tags).toContainEqual(["l", "FREQ=WEEKLY;BYDAY=MO", "rrule"]);
+    expect(e.tags).toContainEqual(["start_tzid", "America/New_York"]);
+    expect(e.tags).toContainEqual(["form", "naddr1abc"]);
+  });
+});
+
+describe("parseCalendarEvent (via fetchCalendarEventByCoordinate) — reads recurrence/tz/form", () => {
+  it("recovers rrule, startTzid and registrationFormRef from tags", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "eid",
+        pubkey: "p",
+        kind: CALENDAR_KINDS.publicEvent,
+        created_at: 1000,
+        sig: "sig",
+        content: "",
+        tags: [
+          ["d", "abc12345"],
+          ["title", "R"],
+          ["start", "1700000000"],
+          ["end", "1700003600"],
+          ["L", "rrule"],
+          ["l", "FREQ=DAILY", "rrule"],
+          ["start_tzid", "Europe/Paris"],
+          ["form", "naddr1xyz"],
+        ],
+      } satisfies Event,
+    ]);
+    const ev = await fetchCalendarEventByCoordinate("31923:p:abc12345");
+    expect(ev!.repeat.rrule).toBe("FREQ=DAILY");
+    expect(ev!.startTzid).toBe("Europe/Paris");
+    expect(ev!.registrationFormRef).toBe("naddr1xyz");
+  });
+});
+
 describe("deleteCalendarEvent", () => {
   it("publishes kind-5 with the a-tag coordinate", async () => {
     await deleteCalendarEvent("e1", "31923:p:d1");
