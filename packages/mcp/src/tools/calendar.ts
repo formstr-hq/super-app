@@ -141,7 +141,13 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
     async ({ coordinate }) => {
       const rsvps = await calendarRsvp.fetchRsvpsForEvent(coordinate);
       return ok(`Found ${rsvps.length} RSVP(s).`, {
-        rsvps: rsvps.map((r) => ({ pubkey: r.pubkey, status: r.status })),
+        rsvps: rsvps.map((r) => ({
+          pubkey: r.pubkey,
+          status: r.status,
+          suggestedStart: r.suggestedStart,
+          suggestedEnd: r.suggestedEnd,
+          comment: r.comment,
+        })),
       });
     },
   );
@@ -193,18 +199,40 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
   server.registerTool(
     "rsvp_event",
     {
-      description: "RSVP to a calendar event on your identity. Requires confirm:true.",
+      description:
+        "RSVP to a calendar event on your identity. Optionally suggest a new time (suggestedStart/suggestedEnd, unix seconds) and add a note (comment). Requires confirm:true.",
       inputSchema: {
         eventCoordinate: z.string(),
         status: z.enum(["accepted", "declined", "tentative"]),
         isPrivate: z.boolean().optional(),
+        suggestedStart: z.number().optional(),
+        suggestedEnd: z.number().optional(),
+        comment: z.string().optional(),
         confirm: z.boolean().optional(),
       },
     },
-    async ({ eventCoordinate, status, isPrivate, confirm }) => {
+    async ({
+      eventCoordinate,
+      status,
+      isPrivate,
+      suggestedStart,
+      suggestedEnd,
+      comment,
+      confirm,
+    }) => {
       const blocked = requireConfirm("rsvp_event", { confirm }, `sends "${status}" RSVP`);
       if (blocked) return blocked;
-      await calendarRsvp.rsvpToEvent(eventCoordinate, status, Boolean(isPrivate));
+      const hasExtra =
+        suggestedStart !== undefined || suggestedEnd !== undefined || comment !== undefined;
+      if (hasExtra) {
+        await calendarRsvp.rsvpToEvent(eventCoordinate, status, Boolean(isPrivate), {
+          suggestedStart,
+          suggestedEnd,
+          comment,
+        });
+      } else {
+        await calendarRsvp.rsvpToEvent(eventCoordinate, status, Boolean(isPrivate));
+      }
       return ok(`RSVP "${status}" sent.`);
     },
   );
@@ -297,6 +325,116 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
       return ok(`Attached form to "${event.title}".`, {
         coordinate: `${event.kind}:${event.user}:${event.id}`,
       });
+    },
+  );
+
+  server.registerTool(
+    "update_calendar",
+    {
+      description:
+        "Update a calendar list by its id (d-tag). Only changed fields need be sent. Requires confirm:true.",
+      inputSchema: {
+        id: z.string(),
+        title: z.string().optional(),
+        color: z.string().optional(),
+        description: z.string().optional(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async ({ id, title, color, description, confirm }) => {
+      const blocked = requireConfirm("update_calendar", { confirm }, `updates calendar ${id}`);
+      if (blocked) return blocked;
+      const lists = await calendar.fetchCalendarLists();
+      const existing = lists.find((c) => c.id === id);
+      if (!existing) return fail(`No calendar found for id ${id}.`, "NOT_FOUND");
+      const merged = {
+        ...existing,
+        title: title ?? existing.title,
+        color: color ?? existing.color,
+        description: description ?? existing.description,
+      };
+      const saved = await calendar.updateCalendarList(merged);
+      return ok(`Updated calendar "${saved.title}".`, { id: saved.id });
+    },
+  );
+
+  server.registerTool(
+    "delete_calendar",
+    {
+      description:
+        "Delete a calendar list by its addressable coordinate 32123:pubkey:id. Requires confirm:true.",
+      inputSchema: {
+        coordinate: z.string(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async ({ coordinate, confirm }) => {
+      const blocked = requireConfirm(
+        "delete_calendar",
+        { confirm },
+        `deletes calendar ${coordinate}`,
+      );
+      if (blocked) return blocked;
+      await calendar.deleteCalendarList(coordinate);
+      return ok(`Deleted calendar ${coordinate}.`);
+    },
+  );
+
+  server.registerTool(
+    "add_event_to_calendar",
+    {
+      description:
+        "Add an event to a calendar list. coordinate is the event's kind:pubkey:d; supply relayHint and viewKey (nsec) for private events. Requires confirm:true.",
+      inputSchema: {
+        calendarId: z.string(),
+        coordinate: z.string(),
+        relayHint: z.string().optional(),
+        viewKey: z.string().optional(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async ({ calendarId, coordinate, relayHint, viewKey, confirm }) => {
+      const blocked = requireConfirm(
+        "add_event_to_calendar",
+        { confirm },
+        `adds ${coordinate} to calendar ${calendarId}`,
+      );
+      if (blocked) return blocked;
+      const lists = await calendar.fetchCalendarLists();
+      const list = lists.find((c) => c.id === calendarId);
+      if (!list) return fail(`No calendar found for id ${calendarId}.`, "NOT_FOUND");
+      const saved = await calendar.addEventToCalendarList(list, [
+        coordinate,
+        relayHint ?? "",
+        viewKey ?? "",
+      ]);
+      return ok(`Added ${coordinate} to "${saved.title}".`, { id: saved.id });
+    },
+  );
+
+  server.registerTool(
+    "remove_event_from_calendar",
+    {
+      description:
+        "Remove an event (by its coordinate kind:pubkey:d) from a calendar list. Requires confirm:true.",
+      inputSchema: {
+        calendarId: z.string(),
+        coordinate: z.string(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async ({ calendarId, coordinate, confirm }) => {
+      const blocked = requireConfirm(
+        "remove_event_from_calendar",
+        { confirm },
+        `removes ${coordinate} from calendar ${calendarId}`,
+      );
+      if (blocked) return blocked;
+      const lists = await calendar.fetchCalendarLists();
+      const list = lists.find((c) => c.id === calendarId);
+      if (!list) return fail(`No calendar found for id ${calendarId}.`, "NOT_FOUND");
+      const saved = await calendar.removeEventFromCalendarList(list, coordinate);
+      return ok(`Removed ${coordinate} from "${saved.title}".`, { id: saved.id });
     },
   );
 }

@@ -9,6 +9,10 @@ vi.mock("@formstr/app/services", () => ({
     deleteCalendarEvent: vi.fn(),
     fetchCalendarLists: vi.fn(),
     createCalendarList: vi.fn(),
+    updateCalendarList: vi.fn(),
+    deleteCalendarList: vi.fn(),
+    addEventToCalendarList: vi.fn(),
+    removeEventFromCalendarList: vi.fn(),
     fetchInvitationsSync: vi.fn(),
   },
   calendarRsvp: {
@@ -229,5 +233,195 @@ describe("calendar tools", () => {
     expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
       expect.objectContaining({ registrationFormRef: "naddr1abc", existingId: "d" }),
     );
+  });
+
+  // ── Task 18: update_calendar / delete_calendar ─────────────
+
+  it("update_calendar and delete_calendar are gated behind allowWrites", () => {
+    const ro = fakeServer();
+    registerCalendar(ro.server, { allowWrites: false });
+    expect(ro.tools.has("update_calendar")).toBe(false);
+    expect(ro.tools.has("delete_calendar")).toBe(false);
+
+    const rw = fakeServer();
+    registerCalendar(rw.server, { allowWrites: true });
+    expect(rw.tools.has("update_calendar")).toBe(true);
+    expect(rw.tools.has("delete_calendar")).toBe(true);
+  });
+
+  it("update_calendar requires confirm then merges and republishes the list", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendar.fetchCalendarLists as any).mockResolvedValue([
+      {
+        id: "c1",
+        eventId: "e1",
+        title: "Old",
+        description: "d",
+        color: "#000",
+        eventRefs: [["31923:pk:x", "", ""]],
+        createdAt: 0,
+        isVisible: true,
+      },
+    ]);
+    (calendar.updateCalendarList as any).mockResolvedValue({ id: "c1", title: "New" });
+
+    const blocked = await tools.get("update_calendar")!.handler({ id: "c1", title: "New" });
+    expect(blocked.isError).toBe(true);
+    expect(calendar.updateCalendarList).not.toHaveBeenCalled();
+
+    const okRes = await tools
+      .get("update_calendar")!
+      .handler({ id: "c1", title: "New", color: "#fff", confirm: true });
+    expect(calendar.updateCalendarList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "c1",
+        title: "New",
+        color: "#fff",
+        description: "d",
+        eventRefs: [["31923:pk:x", "", ""]],
+      }),
+    );
+    expect(okRes.isError).toBeFalsy();
+  });
+
+  it("update_calendar returns NOT_FOUND when the list is missing", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
+    const res = await tools
+      .get("update_calendar")!
+      .handler({ id: "zzz", title: "x", confirm: true });
+    expect(res.isError).toBe(true);
+    expect(calendar.updateCalendarList).not.toHaveBeenCalled();
+  });
+
+  it("delete_calendar requires confirm then calls deleteCalendarList", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+
+    const blocked = await tools.get("delete_calendar")!.handler({ coordinate: "32123:pk:c1" });
+    expect(blocked.isError).toBe(true);
+    expect(calendar.deleteCalendarList).not.toHaveBeenCalled();
+
+    const okRes = await tools
+      .get("delete_calendar")!
+      .handler({ coordinate: "32123:pk:c1", confirm: true });
+    expect(calendar.deleteCalendarList).toHaveBeenCalledWith("32123:pk:c1");
+    expect(okRes.isError).toBeFalsy();
+  });
+
+  // ── Task 19: add/remove event ↔ calendar membership ────────
+
+  it("add/remove event to calendar are gated behind allowWrites", () => {
+    const ro = fakeServer();
+    registerCalendar(ro.server, { allowWrites: false });
+    expect(ro.tools.has("add_event_to_calendar")).toBe(false);
+    expect(ro.tools.has("remove_event_from_calendar")).toBe(false);
+
+    const rw = fakeServer();
+    registerCalendar(rw.server, { allowWrites: true });
+    expect(rw.tools.has("add_event_to_calendar")).toBe(true);
+    expect(rw.tools.has("remove_event_from_calendar")).toBe(true);
+  });
+
+  it("add_event_to_calendar resolves the list and calls addEventToCalendarList", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendar.fetchCalendarLists as any).mockResolvedValue([{ id: "c1", eventRefs: [] }]);
+    (calendar.addEventToCalendarList as any).mockResolvedValue({
+      id: "c1",
+      eventRefs: [["31923:pk:d", "wss://r", "nsec1view"]],
+    });
+
+    const blocked = await tools
+      .get("add_event_to_calendar")!
+      .handler({ calendarId: "c1", coordinate: "31923:pk:d" });
+    expect(blocked.isError).toBe(true);
+    expect(calendar.addEventToCalendarList).not.toHaveBeenCalled();
+
+    const okRes = await tools.get("add_event_to_calendar")!.handler({
+      calendarId: "c1",
+      coordinate: "31923:pk:d",
+      relayHint: "wss://r",
+      viewKey: "nsec1view",
+      confirm: true,
+    });
+    expect(calendar.addEventToCalendarList).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "c1" }),
+      ["31923:pk:d", "wss://r", "nsec1view"],
+    );
+    expect(okRes.isError).toBeFalsy();
+  });
+
+  it("add_event_to_calendar returns NOT_FOUND when the calendar is missing", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
+    const res = await tools
+      .get("add_event_to_calendar")!
+      .handler({ calendarId: "nope", coordinate: "31923:pk:d", confirm: true });
+    expect(res.isError).toBe(true);
+    expect(calendar.addEventToCalendarList).not.toHaveBeenCalled();
+  });
+
+  it("remove_event_from_calendar resolves the list and calls removeEventFromCalendarList", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendar.fetchCalendarLists as any).mockResolvedValue([
+      { id: "c1", eventRefs: [["31923:pk:d", "", ""]] },
+    ]);
+    (calendar.removeEventFromCalendarList as any).mockResolvedValue({ id: "c1", eventRefs: [] });
+
+    const okRes = await tools
+      .get("remove_event_from_calendar")!
+      .handler({ calendarId: "c1", coordinate: "31923:pk:d", confirm: true });
+    expect(calendar.removeEventFromCalendarList).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "c1" }),
+      "31923:pk:d",
+    );
+    expect(okRes.isError).toBeFalsy();
+  });
+
+  // ── Task 20: RSVP suggested-time + note ────────────────────
+
+  it("rsvp_event forwards suggested times and comment as the 4th arg", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    await tools.get("rsvp_event")!.handler({
+      eventCoordinate: "31923:pk:d",
+      status: "tentative",
+      suggestedStart: 1000,
+      suggestedEnd: 2000,
+      comment: "running late",
+      confirm: true,
+    });
+    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith("31923:pk:d", "tentative", false, {
+      suggestedStart: 1000,
+      suggestedEnd: 2000,
+      comment: "running late",
+    });
+  });
+
+  it("fetch_event_rsvps includes suggested times and comment", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    (calendarRsvp.fetchRsvpsForEvent as any).mockResolvedValue([
+      {
+        pubkey: "p1",
+        status: "tentative",
+        suggestedStart: 1000,
+        suggestedEnd: 2000,
+        comment: "can we push?",
+      },
+    ]);
+    const res = await tools.get("fetch_event_rsvps")!.handler({ coordinate: "31923:p:d" });
+    expect(res.structuredContent.rsvps[0]).toMatchObject({
+      pubkey: "p1",
+      status: "tentative",
+      suggestedStart: 1000,
+      suggestedEnd: 2000,
+      comment: "can we push?",
+    });
   });
 });
