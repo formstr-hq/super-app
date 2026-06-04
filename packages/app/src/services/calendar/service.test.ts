@@ -152,6 +152,31 @@ describe("publishPrivateCalendarEvent — gift wraps", () => {
   });
 });
 
+describe("publishPrivateCalendarEvent — recurrence/tz/form in encrypted payload", () => {
+  it("includes rrule/tzid/form rows in the data passed to nip44SelfEncrypt", async () => {
+    (wrapEvent as any).mockResolvedValue({ id: "wrap", kind: CALENDAR_KINDS.giftWrap });
+    await publishPrivateCalendarEvent(
+      {
+        title: "SecretRepeat",
+        description: "",
+        begin: new Date(1700000000000),
+        end: new Date(1700003600000),
+        isPrivate: true,
+        rrule: "FREQ=WEEKLY",
+        startTzid: "Asia/Tokyo",
+        registrationFormRef: "naddr1priv",
+      },
+      "default",
+    );
+    const encryptedArg = (nip44SelfEncrypt as any).mock.calls[0][1];
+    const rows = JSON.parse(encryptedArg) as string[][];
+    expect(rows).toContainEqual(["L", "rrule"]);
+    expect(rows).toContainEqual(["l", "FREQ=WEEKLY", "rrule"]);
+    expect(rows).toContainEqual(["start_tzid", "Asia/Tokyo"]);
+    expect(rows).toContainEqual(["form", "naddr1priv"]);
+  });
+});
+
 describe("fetchCalendarEventsSync", () => {
   it("parses returned events", async () => {
     (nostrRuntime.querySync as any).mockResolvedValue([

@@ -103,6 +103,14 @@ export async function publishPrivateCalendarEvent(
   for (const cat of draft.categories ?? []) eventData.push(["t", cat]);
   for (const p of draft.participants ?? []) eventData.push(["p", p]);
 
+  if (draft.startTzid) eventData.push(["start_tzid", draft.startTzid]);
+  if (draft.endTzid) eventData.push(["end_tzid", draft.endTzid]);
+  if (draft.rrule) {
+    eventData.push(["L", "rrule"]);
+    eventData.push(["l", draft.rrule, "rrule"]);
+  }
+  if (draft.registrationFormRef) eventData.push(["form", draft.registrationFormRef]);
+
   // Encrypt content with self-encryption
   const content = await nip44SelfEncrypt(signer, JSON.stringify(eventData));
 
@@ -146,7 +154,10 @@ export async function publishPrivateCalendarEvent(
     user: pubkey,
     isPrivate: true,
     calendarId,
-    repeat: { rrule: null },
+    repeat: { rrule: draft.rrule ?? null },
+    startTzid: draft.startTzid,
+    endTzid: draft.endTzid,
+    registrationFormRef: draft.registrationFormRef,
     event: signed,
   };
 }
