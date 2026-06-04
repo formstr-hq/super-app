@@ -322,9 +322,13 @@ export async function fetchCalendarLists(): Promise<CalendarList[]> {
 export async function deleteCalendarEvent(eventId: string, coordinate?: string): Promise<void> {
   const signer = await signerManager.getSigner();
 
-  const tags: string[][] = [["k", String(CALENDAR_KINDS.publicEvent)]];
-  if (eventId) tags.push(["e", eventId]);
+  const kindFromCoord = coordinate ? Number(coordinate.split(":")[0]) : NaN;
+  const kind =
+    Number.isFinite(kindFromCoord) && kindFromCoord ? kindFromCoord : CALENDAR_KINDS.publicEvent;
+
+  const tags: string[][] = [["k", String(kind)]];
   if (coordinate) tags.push(["a", coordinate]);
+  if (eventId && /^[0-9a-f]{64}$/i.test(eventId)) tags.push(["e", eventId]);
 
   const event: EventTemplate = {
     kind: 5,

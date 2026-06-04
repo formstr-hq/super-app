@@ -250,11 +250,21 @@ describe("parseCalendarEvent (via fetchCalendarEventByCoordinate) — reads recu
 });
 
 describe("deleteCalendarEvent", () => {
-  it("publishes kind-5 with the a-tag coordinate", async () => {
+  it("publishes kind-5 with the a-tag coordinate and matching k-tag", async () => {
     await deleteCalendarEvent("e1", "31923:p:d1");
     const e = (nostrRuntime.publish as any).mock.calls[0][1];
     expect(e.kind).toBe(5);
     expect(e.tags).toContainEqual(["a", "31923:p:d1"]);
+    expect(e.tags).toContainEqual(["k", "31923"]);
+  });
+
+  it("derives the k-tag for private events from the coordinate kind", async () => {
+    await deleteCalendarEvent("d2", "32678:p:d2");
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.tags).toContainEqual(["k", "32678"]);
+    expect(e.tags).toContainEqual(["a", "32678:p:d2"]);
+    // d-tag id "d2" is not a 64-hex nostr id → no e-tag
+    expect(e.tags.find((t: string[]) => t[0] === "e")).toBeUndefined();
   });
 });
 
