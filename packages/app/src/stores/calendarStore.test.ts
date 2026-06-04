@@ -7,6 +7,8 @@ vi.mock("../services/calendar/service", () => ({
   publishPrivateCalendarEvent: vi.fn(),
   createCalendarList: vi.fn(),
   updateCalendarList: vi.fn(),
+  deleteCalendarList: vi.fn(),
+  addEventToCalendarList: vi.fn(),
   deleteCalendarEvent: vi.fn(),
 }));
 
@@ -63,6 +65,53 @@ describe("createCalendar", () => {
     (calendarService.createCalendarList as any).mockResolvedValue({ id: "c1", title: "Work" });
     await useCalendarStore.getState().createCalendar("Work", "#4285f4", "desc");
     expect(calendarService.createCalendarList).toHaveBeenCalledWith("Work", "#4285f4", "desc");
+  });
+});
+
+describe("updateCalendar", () => {
+  it("forwards the calendar to updateCalendarList and replaces it in state", async () => {
+    const cal = { id: "c1", title: "Old", color: "#fff", eventRefs: [] };
+    useCalendarStore.setState({ calendars: [cal as any] });
+    (calendarService.updateCalendarList as any).mockResolvedValue({ ...cal, title: "New" });
+    await useCalendarStore.getState().updateCalendar({ ...cal, title: "New" } as any);
+    expect(calendarService.updateCalendarList).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "c1", title: "New" }),
+    );
+    expect(useCalendarStore.getState().calendars[0].title).toBe("New");
+  });
+});
+
+describe("deleteCalendar", () => {
+  it("calls deleteCalendarList with the coordinate and removes it from state", async () => {
+    useCalendarStore.setState({ calendars: [{ id: "c1" } as any, { id: "c2" } as any] });
+    await useCalendarStore.getState().deleteCalendar("32123:pub:c1", "c1");
+    expect(calendarService.deleteCalendarList).toHaveBeenCalledWith("32123:pub:c1");
+    expect(useCalendarStore.getState().calendars.map((c) => c.id)).toEqual(["c2"]);
+  });
+});
+
+describe("createEvent membership", () => {
+  it("adds the event coordinate (no 'a' prefix) via addEventToCalendarList", async () => {
+    const cal = { id: "c1", title: "Work", eventRefs: [] };
+    useCalendarStore.setState({ calendars: [cal as any] });
+    (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
+      evt({ id: "d9", kind: 31923, user: "pub" }),
+    );
+    (calendarService.addEventToCalendarList as any).mockResolvedValue({
+      ...cal,
+      eventRefs: [["31923:pub:d9", "", ""]],
+    });
+    await useCalendarStore.getState().createEvent({
+      title: "X",
+      description: "",
+      begin: new Date(0),
+      end: new Date(0),
+      calendarId: "c1",
+    } as any);
+    expect(calendarService.addEventToCalendarList).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "c1" }),
+      ["31923:pub:d9", "", ""],
+    );
   });
 });
 

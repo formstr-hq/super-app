@@ -16,6 +16,8 @@ interface CalendarStore {
   fetchCalendars(): Promise<void>;
   createEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
   createCalendar(title: string, color: string, description?: string): Promise<CalendarList>;
+  updateCalendar(calendar: CalendarList): Promise<CalendarList>;
+  deleteCalendar(coordinate: string, id: string): Promise<void>;
   deleteEvent(id: string, coordinate?: string): Promise<void>;
   ingestEvent(event: CalendarEvent): void;
   updateEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
@@ -88,17 +90,19 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
         ? await calendarService.publishPrivateCalendarEvent(draft, draft.calendarId ?? "default")
         : await calendarService.publishPublicCalendarEvent(draft);
 
-      // Add event ref to the calendar list if a calendarId was specified
+      // Add event ref to the calendar list if a calendarId was specified.
+      // The ref is the bare coordinate (the codec re-adds the "a" tag prefix);
+      // private events carry their shared viewKey so invitees can decrypt.
       if (draft.calendarId) {
         const calendar = get().calendars.find((c) => c.id === draft.calendarId);
         if (calendar) {
-          const ref: string[] = ["a", `${event.kind}:${event.user}:${event.id}`, "", ""];
-          const updatedCalendar = {
-            ...calendar,
-            eventRefs: [...calendar.eventRefs, ref],
-          };
+          const ref: string[] = [
+            `${event.kind}:${event.user}:${event.id}`,
+            "",
+            event.viewKey ?? "",
+          ];
           try {
-            const saved = await calendarService.updateCalendarList(updatedCalendar);
+            const saved = await calendarService.addEventToCalendarList(calendar, ref);
             set((state) => ({
               calendars: state.calendars.map((c) => (c.id === saved.id ? saved : c)),
             }));
@@ -125,6 +129,29 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to create calendar" });
       throw e;
+    }
+  },
+
+  async updateCalendar(calendar) {
+    set({ error: null });
+    try {
+      const saved = await calendarService.updateCalendarList(calendar);
+      set((state) => ({
+        calendars: state.calendars.map((c) => (c.id === saved.id ? saved : c)),
+      }));
+      return saved;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to update calendar" });
+      throw e;
+    }
+  },
+
+  async deleteCalendar(coordinate, id) {
+    try {
+      await calendarService.deleteCalendarList(coordinate);
+      set((state) => ({ calendars: state.calendars.filter((c) => c.id !== id) }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to delete calendar" });
     }
   },
 

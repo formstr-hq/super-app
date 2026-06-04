@@ -1,14 +1,7 @@
-import {
-  Box,
-  Button,
-  IconButton,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from "@mui/material";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { Box, Typography } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
 
+import { CalendarHeader } from "../components/calendar/CalendarHeader";
 import { CalendarListView } from "../components/calendar/CalendarListView";
 import { CalendarManageDialog } from "../components/calendar/CalendarManageDialog";
 import { CalendarMonthView } from "../components/calendar/CalendarMonthView";
@@ -16,23 +9,10 @@ import { CalendarSidebar } from "../components/calendar/CalendarSidebar";
 import { EventDetailsDialog } from "../components/calendar/EventDetailsDialog";
 import { EventDialog } from "../components/calendar/EventDialog";
 import { InvitationInbox } from "../components/calendar/InvitationInbox";
-import type { CalendarEvent } from "../services/calendar";
+import { filterEventsByCalendarVisibility } from "../lib/calendarMembership";
+import type { CalendarEvent, CalendarList } from "../services/calendar";
+import { CALENDAR_KINDS } from "../services/calendar";
 import { useAuthStore, useCalendarStore } from "../stores";
-
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
 
 export function CalendarPage() {
   const {
@@ -46,6 +26,8 @@ export function CalendarPage() {
     createEvent,
     updateEvent,
     createCalendar,
+    updateCalendar,
+    deleteCalendar,
     deleteEvent,
   } = useCalendarStore();
   const pubkey = useAuthStore((s) => s.pubkey);
@@ -55,7 +37,8 @@ export function CalendarPage() {
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null);
-  const [createCalOpen, setCreateCalOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [editCalendar, setEditCalendar] = useState<CalendarList | null>(null);
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<Set<string>>(new Set());
   const [showAllPublic, setShowAllPublic] = useState(false);
 
@@ -84,6 +67,7 @@ export function CalendarPage() {
 
   const year = selectedDate.getFullYear();
   const month = selectedDate.getMonth();
+  const monthLabel = selectedDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   const toggleCalendar = (calId: string) =>
     setVisibleCalendarIds((prev) => {
@@ -93,9 +77,7 @@ export function CalendarPage() {
       return next;
     });
 
-  const filteredEvents = events.filter(
-    (e) => !e.calendarId || visibleCalendarIds.has(e.calendarId),
-  );
+  const filteredEvents = filterEventsByCalendarVisibility(events, calendars, visibleCalendarIds);
 
   const handleDelete = (event: CalendarEvent) => {
     deleteEvent(event.id, `${event.kind}:${event.user}:${event.id}`);
@@ -111,45 +93,37 @@ export function CalendarPage() {
     setEditEvent(event);
     setEventDialogOpen(true);
   };
+  const openNewCalendar = () => {
+    setEditCalendar(null);
+    setManageOpen(true);
+  };
+  const openEditCalendar = (calendar: CalendarList) => {
+    setEditCalendar(calendar);
+    setManageOpen(true);
+  };
 
   return (
-    <Box sx={{ display: "flex", gap: 0, mx: { xs: -2, sm: -3, lg: -4 } }}>
+    <Box sx={{ display: "flex" }}>
       <CalendarSidebar
         calendars={calendars}
         visibleCalendarIds={visibleCalendarIds}
         onToggleCalendar={toggleCalendar}
-        onNewCalendar={() => setCreateCalOpen(true)}
+        onNewCalendar={openNewCalendar}
+        onEditCalendar={openEditCalendar}
         showAllPublic={showAllPublic}
         onToggleShowAllPublic={setShowAllPublic}
       />
 
-      <Box sx={{ flex: 1, minWidth: 0, px: { xs: 2, sm: 3, lg: 4 } }}>
-        <Box
-          sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2.5 }}
-        >
-          <Typography variant="h6" fontWeight={600}>
-            Calendar
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={viewMode}
-              onChange={(_, v) => v && setViewMode(v)}
-            >
-              <ToggleButton value="month">Month</ToggleButton>
-              <ToggleButton value="list">List</ToggleButton>
-            </ToggleButtonGroup>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<Plus size={16} />}
-              onClick={openCreate}
-            >
-              New Event
-            </Button>
-          </Box>
-        </Box>
+      <Box sx={{ flex: 1, minWidth: 0, pl: { sm: 3 } }}>
+        <CalendarHeader
+          monthLabel={monthLabel}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          onPrev={() => setSelectedDate(new Date(year, month - 1, 1))}
+          onNext={() => setSelectedDate(new Date(year, month + 1, 1))}
+          onToday={() => setSelectedDate(new Date())}
+          onNewEvent={openCreate}
+        />
 
         {error && (
           <Typography variant="body2" color="error" sx={{ mb: 2 }}>
@@ -160,41 +134,14 @@ export function CalendarPage() {
         <InvitationInbox />
 
         {viewMode === "month" && (
-          <>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 1.5,
-                mb: 2,
-              }}
-            >
-              <IconButton
-                size="small"
-                onClick={() => setSelectedDate(new Date(year, month - 1, 1))}
-              >
-                <ChevronLeft size={18} />
-              </IconButton>
-              <Typography variant="body1" fontWeight={600} sx={{ width: 144, textAlign: "center" }}>
-                {MONTHS[month]} {year}
-              </Typography>
-              <IconButton
-                size="small"
-                onClick={() => setSelectedDate(new Date(year, month + 1, 1))}
-              >
-                <ChevronRight size={18} />
-              </IconButton>
-            </Box>
-            <CalendarMonthView
-              events={filteredEvents}
-              year={year}
-              month={month}
-              calendars={calendars}
-              onEventClick={setDetailEvent}
-              onDeleteEvent={handleDelete}
-            />
-          </>
+          <CalendarMonthView
+            events={filteredEvents}
+            year={year}
+            month={month}
+            calendars={calendars}
+            onEventClick={setDetailEvent}
+            onDeleteEvent={handleDelete}
+          />
         )}
 
         {viewMode === "list" && (
@@ -214,9 +161,22 @@ export function CalendarPage() {
         event={editEvent}
       />
       <CalendarManageDialog
-        open={createCalOpen}
-        onClose={() => setCreateCalOpen(false)}
-        onSave={({ title, color, description }) => createCalendar(title, color, description)}
+        open={manageOpen}
+        calendar={editCalendar}
+        onClose={() => setManageOpen(false)}
+        onSave={({ id, title, color, description }) =>
+          id && editCalendar
+            ? updateCalendar({ ...editCalendar, title, color, description })
+            : createCalendar(title, color, description)
+        }
+        onDelete={
+          editCalendar
+            ? (cal) => {
+                deleteCalendar(`${CALENDAR_KINDS.calendarList}:${pubkey}:${cal.id}`, cal.id);
+                setManageOpen(false);
+              }
+            : undefined
+        }
       />
       <EventDetailsDialog
         event={detailEvent}
