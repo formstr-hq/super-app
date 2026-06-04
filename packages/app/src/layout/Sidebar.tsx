@@ -12,20 +12,10 @@ import {
   Button,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import {
-  FileText,
-  Calendar,
-  FileEdit,
-  HardDrive,
-  BarChart3,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Radio,
-  LogIn,
-} from "lucide-react";
+import { FileText, Calendar, FileEdit, HardDrive, BarChart3, Radio, LogIn } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { useAuthStore, useSettingsStore } from "../stores";
+import { useAuthStore } from "../stores";
 
 export const SIDEBAR_WIDTH = 240;
 export const SIDEBAR_COLLAPSED_WIDTH = 56;
@@ -46,7 +36,6 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { toggleSidebarCollapsed } = useSettingsStore();
   const { isLoggedIn, pubkey } = useAuthStore();
   const theme = useTheme();
 
@@ -88,16 +77,6 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
             </Typography>
           </Box>
         )}
-
-        <Tooltip title={collapsed ? "Expand sidebar" : "Collapse sidebar"} placement="right">
-          <IconButton
-            size="small"
-            onClick={toggleSidebarCollapsed}
-            sx={{ display: { xs: "none", lg: "flex" }, color: "text.secondary" }}
-          >
-            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          </IconButton>
-        </Tooltip>
 
         {collapsed && (
           <Box

@@ -63,12 +63,12 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
       }}
     >
       <Toolbar variant="dense" sx={{ minHeight: 48, gap: 1, px: 2 }}>
-        {/* Sidebar toggle */}
+        {/* Sidebar toggle — mobile/tablet only (desktop switches modules via the tabs) */}
         <IconButton
           size="small"
           onClick={toggleSidebar}
           aria-label="Toggle sidebar"
-          sx={{ color: "text.secondary", flexShrink: 0 }}
+          sx={{ color: "text.secondary", flexShrink: 0, display: { xs: "flex", md: "none" } }}
         >
           <MenuIcon size={18} />
         </IconButton>
