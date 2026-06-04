@@ -112,4 +112,77 @@ describe("calendar tools", () => {
     const hit = await tools.get("get_calendar_event")!.handler({ coordinate: "31923:p:d" });
     expect(hit.isError).toBeFalsy();
   });
+
+  it("update_calendar_event is gated and requires confirm, then republishes", async () => {
+    const ro = fakeServer();
+    registerCalendar(ro.server, { allowWrites: false });
+    expect(ro.tools.has("update_calendar_event")).toBe(false);
+    expect(ro.tools.has("attach_form_to_event")).toBe(false);
+
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+      id: "d",
+      title: "Old",
+      description: "",
+      begin: 1700000000000,
+      end: 1700003600000,
+      kind: 31923,
+      user: "pk",
+      location: [],
+      participants: [],
+      isPrivate: false,
+      repeat: { rrule: null },
+    });
+    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
+      id: "d",
+      eventId: "ev",
+      kind: 31923,
+      user: "pk",
+      title: "New",
+    });
+
+    const blocked = await tools
+      .get("update_calendar_event")!
+      .handler({ coordinate: "31923:pk:d", title: "New" });
+    expect(blocked.isError).toBe(true);
+    const okRes = await tools
+      .get("update_calendar_event")!
+      .handler({ coordinate: "31923:pk:d", title: "New", confirm: true });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ existingId: "d", title: "New" }),
+    );
+    expect(okRes.isError).toBeFalsy();
+  });
+
+  it("attach_form_to_event republishes with the form ref", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+      id: "d",
+      title: "T",
+      description: "",
+      begin: 1,
+      end: 2,
+      kind: 31923,
+      user: "pk",
+      location: [],
+      participants: [],
+      isPrivate: false,
+      repeat: { rrule: null },
+    });
+    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
+      id: "d",
+      eventId: "ev",
+      kind: 31923,
+      user: "pk",
+      title: "T",
+    });
+    await tools
+      .get("attach_form_to_event")!
+      .handler({ coordinate: "31923:pk:d", formRef: "naddr1abc", confirm: true });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ registrationFormRef: "naddr1abc", existingId: "d" }),
+    );
+  });
 });

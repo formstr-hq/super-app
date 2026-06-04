@@ -149,4 +149,95 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
       return ok(`RSVP "${status}" sent.`);
     },
   );
+
+  server.registerTool(
+    "update_calendar_event",
+    {
+      description:
+        "Update a calendar event by its coordinate kind:pubkey:d. Only changed fields need be sent. Requires confirm:true.",
+      inputSchema: {
+        coordinate: z.string(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        start: z.string().optional(),
+        end: z.string().optional(),
+        location: z.string().optional(),
+        rrule: z.string().optional(),
+        startTzid: z.string().optional(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async (args) => {
+      const blocked = requireConfirm(
+        "update_calendar_event",
+        { confirm: args.confirm },
+        `updates event ${args.coordinate}`,
+      );
+      if (blocked) return blocked;
+      const existing = await calendar.fetchCalendarEventByCoordinate(args.coordinate);
+      if (!existing) return fail(`No event found for ${args.coordinate}.`, "NOT_FOUND");
+      const draft = {
+        title: args.title ?? existing.title,
+        description: args.description ?? existing.description,
+        begin: args.start ? new Date(args.start) : new Date(existing.begin),
+        end: args.end ? new Date(args.end) : new Date(existing.end),
+        location: args.location ?? existing.location[0],
+        participants: existing.participants,
+        isPrivate: existing.isPrivate,
+        rrule: args.rrule ?? existing.repeat.rrule ?? undefined,
+        startTzid: args.startTzid ?? existing.startTzid,
+        registrationFormRef: existing.registrationFormRef,
+        existingId: existing.id,
+      };
+      const event = existing.isPrivate
+        ? await calendar.publishPrivateCalendarEvent(draft, existing.calendarId ?? "default")
+        : await calendar.publishPublicCalendarEvent(draft);
+      return ok(`Updated event "${event.title}".`, {
+        id: event.id,
+        coordinate: `${event.kind}:${event.user}:${event.id}`,
+      });
+    },
+  );
+
+  server.registerTool(
+    "attach_form_to_event",
+    {
+      description:
+        "Attach a Formstr form (naddr or coordinate) as an event's registration form. Requires confirm:true.",
+      inputSchema: {
+        coordinate: z.string(),
+        formRef: z.string(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async ({ coordinate, formRef, confirm }) => {
+      const blocked = requireConfirm(
+        "attach_form_to_event",
+        { confirm },
+        `attaches a form to ${coordinate}`,
+      );
+      if (blocked) return blocked;
+      const existing = await calendar.fetchCalendarEventByCoordinate(coordinate);
+      if (!existing) return fail(`No event found for ${coordinate}.`, "NOT_FOUND");
+      const draft = {
+        title: existing.title,
+        description: existing.description,
+        begin: new Date(existing.begin),
+        end: new Date(existing.end),
+        location: existing.location[0],
+        participants: existing.participants,
+        isPrivate: existing.isPrivate,
+        rrule: existing.repeat.rrule ?? undefined,
+        startTzid: existing.startTzid,
+        registrationFormRef: formRef,
+        existingId: existing.id,
+      };
+      const event = existing.isPrivate
+        ? await calendar.publishPrivateCalendarEvent(draft, existing.calendarId ?? "default")
+        : await calendar.publishPublicCalendarEvent(draft);
+      return ok(`Attached form to "${event.title}".`, {
+        coordinate: `${event.kind}:${event.user}:${event.id}`,
+      });
+    },
+  );
 }

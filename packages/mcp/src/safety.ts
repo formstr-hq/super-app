@@ -5,6 +5,8 @@ import { fail } from "./result";
 export const GATED_TOOLS = [
   "delete_form",
   "delete_calendar_event",
+  "update_calendar_event",
+  "attach_form_to_event",
   "submit_form_response",
   "submit_poll_response",
   "rsvp_event",
