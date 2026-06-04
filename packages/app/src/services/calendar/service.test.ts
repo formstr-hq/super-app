@@ -32,18 +32,21 @@ vi.mock("./viewKey", async (importOriginal) => {
 });
 
 import {
+  addEventToCalendarList,
   createCalendarList,
   deleteCalendarEvent,
   fetchCalendarEventByCoordinate,
   fetchCalendarEventsSync,
   fetchCalendarLists,
   fetchInvitationsSync,
+  moveEventBetweenCalendarLists,
   parseCalendarEvent,
   publishPrivateCalendarEvent,
   publishPublicCalendarEvent,
+  removeEventFromCalendarList,
   updateCalendarList,
 } from "./service";
-import { CALENDAR_KINDS } from "./types";
+import { CALENDAR_KINDS, type CalendarList } from "./types";
 import { generateViewKey, decryptWithViewKey } from "./viewKey";
 
 const mockSigner = {
@@ -526,5 +529,87 @@ describe("parseCalendarEvent — viewKey decrypt", () => {
     expect(parsed?.title).toBe("Shared Secret");
     expect(parsed?.viewKey).toBe("nsec1somekey");
     expect(decryptWithViewKey).toHaveBeenCalledWith("nsec1somekey", "cipher");
+  });
+});
+
+describe("event↔calendar membership", () => {
+  const baseList = (): CalendarList => ({
+    id: "cal1",
+    eventId: "old",
+    title: "Work",
+    description: "",
+    color: "#4285f4",
+    eventRefs: [],
+    createdAt: 1000,
+    isVisible: true,
+  });
+
+  it("addEventToCalendarList appends an eventRef and republishes the list", async () => {
+    const ref = ["32678:aabbccdd:d1", "wss://relay.test", "nsec1view"];
+    const updated = await addEventToCalendarList(baseList(), ref);
+
+    expect(updated.eventRefs).toContainEqual(ref);
+    // Republished via updateCalendarList → fresh eventId from the signed event.
+    expect(updated.eventId).toBe("eid");
+    expect(nostrRuntime.publish).toHaveBeenCalledTimes(1);
+  });
+
+  it("addEventToCalendarList dedupes by coordinate and does not republish", async () => {
+    const list = { ...baseList(), eventRefs: [["32678:aabbccdd:d1", "", ""]] };
+    const updated = await addEventToCalendarList(list, [
+      "32678:aabbccdd:d1",
+      "wss://other",
+      "nsec1diff",
+    ]);
+
+    expect(updated.eventRefs).toHaveLength(1);
+    // Original ref kept, not replaced by the duplicate.
+    expect(updated.eventRefs[0][1]).toBe("");
+    expect(nostrRuntime.publish).not.toHaveBeenCalled();
+  });
+
+  it("removeEventFromCalendarList drops the matching coordinate and republishes", async () => {
+    const list = {
+      ...baseList(),
+      eventRefs: [
+        ["32678:aabbccdd:d1", "", ""],
+        ["31923:aabbccdd:d2", "", ""],
+      ],
+    };
+    const updated = await removeEventFromCalendarList(list, "32678:aabbccdd:d1");
+
+    expect(updated.eventRefs).toEqual([["31923:aabbccdd:d2", "", ""]]);
+    expect(nostrRuntime.publish).toHaveBeenCalledTimes(1);
+  });
+
+  it("moveEventBetweenCalendarLists moves a ref from source to target", async () => {
+    const source = { ...baseList(), id: "src", eventRefs: [["32678:aabbccdd:d1", "", ""]] };
+    const target = { ...baseList(), id: "tgt", eventRefs: [] };
+    const ref = ["32678:aabbccdd:d1", "wss://relay.test", "nsec1view"];
+
+    const result = await moveEventBetweenCalendarLists(
+      [source, target],
+      "tgt",
+      "32678:aabbccdd:d1",
+      ref,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.source?.eventRefs).toEqual([]);
+    expect(result!.target.eventRefs).toContainEqual(ref);
+    // One publish for the source remove, one for the target add.
+    expect(nostrRuntime.publish).toHaveBeenCalledTimes(2);
+  });
+
+  it("moveEventBetweenCalendarLists is a null no-op when already in the target", async () => {
+    const target = { ...baseList(), id: "tgt", eventRefs: [["32678:aabbccdd:d1", "", ""]] };
+    const result = await moveEventBetweenCalendarLists([target], "tgt", "32678:aabbccdd:d1", [
+      "32678:aabbccdd:d1",
+      "",
+      "",
+    ]);
+
+    expect(result).toBeNull();
+    expect(nostrRuntime.publish).not.toHaveBeenCalled();
   });
 });

@@ -341,6 +341,91 @@ export async function fetchCalendarLists(): Promise<CalendarList[]> {
   return lists;
 }
 
+// ── Event ↔ Calendar membership ─────────────────────────
+
+/**
+ * Adds an event reference to a calendar list and republishes the updated list.
+ * Deduplicates by coordinate (the first element of the ref); when the
+ * coordinate is already present this is a no-op that returns the list unchanged
+ * without republishing.
+ *
+ * @param calendarList - The list to update
+ * @param eventRef - ["{kind}:{authorPubkey}:{dTag}", "{relayHint}", "{viewKey}"]
+ */
+export async function addEventToCalendarList(
+  calendarList: CalendarList,
+  eventRef: string[],
+): Promise<CalendarList> {
+  if (calendarList.eventRefs.some((ref) => ref[0] === eventRef[0])) {
+    return calendarList;
+  }
+
+  const updated: CalendarList = {
+    ...calendarList,
+    eventRefs: [...calendarList.eventRefs, eventRef],
+    createdAt: Math.floor(Date.now() / 1000),
+  };
+
+  return updateCalendarList(updated);
+}
+
+/**
+ * Removes the event reference matching `eventCoordinate` and republishes.
+ *
+ * @param calendarList - The list to update
+ * @param eventCoordinate - "{kind}:{authorPubkey}:{dTag}"
+ */
+export async function removeEventFromCalendarList(
+  calendarList: CalendarList,
+  eventCoordinate: string,
+): Promise<CalendarList> {
+  const updated: CalendarList = {
+    ...calendarList,
+    eventRefs: calendarList.eventRefs.filter((ref) => ref[0] !== eventCoordinate),
+    createdAt: Math.floor(Date.now() / 1000),
+  };
+
+  return updateCalendarList(updated);
+}
+
+/**
+ * Moves an event from whichever list currently holds it to `targetCalendarId`.
+ * Returns `null` when the event is already in the target (no work needed); the
+ * source republish is skipped when no other list holds the coordinate.
+ *
+ * @param calendars - All known lists to search for the current owner
+ * @param targetCalendarId - Destination list id
+ * @param eventCoordinate - "{kind}:{authorPubkey}:{dTag}"
+ * @param eventRef - Full ref to add to the destination
+ */
+export async function moveEventBetweenCalendarLists(
+  calendars: CalendarList[],
+  targetCalendarId: string,
+  eventCoordinate: string,
+  eventRef: string[],
+): Promise<{ source?: CalendarList; target: CalendarList } | null> {
+  const targetCalendar = calendars.find((cal) => cal.id === targetCalendarId);
+  if (!targetCalendar) {
+    throw new Error(`Target calendar not found: ${targetCalendarId}`);
+  }
+
+  // Already in the target — nothing to move.
+  if (targetCalendar.eventRefs.some((ref) => ref[0] === eventCoordinate)) {
+    return null;
+  }
+
+  const sourceCalendar = calendars.find(
+    (cal) => cal.id !== targetCalendarId && cal.eventRefs.some((ref) => ref[0] === eventCoordinate),
+  );
+
+  const source = sourceCalendar
+    ? await removeEventFromCalendarList(sourceCalendar, eventCoordinate)
+    : undefined;
+  const target = await addEventToCalendarList(targetCalendar, eventRef);
+
+  return { source, target };
+}
+
 // ── Delete Event ────────────────────────────────────────
 
 export async function deleteCalendarEvent(eventId: string, coordinate?: string): Promise<void> {
