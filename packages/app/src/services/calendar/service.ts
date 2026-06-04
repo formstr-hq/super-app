@@ -17,7 +17,7 @@ import {
   type CalendarList,
   type CalendarEventDraft,
 } from "./types";
-import { generateViewKey, encryptWithViewKey } from "./viewKey";
+import { generateViewKey, encryptWithViewKey, decryptWithViewKey } from "./viewKey";
 
 // ── Publish Public Event ────────────────────────────────
 
@@ -225,7 +225,7 @@ export async function fetchCalendarEventsSync(
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  const parsed = await Promise.all(events.map(parseCalendarEvent));
+  const parsed = await Promise.all(events.map((e) => parseCalendarEvent(e)));
   return parsed.filter((e: CalendarEvent | null): e is CalendarEvent => e !== null);
 }
 
@@ -235,6 +235,7 @@ export async function fetchCalendarEventsSync(
  */
 export async function fetchCalendarEventByCoordinate(
   coordinate: string,
+  viewKey?: string,
 ): Promise<CalendarEvent | null> {
   const [kindStr, pubkey, dTag] = coordinate.split(":");
   const kind = Number(kindStr);
@@ -250,7 +251,7 @@ export async function fetchCalendarEventByCoordinate(
 
   // Newest-wins (addressable events can diverge across relays).
   const newest = events.reduce((a, b) => (b.created_at > a.created_at ? b : a));
-  return parseCalendarEvent(newest);
+  return parseCalendarEvent(newest, viewKey);
 }
 
 // ── Calendar List CRUD ──────────────────────────────────
@@ -367,24 +368,30 @@ export async function deleteCalendarEvent(eventId: string, coordinate?: string):
 
 // ── Helpers ─────────────────────────────────────────────
 
-export async function parseCalendarEvent(event: Event): Promise<CalendarEvent | null> {
+export async function parseCalendarEvent(
+  event: Event,
+  viewKey?: string,
+): Promise<CalendarEvent | null> {
   const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
   const isPrivate = event.kind !== CALENDAR_KINDS.publicEvent;
 
-  // For private events, attempt to decrypt the content to recover tags
+  // For private events, attempt to decrypt the content to recover tags.
   let tags = event.tags;
   if (isPrivate && event.content) {
     try {
-      const signer = await signerManager.getSigner();
-      const decrypted = await nip44SelfDecrypt(signer, event.content);
+      // Prefer the shared viewKey (interop: any invitee holding the nsec can
+      // decrypt). Fall back to author-only self-decryption for legacy events.
+      const decrypted = viewKey
+        ? await decryptWithViewKey(viewKey, event.content)
+        : await nip44SelfDecrypt(await signerManager.getSigner(), event.content);
       const parsed = JSON.parse(decrypted) as string[][];
       if (Array.isArray(parsed)) {
         // Merge decrypted tags with original event tags (keep "d" tag from original)
         tags = [...event.tags, ...parsed];
       }
     } catch {
-      // Decryption failed — event may belong to another user or use a viewKey.
-      // Fall through to parse with whatever tags are available.
+      // Decryption failed — event may belong to another user or use a viewKey
+      // we don't hold. Fall through to parse with whatever tags are available.
     }
   }
 
@@ -422,6 +429,7 @@ export async function parseCalendarEvent(event: Event): Promise<CalendarEvent | 
     website,
     user: event.pubkey,
     isPrivate,
+    viewKey,
     repeat: { rrule },
     startTzid,
     endTzid,
@@ -456,7 +464,10 @@ export async function fetchInvitationsSync(): Promise<InvitationWithEvent[]> {
     seen.add(wrap.id);
     const invitation = await extractInvitationFromWrap(wrap);
     if (!invitation) continue;
-    const event = await fetchCalendarEventByCoordinate(invitation.eventCoordinate);
+    const event = await fetchCalendarEventByCoordinate(
+      invitation.eventCoordinate,
+      invitation.viewKey,
+    );
     out.push({ ...invitation, event: event ?? undefined });
   }
   return out;

@@ -24,6 +24,13 @@ vi.mock("@formstr/core", () => ({
   },
 }));
 
+// Keep generateViewKey/encryptWithViewKey real (they only touch nostr-tools +
+// the mocked core), but stub decryptWithViewKey so we can drive parse output.
+vi.mock("./viewKey", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, decryptWithViewKey: vi.fn() };
+});
+
 import {
   createCalendarList,
   deleteCalendarEvent,
@@ -31,12 +38,13 @@ import {
   fetchCalendarEventsSync,
   fetchCalendarLists,
   fetchInvitationsSync,
+  parseCalendarEvent,
   publishPrivateCalendarEvent,
   publishPublicCalendarEvent,
   updateCalendarList,
 } from "./service";
 import { CALENDAR_KINDS } from "./types";
-import { generateViewKey } from "./viewKey";
+import { generateViewKey, decryptWithViewKey } from "./viewKey";
 
 const mockSigner = {
   getPublicKey: vi.fn().mockResolvedValue("aabbccdd"),
@@ -493,5 +501,30 @@ describe("calendar list CRUD interop", () => {
     ]);
     (nip44SelfDecrypt as any).mockResolvedValue(JSON.stringify({ id: "cal2", title: "old" }));
     await expect(fetchCalendarLists()).resolves.toEqual([]);
+  });
+});
+
+describe("parseCalendarEvent — viewKey decrypt", () => {
+  it("decrypts private content with the supplied viewKey", async () => {
+    (decryptWithViewKey as any).mockResolvedValue(
+      JSON.stringify([
+        ["title", "Shared Secret"],
+        ["start", "1700000000"],
+        ["end", "1700003600"],
+      ]),
+    );
+    const evt = {
+      id: "e",
+      pubkey: "author",
+      kind: CALENDAR_KINDS.privateEvent,
+      created_at: 1,
+      sig: "s",
+      content: "cipher",
+      tags: [["d", "d1"]],
+    };
+    const parsed = await parseCalendarEvent(evt as any, "nsec1somekey");
+    expect(parsed?.title).toBe("Shared Secret");
+    expect(parsed?.viewKey).toBe("nsec1somekey");
+    expect(decryptWithViewKey).toHaveBeenCalledWith("nsec1somekey", "cipher");
   });
 });

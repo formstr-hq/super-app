@@ -119,4 +119,21 @@ describe("extractInvitationFromWrap", () => {
     (unwrapEvent as any).mockResolvedValue({ kind: 1, pubkey: "x", content: "{}" });
     expect(await extractInvitationFromWrap({ id: "w" } as any)).toBeNull();
   });
+
+  it("reads the standalone invitation rumor shape (a + viewKey tags)", async () => {
+    (unwrapEvent as any).mockResolvedValue({
+      kind: CALENDAR_KINDS.rumor,
+      pubkey: "author",
+      content: "",
+      tags: [
+        ["a", "32678:author:d9", "wss://r"],
+        ["viewKey", "nsec1xyz"],
+      ],
+    });
+    const inv = await extractInvitationFromWrap({ id: "w1", created_at: 7 } as any);
+    expect(inv?.eventCoordinate).toBe("32678:author:d9");
+    expect(inv?.kind).toBe(32678);
+    expect(inv?.authorPubkey).toBe("author");
+    expect(inv?.viewKey).toBe("nsec1xyz");
+  });
 });

@@ -96,6 +96,10 @@ export interface InvitationRumor {
   kind: number;
   wrapId: string;
   receivedAt: number;
+  /** nsec to decrypt the referenced private event (standalone-shaped invites). */
+  viewKey?: string;
+  /** Relay where the referenced event was published. */
+  relayHint?: string;
 }
 
 /**
@@ -107,12 +111,33 @@ export async function extractInvitationFromWrap(wrap: NostrEvent): Promise<Invit
     const signer = await signerManager.getSigner();
     const unwrapped = await unwrapEvent(wrap, signer);
     if (!unwrapped) return null;
-    // The rumor content is the stringified envelope we publish from
-    // `publishPrivateCalendarEvent` — shape: { eventId, authorPubkey, kind }.
     if (unwrapped.kind !== CALENDAR_KINDS.rumor && unwrapped.kind !== CALENDAR_KINDS.rsvpRumor) {
       return null;
     }
-    const payload = JSON.parse(unwrapped.content ?? "{}");
+
+    // Preferred (standalone-compatible) shape: an `a` coordinate tag plus an
+    // optional `viewKey` tag. This is what calendar.formstr.app emits and
+    // reads (see upstream getDetailsFromGiftWrap).
+    const tags: string[][] = Array.isArray(unwrapped.tags) ? unwrapped.tags : [];
+    const aTag = tags.find((t) => t[0] === "a");
+    if (aTag?.[1]) {
+      const coordinate = aTag[1];
+      const [kindStr, authorPubkey] = coordinate.split(":");
+      const kind = Number(kindStr);
+      if (!kind || !authorPubkey) return null;
+      return {
+        eventCoordinate: coordinate,
+        authorPubkey,
+        kind,
+        wrapId: wrap.id,
+        receivedAt: wrap.created_at,
+        viewKey: tags.find((t) => t[0] === "viewKey")?.[1],
+        relayHint: aTag[2],
+      };
+    }
+
+    // Legacy super-app shape: { eventId, authorPubkey?, kind? } in content.
+    const payload = JSON.parse(unwrapped.content || "{}");
     const eventId: string | undefined = payload.eventId;
     const authorPubkey: string | undefined = payload.authorPubkey ?? unwrapped.pubkey;
     const kind: number = payload.kind ?? CALENDAR_KINDS.privateEvent;
