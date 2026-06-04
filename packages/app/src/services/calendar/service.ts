@@ -451,6 +451,31 @@ export async function deleteCalendarEvent(eventId: string, coordinate?: string):
   await nostrRuntime.publish(relays, signed);
 }
 
+/**
+ * Delete a calendar list (addressable kind-32123) via NIP-09, mirroring
+ * {@link deleteCalendarEvent}.
+ *
+ * @param coordinate - "32123:{authorPubkey}:{dTag}"
+ */
+export async function deleteCalendarList(coordinate: string): Promise<void> {
+  const signer = await signerManager.getSigner();
+  const kind = Number(coordinate.split(":")[0]) || CALENDAR_KINDS.calendarList;
+
+  const event: EventTemplate = {
+    kind: 5,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ["k", String(kind)],
+      ["a", coordinate],
+    ],
+    content: "Deleted via Formstr",
+  };
+
+  const signed = await signer.signEvent(event);
+  const relays = relayManager.getRelaysForModule("calendar");
+  await nostrRuntime.publish(relays, signed);
+}
+
 // ── Helpers ─────────────────────────────────────────────
 
 export async function parseCalendarEvent(

@@ -37,6 +37,7 @@ import {
   deleteCalendarEvent,
   fetchCalendarEventByCoordinate,
   fetchCalendarEventsSync,
+  deleteCalendarList,
   fetchCalendarLists,
   fetchInvitationsSync,
   moveEventBetweenCalendarLists,
@@ -529,6 +530,17 @@ describe("parseCalendarEvent — viewKey decrypt", () => {
     expect(parsed?.title).toBe("Shared Secret");
     expect(parsed?.viewKey).toBe("nsec1somekey");
     expect(decryptWithViewKey).toHaveBeenCalledWith("nsec1somekey", "cipher");
+  });
+});
+
+describe("deleteCalendarList", () => {
+  it("emits a NIP-09 kind-5 with k + a tags for the calendar coordinate", async () => {
+    await deleteCalendarList("32123:aabbccdd:cal1");
+    const published = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(published.kind).toBe(5);
+    expect(published.tags).toContainEqual(["k", "32123"]);
+    expect(published.tags).toContainEqual(["a", "32123:aabbccdd:cal1"]);
+    expect(nostrRuntime.publish).toHaveBeenCalledTimes(1);
   });
 });
 
