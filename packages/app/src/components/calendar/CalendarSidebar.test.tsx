@@ -61,4 +61,18 @@ describe("CalendarSidebar (My Calendars panel)", () => {
     fireEvent.click(screen.getByText(/show all public/i));
     expect(props.onToggleShowAllPublic).toHaveBeenCalledWith(true);
   });
+
+  it("renders an Invitations entry with the pending count and opens it", () => {
+    const onOpenInvitations = vi.fn();
+    renderSidebar({ pendingInvitations: 3, onOpenInvitations });
+    const row = screen.getByRole("button", { name: /invitations/i });
+    expect(row).toHaveTextContent("3");
+    fireEvent.click(row);
+    expect(onOpenInvitations).toHaveBeenCalled();
+  });
+
+  it("omits the Invitations entry when no handler is provided", () => {
+    renderSidebar();
+    expect(screen.queryByRole("button", { name: /invitations/i })).toBeNull();
+  });
 });

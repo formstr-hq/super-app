@@ -1,6 +1,6 @@
 import { Box, Checkbox, Divider, IconButton, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { Plus, Settings2 } from "lucide-react";
+import { Inbox, Plus, Settings2 } from "lucide-react";
 
 import type { CalendarList } from "../../services/calendar";
 
@@ -13,6 +13,12 @@ interface CalendarSidebarProps {
   onEditCalendar?: (calendar: CalendarList) => void;
   showAllPublic: boolean;
   onToggleShowAllPublic: (value: boolean) => void;
+  /** Pending invitation count for the rail badge. */
+  pendingInvitations?: number;
+  /** Which main view is active; drives the Invitations row's selected state. */
+  view?: "calendar" | "invitations";
+  /** When provided, the Invitations entry renders and opens the invitations view. */
+  onOpenInvitations?: () => void;
 }
 
 export function CalendarSidebar({
@@ -23,20 +29,79 @@ export function CalendarSidebar({
   onEditCalendar,
   showAllPublic,
   onToggleShowAllPublic,
+  pendingInvitations = 0,
+  view = "calendar",
+  onOpenInvitations,
 }: CalendarSidebarProps) {
   const theme = useTheme();
+  const invitationsActive = view === "invitations";
+
   return (
     <Box
       component="aside"
       sx={{
-        width: 208,
+        width: 236,
         flexShrink: 0,
+        height: "100%",
         borderRight: `1px solid ${theme.palette.divider}`,
-        px: 1.5,
-        py: 2,
-        display: { xs: "none", sm: "block" },
+        bgcolor: theme.palette.mode === "dark" ? "background.default" : "grey.50",
+        px: 1.25,
+        py: 1.75,
+        display: { xs: "none", sm: "flex" },
+        flexDirection: "column",
+        gap: 0.25,
       }}
     >
+      {onOpenInvitations && (
+        <Box
+          component="button"
+          type="button"
+          onClick={onOpenInvitations}
+          aria-label={`Invitations (${pendingInvitations} pending)`}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            width: "100%",
+            px: 1.1,
+            py: 1,
+            mb: 0.5,
+            borderRadius: 1,
+            border: "none",
+            cursor: "pointer",
+            font: "inherit",
+            textAlign: "left",
+            bgcolor: invitationsActive ? "text.primary" : "transparent",
+            color: invitationsActive ? "background.paper" : "text.primary",
+            "&:hover": { bgcolor: invitationsActive ? "text.primary" : "action.hover" },
+          }}
+        >
+          <Inbox size={15} />
+          <Typography variant="body2" sx={{ flex: 1, fontWeight: 500 }}>
+            Invitations
+          </Typography>
+          {pendingInvitations > 0 && (
+            <Box
+              component="span"
+              sx={{
+                fontSize: 11,
+                fontWeight: 700,
+                lineHeight: 1,
+                px: 0.85,
+                py: 0.4,
+                borderRadius: 5,
+                bgcolor: invitationsActive ? "background.paper" : "text.primary",
+                color: invitationsActive ? "text.primary" : "background.paper",
+              }}
+            >
+              {pendingInvitations}
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {onOpenInvitations && <Divider sx={{ mb: 0.75 }} />}
+
       <Box
         sx={{
           display: "flex",
@@ -49,9 +114,9 @@ export function CalendarSidebar({
         <Typography
           variant="caption"
           sx={{
-            fontWeight: 600,
+            fontWeight: 700,
             textTransform: "uppercase",
-            letterSpacing: "0.05em",
+            letterSpacing: "0.07em",
             color: "text.secondary",
           }}
         >
@@ -69,7 +134,8 @@ export function CalendarSidebar({
 
       <Box
         sx={{
-          maxHeight: 280,
+          flex: 1,
+          minHeight: 0,
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
@@ -86,7 +152,7 @@ export function CalendarSidebar({
                 display: "flex",
                 alignItems: "center",
                 gap: 1,
-                px: 0.5,
+                px: 0.75,
                 py: 0.75,
                 borderRadius: 1,
                 cursor: "pointer",
@@ -97,9 +163,9 @@ export function CalendarSidebar({
               <Box
                 component="span"
                 sx={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
+                  width: 11,
+                  height: 11,
+                  borderRadius: "3px",
                   flexShrink: 0,
                   bgcolor: visible ? cal.color || "primary.main" : "transparent",
                   border: `2px solid ${cal.color || theme.palette.text.secondary}`,
@@ -107,7 +173,7 @@ export function CalendarSidebar({
                 }}
               />
               <Typography
-                variant="caption"
+                variant="body2"
                 noWrap
                 sx={{ flex: 1, color: visible ? "text.primary" : "text.secondary" }}
               >
