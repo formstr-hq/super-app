@@ -41,7 +41,16 @@ export function CalendarListView({ events, onEventClick, calendars = [] }: Calen
   }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    <Box
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+      }}
+    >
       {Array.from(groups.entries()).map(([day, dayEvents]) => (
         <Box key={day}>
           <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>

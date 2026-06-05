@@ -45,13 +45,24 @@ export function CalendarMonthView({
     theme.palette.primary.main;
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1.5, overflow: "hidden" }}>
+    <Paper
+      variant="outlined"
+      sx={{
+        borderRadius: 1.5,
+        overflow: "hidden",
+        flex: 1,
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <Box
         sx={{
           display: "grid",
           gridTemplateColumns: "repeat(7, 1fr)",
           borderBottom: `1px solid ${theme.palette.divider}`,
           bgcolor: "action.hover",
+          flexShrink: 0,
         }}
       >
         {DAYS.map((day) => (
@@ -68,7 +79,15 @@ export function CalendarMonthView({
         ))}
       </Box>
 
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gridAutoRows: "minmax(72px, 1fr)",
+        }}
+      >
         {Array.from({ length: firstDay }, (_, i) => (
           <Box
             key={`pre-${i}`}
