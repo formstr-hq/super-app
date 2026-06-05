@@ -2,13 +2,14 @@ import { relayManager } from "@formstr/core";
 import { Box, Drawer } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 
 import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
 import { LoginDialog } from "../components/LoginDialog";
 import { useAuthStore, useSettingsStore, useInvitationsStore } from "../stores";
 
+import { isFullBleedRoute } from "./fullBleed";
 import { Header } from "./Header";
 import { Sidebar, SIDEBAR_WIDTH } from "./Sidebar";
 
@@ -42,6 +43,7 @@ export function AppShell() {
   // Module switching lives in the navbar (Header). On smaller screens the nav
   // collapses into an overlay drawer; on desktop there is no module rail.
   const isDesktop = !isMobile && !isTablet;
+  const fullBleed = isFullBleedRoute(useLocation().pathname);
 
   const sidebarContent = (
     <Sidebar
@@ -88,10 +90,23 @@ export function AppShell() {
           onOpenCommandPalette={() => setPaletteOpen(true)}
           isMobile={isMobile || isTablet}
         />
-        <Box component="main" sx={{ flex: 1, overflow: "auto" }}>
-          <Box sx={{ mx: "auto", maxWidth: "1280px", px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
+        <Box
+          component="main"
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflow: fullBleed ? "hidden" : "auto",
+            display: fullBleed ? "flex" : "block",
+            flexDirection: "column",
+          }}
+        >
+          {fullBleed ? (
             <Outlet />
-          </Box>
+          ) : (
+            <Box sx={{ mx: "auto", maxWidth: "1280px", px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
+              <Outlet />
+            </Box>
+          )}
         </Box>
       </Box>
 

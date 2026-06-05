@@ -108,7 +108,7 @@ export function CalendarPage() {
   };
 
   return (
-    <Box sx={{ display: "flex", height: "100%", minHeight: 0 }}>
+    <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
       <CalendarSidebar
         calendars={calendars}
         visibleCalendarIds={visibleCalendarIds}
