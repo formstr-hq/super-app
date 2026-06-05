@@ -1,12 +1,10 @@
 import {
   Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
-  DialogTitle,
   Divider,
   Typography,
 } from "@mui/material";
@@ -14,7 +12,7 @@ import { Lock, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { formatNpub } from "../../lib/npub";
-import type { CalendarEvent, RSVPResponse } from "../../services/calendar";
+import type { CalendarEvent, CalendarList, RSVPResponse } from "../../services/calendar";
 import { fetchRsvpsForEvent, rsvpToEvent } from "../../services/calendar/rsvp";
 
 import { RSVPBar, type RSVPBarPayload, type RSVPBarStatus } from "./RSVPBar";
@@ -22,21 +20,63 @@ import { RSVPBar, type RSVPBarPayload, type RSVPBarStatus } from "./RSVPBar";
 interface EventDetailsDialogProps {
   event: CalendarEvent | null;
   currentUserPubkey: string | null;
+  calendars?: CalendarList[];
   onClose: () => void;
   onEdit: (event: CalendarEvent) => void;
   onDelete: (event: CalendarEvent) => void;
 }
 
-const formatTime = (unixSec: number) =>
-  new Date(unixSec * 1000).toLocaleString(undefined, {
+function formatWhen(beginMs: number, endMs: number): string {
+  const begin = new Date(beginMs);
+  const end = new Date(endMs);
+  const datePart = begin.toLocaleDateString(undefined, {
     weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const startTime = begin.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const endTime = end.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `${datePart} · ${startTime}–${endTime}`;
+}
+
+function formatSuggested(unixSec: number): string {
+  return new Date(unixSec * 1000).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function initials(pubkey: string): string {
+  return pubkey.slice(0, 2).toUpperCase();
+}
+
+function StatusPill({ status }: { status: string }) {
+  const accepted = status === "accepted";
+  return (
+    <Box
+      component="span"
+      sx={{
+        fontSize: 11,
+        px: "9px",
+        py: "2px",
+        borderRadius: "20px",
+        border: "1px solid",
+        borderColor: accepted ? "transparent" : "divider",
+        bgcolor: accepted ? "text.primary" : "transparent",
+        color: accepted ? "background.paper" : "text.secondary",
+        whiteSpace: "nowrap",
+        textTransform: "capitalize",
+      }}
+    >
+      {status}
+    </Box>
+  );
+}
 
 export function EventDetailsDialog({
   event,
   currentUserPubkey,
+  calendars = [],
   onClose,
   onEdit,
   onDelete,
@@ -62,22 +102,7 @@ export function EventDetailsDialog({
 
   if (!event) return null;
 
-  const formatDate = (ms: number) =>
-    new Date(ms).toLocaleString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-  const rows = [
-    { label: "Start", value: formatDate(event.begin) },
-    { label: "End", value: formatDate(event.end) },
-    ...(event.location.length ? [{ label: "Location", value: event.location.join(", ") }] : []),
-    ...(event.repeat.rrule ? [{ label: "Repeats", value: event.repeat.rrule }] : []),
-  ];
+  const calendar = event.calendarId ? calendars.find((c) => c.id === event.calendarId) : null;
 
   const myStatus = currentUserPubkey
     ? (rsvps.find((r) => r.pubkey === currentUserPubkey)?.status as RSVPBarStatus | undefined)
@@ -94,27 +119,69 @@ export function EventDetailsDialog({
     }
   };
 
+  const metaRows: { label: string; content: React.ReactNode }[] = [
+    {
+      label: "When",
+      content: formatWhen(event.begin, event.end),
+    },
+    ...(event.location.length ? [{ label: "Where", content: event.location.join(", ") }] : []),
+    ...(calendar
+      ? [
+          {
+            label: "Calendar",
+            content: (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                <Box
+                  sx={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: "3px",
+                    bgcolor: calendar.color,
+                    flexShrink: 0,
+                  }}
+                />
+                <span>{calendar.title || "Untitled"}</span>
+              </Box>
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <Dialog open={!!event} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        {event.isPrivate && <Lock size={16} />}
-        {event.title}
-      </DialogTitle>
-      {event.description && (
-        <DialogContentText sx={{ px: 3, pb: 0 }}>{event.description}</DialogContentText>
-      )}
+      <Box sx={{ px: 3, pt: 2.5, pb: 0 }}>
+        <Typography
+          variant="h6"
+          fontWeight={700}
+          sx={{ display: "flex", alignItems: "center", gap: 1 }}
+        >
+          {event.isPrivate && <Lock size={16} />}
+          {event.title}
+        </Typography>
+        {event.description && (
+          <DialogContentText sx={{ mt: 0.5, fontSize: 13 }}>{event.description}</DialogContentText>
+        )}
+      </Box>
+
       <DialogContent>
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-          {rows.map((row) => (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+          {metaRows.map((row) => (
             <Box key={row.label} sx={{ display: "flex", gap: 2 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ width: 64, flexShrink: 0 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ width: 64, flexShrink: 0, fontSize: 13 }}
+              >
                 {row.label}
               </Typography>
-              <Typography variant="body2">{row.value}</Typography>
+              <Typography variant="body2" sx={{ fontSize: 13.5 }}>
+                {row.content}
+              </Typography>
             </Box>
           ))}
 
-          <Divider />
+          <Divider sx={{ my: 1 }} />
           <RSVPBar
             event={event}
             myStatus={myStatus}
@@ -122,38 +189,78 @@ export function EventDetailsDialog({
             onSubmit={submitRsvp}
           />
 
-          <Divider />
-          <Typography variant="caption" fontWeight={600} color="text.secondary">
-            Attendees ({rsvps.length})
-          </Typography>
-          {rsvps.length === 0 && (
-            <Typography variant="caption" color="text.secondary">
-              No RSVPs yet.
-            </Typography>
+          {rsvps.length > 0 && (
+            <>
+              <Divider sx={{ my: 1 }} />
+              <Typography
+                variant="caption"
+                fontWeight={700}
+                color="text.secondary"
+                sx={{ letterSpacing: "0.06em", textTransform: "uppercase" }}
+              >
+                Attendees · {rsvps.length}
+              </Typography>
+              {rsvps.map((r) => (
+                <Box key={r.pubkey} sx={{ display: "flex", flexDirection: "column" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, py: 0.5 }}>
+                    <Box
+                      sx={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: "50%",
+                        bgcolor: "action.hover",
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "text.secondary",
+                      }}
+                    >
+                      {initials(r.pubkey)}
+                    </Box>
+                    <Typography variant="body2" sx={{ flex: 1, fontSize: 13.5 }}>
+                      {formatNpub(r.pubkey)}
+                      {r.pubkey === event.user && (
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ ml: 0.5 }}
+                        >
+                          (organiser)
+                        </Typography>
+                      )}
+                    </Typography>
+                    <StatusPill status={r.status} />
+                  </Box>
+                  {r.comment && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ ml: "34px", mt: "-3px", pb: 0.5 }}
+                    >
+                      "{r.comment}"
+                    </Typography>
+                  )}
+                  {r.suggestedStart && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ ml: "34px", mt: r.comment ? 0 : "-3px", pb: 0.5 }}
+                    >
+                      suggests {formatSuggested(r.suggestedStart)}
+                      {r.suggestedEnd ? ` – ${formatSuggested(r.suggestedEnd)}` : ""}
+                    </Typography>
+                  )}
+                </Box>
+              ))}
+            </>
           )}
-          {rsvps.map((r) => (
-            <Box key={r.pubkey} sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                  {formatNpub(r.pubkey)}
-                </Typography>
-                <Chip label={r.status} size="small" />
-              </Box>
-              {r.comment && (
-                <Typography variant="caption" color="text.secondary">
-                  “{r.comment}”
-                </Typography>
-              )}
-              {r.suggestedStart && (
-                <Typography variant="caption" color="text.secondary">
-                  suggests {formatTime(r.suggestedStart)}
-                  {r.suggestedEnd ? ` – ${formatTime(r.suggestedEnd)}` : ""}
-                </Typography>
-              )}
-            </Box>
-          ))}
         </Box>
       </DialogContent>
+
       <DialogActions>
         {isAuthor && (
           <>
@@ -162,6 +269,7 @@ export function EventDetailsDialog({
               variant="outlined"
               startIcon={<Trash2 size={14} />}
               onClick={() => onDelete(event)}
+              sx={{ mr: "auto" }}
             >
               Delete
             </Button>

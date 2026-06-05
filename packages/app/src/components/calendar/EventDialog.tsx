@@ -6,7 +6,6 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogContentText,
   DialogTitle,
   FormControl,
   FormControlLabel,
@@ -139,9 +138,6 @@ export function EventDialog({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{editing ? "Edit Event" : "New Event"}</DialogTitle>
-      <DialogContentText sx={{ px: 3, pb: 0 }}>
-        Schedule an event on the Nostr network.
-      </DialogContentText>
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 2 }}>
         <TextField
           label="Title"
@@ -190,7 +186,18 @@ export function EventDialog({
               <MenuItem value="none">No calendar</MenuItem>
               {calendars.map((cal) => (
                 <MenuItem key={cal.id} value={cal.id}>
-                  {cal.title || "Untitled"}
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box
+                      sx={{
+                        width: 11,
+                        height: 11,
+                        borderRadius: "3px",
+                        bgcolor: cal.color,
+                        flexShrink: 0,
+                      }}
+                    />
+                    {cal.title || "Untitled"}
+                  </Box>
                 </MenuItem>
               ))}
             </Select>

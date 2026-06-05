@@ -202,6 +202,7 @@ export function CalendarPage() {
       <EventDetailsDialog
         event={detailEvent}
         currentUserPubkey={pubkey}
+        calendars={calendars}
         onClose={() => setDetailEvent(null)}
         onEdit={openEdit}
         onDelete={handleDelete}
