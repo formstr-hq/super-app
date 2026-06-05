@@ -8,11 +8,12 @@ import { CalendarMonthView } from "../components/calendar/CalendarMonthView";
 import { CalendarSidebar } from "../components/calendar/CalendarSidebar";
 import { EventDetailsDialog } from "../components/calendar/EventDetailsDialog";
 import { EventDialog } from "../components/calendar/EventDialog";
-import { InvitationInbox } from "../components/calendar/InvitationInbox";
+import { InvitationsView } from "../components/calendar/InvitationsView";
 import { filterEventsByCalendarVisibility } from "../lib/calendarMembership";
 import type { CalendarEvent, CalendarList } from "../services/calendar";
 import { CALENDAR_KINDS } from "../services/calendar";
 import { useAuthStore, useCalendarStore } from "../stores";
+import { useInvitationsStore } from "../stores/invitationsStore";
 
 export function CalendarPage() {
   const {
@@ -32,7 +33,11 @@ export function CalendarPage() {
   } = useCalendarStore();
   const pubkey = useAuthStore((s) => s.pubkey);
   const pubkeyRef = useRef(pubkey);
+  const pendingInvitations = useInvitationsStore(
+    (s) => s.invitations.filter((i) => !i.rsvp).length,
+  );
 
+  const [view, setView] = useState<"calendar" | "invitations">("calendar");
   const [viewMode, setViewMode] = useState<"month" | "list">("month");
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
@@ -103,7 +108,7 @@ export function CalendarPage() {
   };
 
   return (
-    <Box sx={{ display: "flex" }}>
+    <Box sx={{ display: "flex", height: "100%", minHeight: 0 }}>
       <CalendarSidebar
         calendars={calendars}
         visibleCalendarIds={visibleCalendarIds}
@@ -112,44 +117,60 @@ export function CalendarPage() {
         onEditCalendar={openEditCalendar}
         showAllPublic={showAllPublic}
         onToggleShowAllPublic={setShowAllPublic}
+        pendingInvitations={pendingInvitations}
+        view={view}
+        onOpenInvitations={() => setView("invitations")}
       />
 
-      <Box sx={{ flex: 1, minWidth: 0, pl: { sm: 3 } }}>
-        <CalendarHeader
-          monthLabel={monthLabel}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          onPrev={() => setSelectedDate(new Date(year, month - 1, 1))}
-          onNext={() => setSelectedDate(new Date(year, month + 1, 1))}
-          onToday={() => setSelectedDate(new Date())}
-          onNewEvent={openCreate}
-        />
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          p: { xs: 2, sm: 3 },
+        }}
+      >
+        {view === "invitations" ? (
+          <InvitationsView onBack={() => setView("calendar")} />
+        ) : (
+          <>
+            <CalendarHeader
+              monthLabel={monthLabel}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              onPrev={() => setSelectedDate(new Date(year, month - 1, 1))}
+              onNext={() => setSelectedDate(new Date(year, month + 1, 1))}
+              onToday={() => setSelectedDate(new Date())}
+              onNewEvent={openCreate}
+            />
 
-        {error && (
-          <Typography variant="body2" color="error" sx={{ mb: 2 }}>
-            {error}
-          </Typography>
-        )}
+            {error && (
+              <Typography variant="body2" color="error" sx={{ mb: 2 }}>
+                {error}
+              </Typography>
+            )}
 
-        <InvitationInbox />
+            {viewMode === "month" && (
+              <CalendarMonthView
+                events={filteredEvents}
+                year={year}
+                month={month}
+                calendars={calendars}
+                onEventClick={setDetailEvent}
+                onDeleteEvent={handleDelete}
+              />
+            )}
 
-        {viewMode === "month" && (
-          <CalendarMonthView
-            events={filteredEvents}
-            year={year}
-            month={month}
-            calendars={calendars}
-            onEventClick={setDetailEvent}
-            onDeleteEvent={handleDelete}
-          />
-        )}
-
-        {viewMode === "list" && (
-          <CalendarListView
-            events={filteredEvents}
-            calendars={calendars}
-            onEventClick={setDetailEvent}
-          />
+            {viewMode === "list" && (
+              <CalendarListView
+                events={filteredEvents}
+                calendars={calendars}
+                onEventClick={setDetailEvent}
+              />
+            )}
+          </>
         )}
       </Box>
 
