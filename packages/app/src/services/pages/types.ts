@@ -31,7 +31,16 @@ export interface PageSummary {
   createdAt: number;
   isEncrypted: boolean;
   tags?: string[];
+  /** True for docs received via a share link (kind-11234 entries). */
+  shared?: boolean;
+  /** True when the share carried an editKey (recipient can edit). */
+  canEdit?: boolean;
+  /** The doc's viewKey (hex), when known (shared docs / owner's own shares). */
+  viewKey?: string;
 }
+
+/** One entry in the kind-11234 shared-with-me list: [address, viewKey, editKey?]. */
+export type SharedPageEntry = [string, string] | [string, string, string];
 
 export interface ShareResult {
   url: string;
