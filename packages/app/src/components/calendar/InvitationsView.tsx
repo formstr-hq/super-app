@@ -61,15 +61,33 @@ export function InvitationsView({ onBack }: InvitationsViewProps) {
               key={inv.wrapId}
               inv={inv}
               onAccept={async () => {
-                await rsvpToEvent(inv.eventCoordinate, "accepted", inv.kind !== 31923);
+                await rsvpToEvent(
+                  inv.eventCoordinate,
+                  "accepted",
+                  inv.kind !== 31923,
+                  undefined,
+                  inv.viewKey,
+                );
                 markRsvp(inv.eventCoordinate, "accepted");
               }}
               onDecline={async () => {
-                await rsvpToEvent(inv.eventCoordinate, "declined", inv.kind !== 31923);
+                await rsvpToEvent(
+                  inv.eventCoordinate,
+                  "declined",
+                  inv.kind !== 31923,
+                  undefined,
+                  inv.viewKey,
+                );
                 markRsvp(inv.eventCoordinate, "declined");
               }}
               onTentative={async () => {
-                await rsvpToEvent(inv.eventCoordinate, "tentative", inv.kind !== 31923);
+                await rsvpToEvent(
+                  inv.eventCoordinate,
+                  "tentative",
+                  inv.kind !== 31923,
+                  undefined,
+                  inv.viewKey,
+                );
                 markRsvp(inv.eventCoordinate, "tentative");
               }}
               onDismiss={() => dismiss(inv.wrapId)}

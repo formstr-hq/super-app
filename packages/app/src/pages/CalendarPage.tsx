@@ -1,6 +1,7 @@
 import { Box, Typography } from "@mui/material";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
+import { BookingsView } from "../components/calendar/BookingsView";
 import { CalendarHeader } from "../components/calendar/CalendarHeader";
 import { CalendarListView } from "../components/calendar/CalendarListView";
 import { CalendarManageDialog } from "../components/calendar/CalendarManageDialog";
@@ -12,7 +13,7 @@ import { InvitationsView } from "../components/calendar/InvitationsView";
 import { filterEventsByCalendarVisibility } from "../lib/calendarMembership";
 import type { CalendarEvent, CalendarList } from "../services/calendar";
 import { CALENDAR_KINDS } from "../services/calendar";
-import { useAuthStore, useCalendarStore } from "../stores";
+import { useAuthStore, useBookingStore, useCalendarStore } from "../stores";
 import { useInvitationsStore } from "../stores/invitationsStore";
 
 export function CalendarPage() {
@@ -32,12 +33,16 @@ export function CalendarPage() {
     deleteEvent,
   } = useCalendarStore();
   const pubkey = useAuthStore((s) => s.pubkey);
-  const pubkeyRef = useRef(pubkey);
   const pendingInvitations = useInvitationsStore(
     (s) => s.invitations.filter((i) => !i.rsvp).length,
   );
+  const schedulingPages = useBookingStore((s) => s.schedulingPages);
+  const pendingBookings = useBookingStore(
+    (s) => s.requests.filter((r) => r.status === "pending").length,
+  );
+  const fetchBookings = useBookingStore((s) => s.fetchAll);
 
-  const [view, setView] = useState<"calendar" | "invitations">("calendar");
+  const [view, setView] = useState<"calendar" | "invitations" | "bookings">("calendar");
   const [viewMode, setViewMode] = useState<"month" | "list">("month");
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
@@ -48,27 +53,29 @@ export function CalendarPage() {
   const [showAllPublic, setShowAllPublic] = useState(false);
 
   useEffect(() => {
-    pubkeyRef.current = pubkey;
-  }, [pubkey]);
-  useEffect(() => {
     fetchCalendars();
   }, [fetchCalendars]);
+  useEffect(() => {
+    if (pubkey) fetchBookings();
+  }, [pubkey, fetchBookings]);
   useEffect(() => {
     if (calendars.length > 0 && visibleCalendarIds.size === 0) {
       setVisibleCalendarIds(new Set(calendars.map((c) => c.id)));
     }
   }, [calendars, visibleCalendarIds.size]);
+  // Fetch events independent of the viewed month: relays filter `since`/`until`
+  // on publish time, not the event's start, so a month-coupled window drops
+  // events created in a different month than they occur. We fetch the user's
+  // events broadly (+ private members once calendars load) and the views filter
+  // by date client-side. Month navigation is purely client-side. "Show all
+  // public" browses a recent window of public events instead.
   useEffect(() => {
-    if (!showAllPublic && !pubkeyRef.current) return;
-    const start = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-    const end = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
-    const params: Parameters<typeof fetchEvents>[0] = {
-      since: Math.floor(start.getTime() / 1000),
-      until: Math.floor(end.getTime() / 1000),
-    };
-    if (!showAllPublic && pubkeyRef.current) params.authors = [pubkeyRef.current];
-    fetchEvents(params);
-  }, [selectedDate, fetchEvents, showAllPublic]);
+    if (!showAllPublic && !pubkey) return;
+    const opts = showAllPublic
+      ? { since: Math.floor((Date.now() - 1000 * 60 * 60 * 24 * 90) / 1000) }
+      : { authors: [pubkey!] };
+    fetchEvents(opts);
+  }, [fetchEvents, showAllPublic, pubkey, calendars.length]);
 
   const year = selectedDate.getFullYear();
   const month = selectedDate.getMonth();
@@ -120,6 +127,9 @@ export function CalendarPage() {
         pendingInvitations={pendingInvitations}
         view={view}
         onOpenInvitations={() => setView("invitations")}
+        schedulingPages={schedulingPages}
+        pendingBookings={pendingBookings}
+        onOpenBookings={() => setView("bookings")}
       />
 
       <Box
@@ -134,6 +144,8 @@ export function CalendarPage() {
       >
         {view === "invitations" ? (
           <InvitationsView onBack={() => setView("calendar")} />
+        ) : view === "bookings" ? (
+          <BookingsView onBack={() => setView("calendar")} />
         ) : (
           <>
             <CalendarHeader
@@ -166,6 +178,8 @@ export function CalendarPage() {
             {viewMode === "list" && (
               <CalendarListView
                 events={filteredEvents}
+                year={year}
+                month={month}
                 calendars={calendars}
                 onEventClick={setDetailEvent}
               />

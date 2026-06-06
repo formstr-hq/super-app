@@ -11,6 +11,7 @@ import {
 import { Lock, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { calendarForEvent } from "../../lib/calendarMembership";
 import { formatNpub } from "../../lib/npub";
 import type { CalendarEvent, CalendarList, RSVPResponse } from "../../services/calendar";
 import { fetchRsvpsForEvent, rsvpToEvent } from "../../services/calendar/rsvp";
@@ -90,7 +91,7 @@ export function EventDetailsDialog({
   useEffect(() => {
     if (!event) return;
     let active = true;
-    fetchRsvpsForEvent(coordinate)
+    fetchRsvpsForEvent(coordinate, event.viewKey)
       .then((r) => {
         if (active) setRsvps(r);
       })
@@ -102,7 +103,7 @@ export function EventDetailsDialog({
 
   if (!event) return null;
 
-  const calendar = event.calendarId ? calendars.find((c) => c.id === event.calendarId) : null;
+  const calendar = calendarForEvent(event, calendars);
 
   const myStatus = currentUserPubkey
     ? (rsvps.find((r) => r.pubkey === currentUserPubkey)?.status as RSVPBarStatus | undefined)
@@ -111,8 +112,8 @@ export function EventDetailsDialog({
   const submitRsvp = async (payload: RSVPBarPayload) => {
     setSubmitting(true);
     try {
-      await rsvpToEvent(coordinate, payload.status, event.isPrivate, payload);
-      const refreshed = await fetchRsvpsForEvent(coordinate);
+      await rsvpToEvent(coordinate, payload.status, event.isPrivate, payload, event.viewKey);
+      const refreshed = await fetchRsvpsForEvent(coordinate, event.viewKey);
       setRsvps(refreshed);
     } finally {
       setSubmitting(false);

@@ -167,6 +167,24 @@ After these, a calendar/event authored in the super-app round-trips into the
 standalone: the kind-32123 list decodes to a tags array, and private-event
 invitations carry the `a`+`viewKey` rumor the standalone already parses.
 
+**2026-06-05 follow-up round (uncommitted on the same branch):**
+
+- **Private events now embed the inner `["d", id]` (+ `["image", …]`) and emit the
+  two-element `["l", <RRULE>]` label** — see §5 kind 32678. This is what makes
+  super-app private events render individually (not collapsed under id `""`) in
+  calendar.formstr.app.
+- **NIP-09 deletions are now applied at fetch time** (`service.ts` `fetchDeletions`
+  - `isEventDeleted`, used by `fetchCalendarEventsForUser`, `fetchCalendarEventsSync`
+    and `fetchCalendarLists`). Previously the super-app published a correct kind-5
+    deletion but never re-applied it after a reload, so a deleted event/calendar
+    re-appeared on refresh (most relays keep serving addressable events after a
+    NIP-09 request). This mirrors the standalone, which calls `fetchDeletionEvents`
+    at init and rejects deleted coordinates in its EventStore.
+- **New events default to private (viewKey-backed)** and always land in a calendar
+  list, matching the standalone (`CalendarEventEdit.tsx:327` defaults `isPrivate`
+  true and `addEventToCalendar`s every private event). A private event's viewKey
+  only survives a refresh if it is stored in a calendar-list `eventRef`.
+
 ---
 
 ## 4. Recommended defensive guards for the standalone repo
@@ -185,6 +203,16 @@ remaining gaps are the `nip19.decode` callsites.
   subscription.
 
 ### Still recommended
+
+0. **Fix `publishPublicCalendarEvent` writing location as an `image` tag.**
+   `nostr.ts:961-965` does `event.location.map((location) => tags.push(["image", location]))`
+   — it pushes the location string under an **`image`** key, not `location`. So a
+   standalone-authored **public** event with a location stores that location as an
+   image; every parser (`parser.ts:71-78` reads `image`→image, `location`→location)
+   then renders it in the wrong field, and the location is lost. Should be
+   `tags.push(["location", location])`. (Private events are unaffected —
+   `preparePrivateCalendarEvent` writes `["location", …]` correctly.) The super-app
+   cannot fix this from its side; it only mis-displays the resulting event.
 
 1. **Guard every `nip19.decode` of user/relay-sourced keys.** Wrap a
    `safeNip19Decode(value, expectedPrefix)` helper that returns `null` (and
@@ -247,14 +275,24 @@ Tags (super-app `publishPublicCalendarEvent`):
 `["location", …]?`, `["r", <website>]?`, `["image", …]?`,
 `["t", <category>]*`, `["p", <participantPubkey>]*`,
 `["start_tzid", …]?`, `["end_tzid", …]?`,
-`["L","rrule"] + ["l", <RRULE>, "rrule"]`? , `["form", <naddr>]?`. `content:""`.
+`["L","rrule"] + ["l", <RRULE>]`? , `["form", <naddr>]?`. `content:""`.
+(As of the 2026-06-05 round the super-app emits the **two-element** `["l", <RRULE>]`
+label exactly like the standalone; it still _reads_ the legacy 3-element form.)
 
 ### kind 32678 — Private calendar event (addressable, viewKey-encrypted content)
 
 - Outer tags: `["d", id]`. `content` = NIP-44 encrypt (to the **viewKey** pubkey)
   of the JSON tags array `[["title",…],["description",…],["start",…],["end",…],
-["location",…]?, ["t",…]*, ["p",…]*, ["start_tzid",…]?, ["end_tzid",…]?,
-["L","rrule"]+["l",<RRULE>,"rrule"]?, ["form",<naddr>]?]`.
+["d", id], ["image",…]?, ["location",…]?, ["t",…]*, ["p",…]*, ["start_tzid",…]?,
+["end_tzid",…]?, ["L","rrule"]+["l",<RRULE>]?, ["form",<naddr>]?]`.
+- **The inner `["d", id]` is mandatory for interop.** The standalone's
+  `viewPrivateEvent` (`nostr.ts:799-802`) returns `{…event, tags: <decryptedArray>}`,
+  i.e. it **replaces** the event's tags with the decrypted array, and then
+  `nostrEventToCalendar` (`parser.ts:61-63`) reads the event id from a `["d", …]`
+  row inside it. If the inner `d` is missing, **every** private event from that
+  author collapses under id `""` in the standalone's store (`events.ts:165-172`),
+  so only one survives. The super-app omitted it before 2026-06-05; it now emits
+  it (matching `preparePrivateCalendarEvent` `nostr.ts:344`).
 - Anyone holding the viewKey nsec can decrypt; the author shares it via the gift
   wrap below.
 

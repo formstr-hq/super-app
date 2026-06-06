@@ -37,6 +37,7 @@ import {
   deleteCalendarEvent,
   fetchCalendarEventByCoordinate,
   fetchCalendarEventsSync,
+  fetchCalendarEventsForUser,
   deleteCalendarList,
   fetchCalendarLists,
   fetchInvitationsSync,
@@ -191,9 +192,35 @@ describe("publishPrivateCalendarEvent — recurrence/tz/form in encrypted payloa
     const encryptedArg = (nip44SelfEncrypt as any).mock.calls[0][1];
     const rows = JSON.parse(encryptedArg) as string[][];
     expect(rows).toContainEqual(["L", "rrule"]);
-    expect(rows).toContainEqual(["l", "FREQ=WEEKLY", "rrule"]);
+    // Two-element ["l", RRULE] form, exactly matching the standalone's
+    // preparePrivateCalendarEvent (super-app previously wrote a 3-element form).
+    expect(rows).toContainEqual(["l", "FREQ=WEEKLY"]);
     expect(rows).toContainEqual(["start_tzid", "Asia/Tokyo"]);
     expect(rows).toContainEqual(["form", "naddr1priv"]);
+  });
+
+  it("embeds the inner ['d', id] and image so the standalone keys + renders it", async () => {
+    // The standalone's viewPrivateEvent replaces the event's tags with the
+    // decrypted array, then reads the event id from a ["d", …] row inside it.
+    // Omitting the inner d-tag makes every super-app private event collapse
+    // under id "" in calendar.formstr.app (only one survives). Image likewise
+    // lives inside the encrypted payload for private events.
+    (wrapEvent as any).mockResolvedValue({ id: "wrap", kind: CALENDAR_KINDS.giftWrap });
+    await publishPrivateCalendarEvent(
+      {
+        title: "SecretWithId",
+        description: "",
+        begin: new Date(1700000000000),
+        end: new Date(1700003600000),
+        isPrivate: true,
+        existingId: "abcd1234",
+        image: "https://img.test/x.png",
+      },
+      "default",
+    );
+    const rows = JSON.parse((nip44SelfEncrypt as any).mock.calls[0][1]) as string[][];
+    expect(rows).toContainEqual(["d", "abcd1234"]);
+    expect(rows).toContainEqual(["image", "https://img.test/x.png"]);
   });
 });
 
@@ -265,6 +292,43 @@ describe("fetchCalendarEventsSync", () => {
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("T");
   });
+
+  it("drops events the author deleted via NIP-09 (so the MCP listing matches the UI)", async () => {
+    (nostrRuntime.querySync as any).mockImplementation((_relays: unknown, filter: any) =>
+      Promise.resolve(
+        filter.kinds?.includes(5)
+          ? [
+              {
+                id: "del",
+                pubkey: "p",
+                kind: 5,
+                created_at: 9,
+                sig: "s",
+                content: "",
+                tags: [["a", "31923:p:d1"]],
+              },
+            ]
+          : [
+              {
+                id: "e1",
+                pubkey: "p",
+                kind: CALENDAR_KINDS.publicEvent,
+                created_at: 1,
+                sig: "s",
+                content: "",
+                tags: [
+                  ["d", "d1"],
+                  ["title", "T"],
+                  ["start", "1700000000"],
+                  ["end", "1700003600"],
+                ],
+              },
+            ],
+      ),
+    );
+    const events = await fetchCalendarEventsSync({});
+    expect(events).toHaveLength(0);
+  });
 });
 
 describe("publishPublicCalendarEvent — recurrence/tz/form round-trip", () => {
@@ -280,7 +344,8 @@ describe("publishPublicCalendarEvent — recurrence/tz/form round-trip", () => {
     });
     const e = (nostrRuntime.publish as any).mock.calls[0][1];
     expect(e.tags).toContainEqual(["L", "rrule"]);
-    expect(e.tags).toContainEqual(["l", "FREQ=WEEKLY;BYDAY=MO", "rrule"]);
+    // Two-element ["l", RRULE] label, exactly matching the standalone.
+    expect(e.tags).toContainEqual(["l", "FREQ=WEEKLY;BYDAY=MO"]);
     expect(e.tags).toContainEqual(["start_tzid", "America/New_York"]);
     expect(e.tags).toContainEqual(["form", "naddr1abc"]);
   });
@@ -312,6 +377,54 @@ describe("parseCalendarEvent (via fetchCalendarEventByCoordinate) — reads recu
     expect(ev!.repeat.rrule).toBe("FREQ=DAILY");
     expect(ev!.startTzid).toBe("Europe/Paris");
     expect(ev!.registrationFormRef).toBe("naddr1xyz");
+  });
+
+  it("reads description from event.content for public events (upstream compat)", async () => {
+    // calendar.formstr.app puts description in content (not a tag) for public events.
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "eid",
+        pubkey: "p",
+        kind: CALENDAR_KINDS.publicEvent,
+        created_at: 1000,
+        sig: "sig",
+        content: "an upstream-authored description",
+        tags: [
+          ["d", "abc12345"],
+          ["name", "My Event"],
+          ["start", "1700000000"],
+          ["end", "1700003600"],
+        ],
+      } satisfies Event,
+    ]);
+    const ev = await fetchCalendarEventByCoordinate("31923:p:abc12345");
+    expect(ev!.description).toBe("an upstream-authored description");
+  });
+
+  it("does not use content as description for private events (it is ciphertext)", async () => {
+    const { decryptWithViewKey } = await import("./viewKey");
+    (decryptWithViewKey as any).mockResolvedValue(
+      JSON.stringify([
+        ["title", "Private"],
+        ["description", "secret desc"],
+        ["start", "1700000000"],
+        ["end", "1700003600"],
+      ]),
+    );
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "eid",
+        pubkey: "p",
+        kind: CALENDAR_KINDS.privateEvent,
+        created_at: 1000,
+        sig: "sig",
+        content: "encrypted-blob",
+        tags: [["d", "abc12345"]],
+      } satisfies Event,
+    ]);
+    const ev = await fetchCalendarEventByCoordinate("32678:p:abc12345", "nsec1viewkey");
+    expect(ev!.description).toBe("secret desc");
+    expect(ev!.description).not.toBe("encrypted-blob");
   });
 });
 
@@ -410,6 +523,98 @@ describe("fetchCalendarLists", () => {
   });
 });
 
+describe("deletion filtering — deletes survive a refresh", () => {
+  const liveEvent = (dTag: string, createdAt = 100) => ({
+    id: `hex-${dTag}`,
+    pubkey: "aabbccdd",
+    kind: 31923,
+    created_at: createdAt,
+    sig: "s",
+    content: "",
+    tags: [
+      ["d", dTag],
+      ["title", dTag],
+      ["start", "1700000000"],
+      ["end", "1700003600"],
+    ],
+  });
+  const deletionFor = (coordinate: string, createdAt = 200) => ({
+    id: `del-${coordinate}`,
+    pubkey: "aabbccdd",
+    kind: 5,
+    created_at: createdAt,
+    sig: "s",
+    content: "",
+    tags: [
+      ["a", coordinate],
+      ["k", "31923"],
+    ],
+  });
+
+  it("fetchCalendarEventsForUser drops an event a NIP-09 kind-5 deleted", async () => {
+    (nostrRuntime.querySync as any).mockImplementation((_relays: unknown, filter: any) =>
+      Promise.resolve(
+        filter.kinds?.includes(5)
+          ? [deletionFor("31923:aabbccdd:gone")]
+          : [liveEvent("gone"), liveEvent("kept")],
+      ),
+    );
+    const events = await fetchCalendarEventsForUser([], { authors: ["aabbccdd"] });
+    expect(events.map((e) => e.id)).toEqual(["kept"]);
+  });
+
+  it("keeps a republished event newer than the deletion (created_at honored)", async () => {
+    (nostrRuntime.querySync as any).mockImplementation((_relays: unknown, filter: any) =>
+      Promise.resolve(
+        filter.kinds?.includes(5)
+          ? [deletionFor("31923:aabbccdd:revived", 200)]
+          : [liveEvent("revived", 300)],
+      ),
+    );
+    const events = await fetchCalendarEventsForUser([], { authors: ["aabbccdd"] });
+    expect(events.map((e) => e.id)).toEqual(["revived"]);
+  });
+
+  it("ignores a deletion whose coordinate author is not the deleter (forgery guard)", async () => {
+    const foreignDeletion = {
+      ...deletionFor("31923:aabbccdd:safe"),
+      pubkey: "ffffffff", // not the coordinate author
+    };
+    (nostrRuntime.querySync as any).mockImplementation((_relays: unknown, filter: any) =>
+      Promise.resolve(filter.kinds?.includes(5) ? [foreignDeletion] : [liveEvent("safe")]),
+    );
+    const events = await fetchCalendarEventsForUser([], { authors: ["aabbccdd"] });
+    expect(events.map((e) => e.id)).toEqual(["safe"]);
+  });
+
+  it("fetchCalendarLists drops a calendar list the user deleted", async () => {
+    const list = {
+      id: "evtL",
+      pubkey: "aabbccdd",
+      kind: CALENDAR_KINDS.calendarList,
+      created_at: 100,
+      sig: "s",
+      content: "enc",
+      tags: [["d", "deadcal"]],
+    };
+    const listDeletion = {
+      id: "delL",
+      pubkey: "aabbccdd",
+      kind: 5,
+      created_at: 200,
+      sig: "s",
+      content: "",
+      tags: [["a", `${CALENDAR_KINDS.calendarList}:aabbccdd:deadcal`]],
+    };
+    (nostrRuntime.querySync as any).mockImplementation((_relays: unknown, filter: any) =>
+      Promise.resolve(filter.kinds?.includes(5) ? [listDeletion] : [list]),
+    );
+    (nip44SelfDecrypt as any).mockResolvedValue(JSON.stringify([["title", "Dead"]]));
+    const lists = await fetchCalendarLists();
+    expect(lists).toHaveLength(0);
+  });
+});
+
 describe("fetchInvitationsSync", () => {
   it("unwraps gift-wraps, resolves the referenced event, and dedupes by wrapId", async () => {
     (nostrRuntime.querySync as any)
@@ -491,7 +696,7 @@ describe("calendar list CRUD interop", () => {
     expect(lists[0].eventId).toBe("evt1");
   });
 
-  it("fetchCalendarLists skips a non-array (legacy object) payload without throwing", async () => {
+  it("fetchCalendarLists loads AND heals a legacy object payload to a tags array", async () => {
     (nostrRuntime.querySync as any).mockResolvedValue([
       {
         id: "evt2",
@@ -503,8 +708,23 @@ describe("calendar list CRUD interop", () => {
         sig: "s",
       },
     ]);
-    (nip44SelfDecrypt as any).mockResolvedValue(JSON.stringify({ id: "cal2", title: "old" }));
-    await expect(fetchCalendarLists()).resolves.toEqual([]);
+    (nip44SelfDecrypt as any).mockResolvedValue(
+      JSON.stringify({
+        id: "cal2",
+        title: "old",
+        color: "#abcdef",
+        eventRefs: [["31923:pk:x", "", ""]],
+      }),
+    );
+    const lists = await fetchCalendarLists();
+    // The legacy object is surfaced locally…
+    expect(lists).toHaveLength(1);
+    expect(lists[0]).toMatchObject({ id: "cal2", title: "old", color: "#abcdef" });
+    // …and re-published as the standalone tags-array shape (the heal is
+    // fire-and-forget, so flush the microtask/timer queue before asserting).
+    await new Promise((r) => setTimeout(r, 0));
+    expect(nip44SelfEncrypt).toHaveBeenCalled();
+    expect(nostrRuntime.publish).toHaveBeenCalled();
   });
 });
 
@@ -530,6 +750,33 @@ describe("parseCalendarEvent — viewKey decrypt", () => {
     expect(parsed?.title).toBe("Shared Secret");
     expect(parsed?.viewKey).toBe("nsec1somekey");
     expect(decryptWithViewKey).toHaveBeenCalledWith("nsec1somekey", "cipher");
+  });
+});
+
+describe("parseCalendarEvent — recurrence tag formats", () => {
+  const base = (tags: string[][]) => ({
+    id: "e",
+    pubkey: "author",
+    kind: CALENDAR_KINDS.publicEvent,
+    created_at: 1,
+    sig: "s",
+    content: "",
+    tags: [["d", "d1"], ["start", "1700000000"], ["end", "1700003600"], ...tags],
+  });
+
+  it("reads the standalone's NIP-32 ['L','rrule'] + 2-element ['l', rrule]", async () => {
+    const parsed = await parseCalendarEvent(
+      base([
+        ["L", "rrule"],
+        ["l", "FREQ=WEEKLY;BYDAY=TU,FR"],
+      ]) as any,
+    );
+    expect(parsed?.repeat.rrule).toBe("FREQ=WEEKLY;BYDAY=TU,FR");
+  });
+
+  it("reads the super-app's 3-element ['l', rrule, 'rrule']", async () => {
+    const parsed = await parseCalendarEvent(base([["l", "FREQ=DAILY", "rrule"]]) as any);
+    expect(parsed?.repeat.rrule).toBe("FREQ=DAILY");
   });
 });
 

@@ -28,3 +28,26 @@ export function filterEventsByCalendarVisibility(
     return owning.some((c) => visibleCalendarIds.has(c.id));
   });
 }
+
+/**
+ * Resolves the calendar list that owns an event, matched by coordinate against
+ * each list's `eventRefs`. Returns `null` for unfiled events.
+ *
+ * Membership is NOT read from the event's `calendarId` field — fetched events
+ * never carry it (only the calendar list's `eventRefs` record membership), so
+ * any colour/name lookup must go through the refs to work for events authored
+ * elsewhere (e.g. calendar.formstr.app).
+ */
+export function calendarForEvent(
+  event: CalendarEvent,
+  calendars: CalendarList[],
+): CalendarList | null {
+  // Prefer the in-session `calendarId` (set right after creating an event,
+  // before the list refetch lands), then fall back to the coordinate match.
+  if (event.calendarId) {
+    const byId = calendars.find((c) => c.id === event.calendarId);
+    if (byId) return byId;
+  }
+  const coord = eventCoordinate(event);
+  return calendars.find((c) => c.eventRefs.some((ref) => ref[0] === coord)) ?? null;
+}

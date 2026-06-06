@@ -17,7 +17,7 @@ import {
   type CalendarList,
   type CalendarEventDraft,
 } from "./types";
-import { generateViewKey, encryptWithViewKey, decryptWithViewKey } from "./viewKey";
+import { generateViewKey, encryptWithViewKey, decryptWithViewKey, parseEventRef } from "./viewKey";
 
 // ── Publish Public Event ────────────────────────────────
 
@@ -46,8 +46,10 @@ export async function publishPublicCalendarEvent(
   if (draft.startTzid) tags.push(["start_tzid", draft.startTzid]);
   if (draft.endTzid) tags.push(["end_tzid", draft.endTzid]);
   if (draft.rrule) {
+    // NIP-32 label-pair, two-element ["l", RRULE] — exactly the shape the
+    // standalone writes + reads (it takes the tag right after ["L","rrule"]).
     tags.push(["L", "rrule"]);
-    tags.push(["l", draft.rrule, "rrule"]);
+    tags.push(["l", draft.rrule]);
   }
   if (draft.registrationFormRef) tags.push(["form", draft.registrationFormRef]);
 
@@ -68,6 +70,7 @@ export async function publishPublicCalendarEvent(
     title: draft.title,
     description: draft.description,
     kind: CALENDAR_KINDS.publicEvent,
+    relayHint: relays[0] ?? "",
     begin: draft.begin.getTime(),
     end: draft.end.getTime(),
     createdAt: signed.created_at,
@@ -95,13 +98,20 @@ export async function publishPrivateCalendarEvent(
   const pubkey = await signer.getPublicKey();
   const eventId = draft.existingId ?? crypto.randomUUID().slice(0, 8);
 
+  // The encrypted payload mirrors the standalone's preparePrivateCalendarEvent.
+  // Critically it carries an inner ["d", id]: the standalone's viewPrivateEvent
+  // REPLACES the event's tags with this decrypted array, then reads the event
+  // id from the "d" row. Without it every super-app private event collapses
+  // under id "" in calendar.formstr.app and only one survives.
   const eventData: string[][] = [
     ["title", draft.title],
     ["description", draft.description],
     ["start", String(Math.floor(draft.begin.getTime() / 1000))],
     ["end", String(Math.floor(draft.end.getTime() / 1000))],
+    ["d", eventId],
   ];
 
+  if (draft.image) eventData.push(["image", draft.image]);
   if (draft.location) eventData.push(["location", draft.location]);
   for (const cat of draft.categories ?? []) eventData.push(["t", cat]);
   for (const p of draft.participants ?? []) eventData.push(["p", p]);
@@ -109,8 +119,9 @@ export async function publishPrivateCalendarEvent(
   if (draft.startTzid) eventData.push(["start_tzid", draft.startTzid]);
   if (draft.endTzid) eventData.push(["end_tzid", draft.endTzid]);
   if (draft.rrule) {
+    // Two-element ["l", RRULE] label, matching the standalone exactly.
     eventData.push(["L", "rrule"]);
-    eventData.push(["l", draft.rrule, "rrule"]);
+    eventData.push(["l", draft.rrule]);
   }
   if (draft.registrationFormRef) eventData.push(["form", draft.registrationFormRef]);
 
@@ -165,6 +176,7 @@ export async function publishPrivateCalendarEvent(
     begin: draft.begin.getTime(),
     end: draft.end.getTime(),
     createdAt: signed.created_at,
+    image: draft.image,
     categories: draft.categories ?? [],
     participants: draft.participants ?? [],
     location: draft.location ? [draft.location] : [],
@@ -172,6 +184,7 @@ export async function publishPrivateCalendarEvent(
     user: pubkey,
     isPrivate: true,
     viewKey: viewKeyNsec,
+    relayHint,
     calendarId,
     repeat: { rrule: draft.rrule ?? null },
     startTzid: draft.startTzid,
@@ -225,7 +238,174 @@ export async function fetchCalendarEventsSync(
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  const parsed = await Promise.all(events.map((e) => parseCalendarEvent(e)));
+
+  // Honor NIP-09 deletions here too so the MCP listing (its caller) matches the
+  // UI and a deleted event never resurfaces.
+  const eventAuthors = new Set(events.map((e) => e.pubkey));
+  const deletions = await fetchDeletions(relays, [...eventAuthors]);
+  const survivors = events.filter((e) => !isEventDeleted(e, deletions));
+
+  const parsed = await Promise.all(survivors.map((e) => parseCalendarEvent(e)));
+  return parsed.filter((e: CalendarEvent | null): e is CalendarEvent => e !== null);
+}
+
+/**
+ * NIP-09 deletion index. Maps a deleted addressable coordinate to the newest
+ * deletion's `created_at` (an addressable event is only hidden when its own
+ * `created_at` is ≤ that, so a legitimate re-publish after a delete survives),
+ * and a set of `${author}:${eventId}` keys for deleted non-replaceable events.
+ */
+export interface DeletionIndex {
+  coordTimes: Map<string, number>;
+  ids: Set<string>;
+}
+
+/**
+ * Fetch the kind-5 deletion events authored by `authors` and index them.
+ *
+ * The standalone applies deletions at fetch time (its EventStore tracks
+ * `deletedCoordinates`/`deletedEventIds`); the super-app must do the same or a
+ * deleted event silently re-appears on the next refresh, because most relays
+ * keep serving addressable events after a NIP-09 request and the super-app's
+ * direct author query re-fetches them. Same-author rule: a deletion only counts
+ * against a coordinate whose author matches the deleter.
+ */
+export async function fetchDeletions(relays: string[], authors: string[]): Promise<DeletionIndex> {
+  const coordTimes = new Map<string, number>();
+  const ids = new Set<string>();
+  if (authors.length === 0) return { coordTimes, ids };
+
+  const events = await nostrRuntime.querySync(relays, { kinds: [5], authors } as Filter);
+  for (const ev of events) {
+    for (const tag of ev.tags) {
+      if (tag[0] === "a" && tag[1]) {
+        const author = tag[1].split(":")[1];
+        if (author && author !== ev.pubkey) continue; // forgery guard
+        const prev = coordTimes.get(tag[1]) ?? 0;
+        if (ev.created_at > prev) coordTimes.set(tag[1], ev.created_at);
+      } else if (tag[0] === "e" && tag[1]) {
+        ids.add(`${ev.pubkey}:${tag[1]}`);
+      }
+    }
+  }
+  return { coordTimes, ids };
+}
+
+/** True when `event` has been tombstoned by a kind-5 deletion in `index`. */
+export function isEventDeleted(event: Event, index: DeletionIndex): boolean {
+  if (index.ids.has(`${event.pubkey}:${event.id}`)) return true;
+  const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
+  const delTime = index.coordTimes.get(`${event.kind}:${event.pubkey}:${dTag}`);
+  return delTime !== undefined && event.created_at <= delTime;
+}
+
+/**
+ * Fetch the calendar events visible to the current user, deduped newest-wins by
+ * addressable coordinate. Combines two sources, matching the standalone:
+ *
+ *  1. **Direct** — public + private events by author. When `opts.authors` is
+ *     omitted (and no window is given) this defaults to the signed-in user, so a
+ *     plain `fetchEvents()` returns *your* events regardless of which month they
+ *     fall in. There is intentionally **no `created_at` window** here: relays
+ *     filter `since`/`until` against publish time, not the event's `start`, so a
+ *     month-coupled window silently drops events created in a different month
+ *     than they occur (the cross-app "doesn't sync" bug). The views filter by
+ *     event date client-side instead.
+ *  2. **Referenced** — private events listed in the supplied calendar lists'
+ *     `eventRefs`. Each ref carries the per-event **viewKey**, so private events
+ *     authored in calendar.formstr.app (or by other members of a shared
+ *     calendar) decrypt correctly — a plain author query can't, because their
+ *     content is encrypted to the viewKey, not the author's own key.
+ *
+ * Pass `opts.since` (no `authors`) to browse a window of all-public events.
+ */
+export async function fetchCalendarEventsForUser(
+  calendars: CalendarList[],
+  opts: { authors?: string[]; since?: number; until?: number } = {},
+): Promise<CalendarEvent[]> {
+  const relays = relayManager.getRelaysForModule("calendar");
+
+  // Default the direct query to the signed-in user unless an explicit author
+  // list or browse window was provided.
+  let authors = opts.authors;
+  if (!authors && !opts.since && !opts.until) {
+    try {
+      authors = [await (await signerManager.getSigner()).getPublicKey()];
+    } catch {
+      // Anonymous — fall through to an unfiltered (windowless) public query.
+    }
+  }
+
+  const collected = new Map<string, { event: Event; viewKey?: string }>();
+  const consider = (event: Event, viewKey?: string) => {
+    const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
+    const coordinate = `${event.kind}:${event.pubkey}:${dTag}`;
+    const existing = collected.get(coordinate);
+    if (!existing || event.created_at > existing.event.created_at) {
+      collected.set(coordinate, { event, viewKey: viewKey ?? existing?.viewKey });
+    } else if (viewKey && !existing.viewKey) {
+      existing.viewKey = viewKey;
+    }
+  };
+
+  // 1) Direct events by author / browse window. With an author list (own
+  // events) we include private kinds — those decrypt via the viewKey held in
+  // our calendar lists. Without authors ("show all public") we fetch ONLY
+  // public events: foreign private events can't be decrypted and would surface
+  // as "Untitled" noise; private members still arrive via eventRefs below.
+  const directFilter: Filter = {
+    kinds: authors
+      ? [CALENDAR_KINDS.publicEvent, CALENDAR_KINDS.privateEvent, CALENDAR_KINDS.privateRecurring]
+      : [CALENDAR_KINDS.publicEvent],
+    ...(authors && { authors }),
+    ...(opts.since && { since: opts.since }),
+    ...(opts.until && { until: opts.until }),
+  };
+  for (const event of await nostrRuntime.querySync(relays, directFilter)) consider(event);
+
+  // 2) Private members referenced (with viewKeys) by the calendar lists.
+  const kinds = new Set<number>();
+  const refAuthors = new Set<string>();
+  const dTags = new Set<string>();
+  const viewKeyByCoordinate = new Map<string, string>();
+  for (const cal of calendars) {
+    for (const ref of cal.eventRefs) {
+      const { coordinate, viewKey } = parseEventRef(ref);
+      const [kindStr, author, dTag] = coordinate.split(":");
+      const kind = Number(kindStr);
+      if (!kind || !author || !dTag) continue;
+      kinds.add(kind);
+      refAuthors.add(author);
+      dTags.add(dTag);
+      if (viewKey) viewKeyByCoordinate.set(coordinate, viewKey);
+    }
+  }
+  if (dTags.size > 0) {
+    const refFilter = {
+      kinds: [...kinds],
+      authors: [...refAuthors],
+      "#d": [...dTags],
+    } as Filter;
+    for (const event of await nostrRuntime.querySync(relays, refFilter)) {
+      const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
+      consider(event, viewKeyByCoordinate.get(`${event.kind}:${event.pubkey}:${dTag}`));
+    }
+  }
+
+  // Drop anything the author deleted via NIP-09. Without this a deleted event
+  // re-appears on every refresh (relays keep serving it; the direct query above
+  // re-fetches it). Query deletions for exactly the authors whose events we
+  // collected so the kind-5 lookup stays bounded.
+  const eventAuthors = new Set<string>();
+  for (const { event } of collected.values()) eventAuthors.add(event.pubkey);
+  const deletions = await fetchDeletions(relays, [...eventAuthors]);
+  const survivors = [...collected.values()].filter(
+    ({ event }) => !isEventDeleted(event, deletions),
+  );
+
+  const parsed = await Promise.all(
+    survivors.map(({ event, viewKey }) => parseCalendarEvent(event, viewKey)),
+  );
   return parsed.filter((e: CalendarEvent | null): e is CalendarEvent => e !== null);
 }
 
@@ -321,18 +501,54 @@ export async function fetchCalendarLists(): Promise<CalendarList[]> {
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  const lists: CalendarList[] = [];
 
+  // Newest-wins per d-tag: relays (and an old object-format version coexisting
+  // with the healed tags-array version) can return duplicates, which otherwise
+  // surface as duplicate calendars in the sidebar.
+  const newest = new Map<string, Event>();
   for (const event of events) {
+    const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
+    const prev = newest.get(dTag);
+    if (!prev || event.created_at > prev.created_at) newest.set(dTag, event);
+  }
+
+  // Honor NIP-09 deletions so a deleted calendar stays gone after a refresh
+  // (same root cause as deleted events). Filter BEFORE the heal step below so a
+  // deleted object-format list is never re-published back to life.
+  const deletions = await fetchDeletions(relays, [pubkey]);
+
+  const lists: CalendarList[] = [];
+  for (const [dTag, event] of newest) {
+    if (isEventDeleted(event, deletions)) continue;
     try {
       const decrypted = await nip44SelfDecrypt(signer, event.content);
-      const parsed = JSON.parse(decrypted);
-      // The standalone (and now we) store the list as a NIP tags array.
-      // Skip a legacy object payload rather than throwing — keeps a mixed
-      // account loading and matches the standalone's defensive intent.
-      if (!Array.isArray(parsed)) continue;
-      const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
-      lists.push(decodeCalendarList(parsed as string[][], dTag, event.id));
+      const parsed = JSON.parse(decrypted) as unknown;
+      if (Array.isArray(parsed)) {
+        lists.push(decodeCalendarList(parsed as string[][], dTag, event.id));
+      } else if (parsed && typeof parsed === "object") {
+        // Legacy super-app **object** payload. Load it AND re-publish it as the
+        // standalone's tags-array shape: calendar.formstr.app rejects object
+        // payloads, and (in deployed builds) that throw aborts its entire
+        // calendar-list load — so an object list left on relays makes *none* of
+        // the user's super-app events appear there. Healing it removes the
+        // trigger. Self-limiting: once republished (tags array, newer
+        // created_at) the next fetch sees an array and won't re-heal.
+        const obj = parsed as Record<string, unknown>;
+        const legacy: CalendarList = {
+          id: dTag,
+          eventId: event.id,
+          title: typeof obj.title === "string" ? obj.title : "Calendar",
+          description: typeof obj.description === "string" ? obj.description : "",
+          color: typeof obj.color === "string" ? obj.color : "#334155",
+          eventRefs: Array.isArray(obj.eventRefs) ? (obj.eventRefs as string[][]) : [],
+          createdAt: typeof obj.createdAt === "number" ? obj.createdAt : 0,
+          isVisible: obj.isVisible !== false,
+        };
+        lists.push(legacy);
+        void updateCalendarList(legacy).catch(() => {
+          // Best-effort heal — the list still loads locally regardless.
+        });
+      }
     } catch {
       // Skip corrupted entries
     }
@@ -507,7 +723,10 @@ export async function parseCalendarEvent(
 
   const title =
     tags.find((t) => t[0] === "title")?.[1] ?? tags.find((t) => t[0] === "name")?.[1] ?? "Untitled";
-  const description = tags.find((t) => t[0] === "description")?.[1] ?? "";
+  // Standalone public events put the description in `content`, not a tag.
+  // For private events content is encrypted ciphertext — never use it as text.
+  const description =
+    tags.find((t) => t[0] === "description")?.[1] ?? (isPrivate ? "" : (event.content ?? ""));
   const start = tags.find((t) => t[0] === "start")?.[1];
   const end = tags.find((t) => t[0] === "end")?.[1];
   const location = tags.filter((t) => t[0] === "location").map((t) => t[1]);
@@ -515,8 +734,14 @@ export async function parseCalendarEvent(
   const participants = tags.filter((t) => t[0] === "p").map((t) => t[1]);
   const image = tags.find((t) => t[0] === "image")?.[1];
   const website = tags.find((t) => t[0] === "r")?.[1] ?? "";
+  // Recurrence. The standalone writes NIP-32 labels: ["L","rrule"] followed by
+  // a 2-element ["l", <RRULE>]. The super-app (historically) wrote a 3-element
+  // ["l", <RRULE>, "rrule"]. Read both, else a legacy ["rrule", <RRULE>] —
+  // otherwise an upstream-authored recurring event never expands here.
+  const hasRruleLabel = tags.some((t) => t[0] === "L" && t[1] === "rrule");
   const rrule =
     tags.find((t) => t[0] === "l" && t[2] === "rrule")?.[1] ??
+    (hasRruleLabel ? tags.find((t) => t[0] === "l")?.[1] : undefined) ??
     tags.find((t) => t[0] === "rrule")?.[1] ??
     null;
   const startTzid = tags.find((t) => t[0] === "start_tzid")?.[1];

@@ -21,8 +21,7 @@ import { npubToHex } from "../../lib/npub";
 import { buildRRuleString, parseRRuleString, type RRuleParts } from "../../lib/rrule";
 import type { CalendarEvent, CalendarEventDraft, CalendarList } from "../../services/calendar";
 
-import { RRuleBuilder } from "./RRuleBuilder";
-import { TimezonePicker } from "./TimezonePicker";
+import { RecurrenceField } from "./RecurrenceField";
 
 /** Format an epoch-ms instant as a `datetime-local` input value in local time. */
 function toLocalInput(ms: number): string {
@@ -56,13 +55,16 @@ export function EventDialog({
   const [end, setEnd] = useState("");
   const [location, setLocation] = useState("");
   const [calendarId, setCalendarId] = useState("none");
-  const [isPrivate, setIsPrivate] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(true);
   const [participantsText, setParticipantsText] = useState("");
   const [rruleParts, setRruleParts] = useState<RRuleParts | null>(null);
-  const [startTzid, setStartTzid] = useState<string | undefined>(undefined);
   const [formRef, setFormRef] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Stable primitive so the reset effect doesn't re-run on every parent render
+  // (the `calendars` array identity can change) — only when the default changes.
+  const firstCalendarId = calendars[0]?.id;
 
   useEffect(() => {
     if (!open) return;
@@ -76,30 +78,29 @@ export function EventDialog({
       setIsPrivate(event.isPrivate);
       setParticipantsText(event.participants.join(", "));
       setRruleParts(parseRRuleString(event.repeat.rrule));
-      setStartTzid(event.startTzid);
       setFormRef(event.registrationFormRef ?? "");
       setAdvancedOpen(
-        !!event.repeat.rrule ||
-          !!event.startTzid ||
-          !!event.registrationFormRef ||
-          event.participants.length > 0,
+        !!event.repeat.rrule || !!event.registrationFormRef || event.participants.length > 0,
       );
     } else {
       const base = defaultDate ?? new Date();
       setTitle("");
       setDescription("");
       setLocation("");
-      setCalendarId("none");
-      setIsPrivate(false);
+      // Default to the first calendar so the (private-by-default) event has a
+      // home where its viewKey is stored — matching calendar.formstr.app.
+      setCalendarId(firstCalendarId ?? "none");
+      // Private (encrypted, viewKey-backed) by default, like the standalone, so
+      // new events are shareable + visible in calendar.formstr.app.
+      setIsPrivate(true);
       setParticipantsText("");
       setRruleParts(null);
-      setStartTzid(undefined);
       setFormRef("");
       setAdvancedOpen(false);
       setBegin(toLocalInput(base.getTime()));
       setEnd(toLocalInput(base.getTime() + 3_600_000));
     }
-  }, [open, event, defaultDate]);
+  }, [open, event, defaultDate, firstCalendarId]);
 
   const handleSubmit = async () => {
     if (!title || !begin) return;
@@ -123,7 +124,6 @@ export function EventDialog({
         isPrivate,
         participants: participants.length ? participants : undefined,
         rrule: buildRRuleString(rruleParts),
-        startTzid,
         registrationFormRef: formRef || undefined,
         existingId: event?.id,
       });
@@ -240,13 +240,7 @@ export function EventDialog({
               onChange={(e) => setParticipantsText(e.target.value)}
               helperText="Each participant receives a NIP-59 invitation."
             />
-            <RRuleBuilder value={rruleParts} onChange={setRruleParts} />
-            <Box>
-              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                Timezone
-              </Typography>
-              <TimezonePicker value={startTzid} onChange={setStartTzid} />
-            </Box>
+            <RecurrenceField value={rruleParts} onChange={setRruleParts} />
             <TextField
               label="Registration form (naddr/coordinate, optional)"
               size="small"

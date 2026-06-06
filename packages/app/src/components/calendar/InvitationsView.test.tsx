@@ -62,7 +62,13 @@ describe("InvitationsView", () => {
     renderView();
     fireEvent.click(screen.getByRole("button", { name: /accept/i }));
     await waitFor(() =>
-      expect(rsvpToEvent).toHaveBeenCalledWith("31923:author:d1", "accepted", false),
+      expect(rsvpToEvent).toHaveBeenCalledWith(
+        "31923:author:d1",
+        "accepted",
+        false,
+        undefined,
+        undefined,
+      ),
     );
     await waitFor(() => expect(state.markRsvp).toHaveBeenCalledWith("31923:author:d1", "accepted"));
   });

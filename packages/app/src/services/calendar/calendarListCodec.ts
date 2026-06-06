@@ -51,8 +51,17 @@ export function decodeCalendarList(tags: string[][], dTag: string, eventId: stri
         color = tag[1] || DEFAULT_COLOR;
         break;
       case "a":
-        // ["a", coordinate, relayHint?, viewKey?]
-        eventRefs.push([tag[1], tag[2] ?? "", tag[3] ?? ""]);
+        if (tag[1] === "a") {
+          // Heal double-"a" written by T9–T16: calendarStore stored ["a", coord, ...]
+          // inside eventRefs, so encodeCalendarList emitted ["a","a",coord,...].
+          // Detect by tag[1] === "a" and shift fields back to the correct positions.
+          // Self-healing: the next updateCalendarList write re-encodes correctly.
+          const coord = tag[2] ?? "";
+          if (coord && coord !== "a") eventRefs.push([coord, tag[3] ?? "", tag[4] ?? ""]);
+        } else {
+          // Normal format: ["a", coordinate, relayHint?, viewKey?]
+          eventRefs.push([tag[1], tag[2] ?? "", tag[3] ?? ""]);
+        }
         break;
     }
   }

@@ -8,3 +8,4 @@ export { usePollsStore } from "./pollsStore";
 export { useAIStore } from "./aiStore";
 export { useAIPendingStore, moduleForTool } from "./aiPendingStore";
 export { useInvitationsStore } from "./invitationsStore";
+export { useBookingStore } from "./bookingStore";

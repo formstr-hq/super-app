@@ -13,6 +13,13 @@ export const CALENDAR_KINDS = {
   rsvpGiftWrap: 1055,
   rsvpRumor: 55,
   participantRemoval: 84,
+  // Appointment scheduling (Calendly-style booking links).
+  schedulingPage: 31927,
+  schedulingPagesList: 32680,
+  bookingRequestGiftWrap: 1057,
+  bookingRequestRumor: 57,
+  bookingResponseGiftWrap: 1058,
+  bookingResponseRumor: 58,
 } as const;
 
 // ── Data Structures ─────────────────────────────────────

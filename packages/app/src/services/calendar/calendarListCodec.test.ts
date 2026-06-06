@@ -43,4 +43,30 @@ describe("calendarListCodec", () => {
     expect(d.title).toBe("Team");
     expect(d.eventRefs[0][0]).toBe("31923:pk:z");
   });
+
+  it("heals double-'a' refs written by T9-T16 (coordinate was in relay-URL slot)", () => {
+    const doubleA = [
+      ["title", "Bad"],
+      ["color", "#334155"],
+      ["a", "a", "31923:pk:xyz", "wss://r.test", "nsec1abc"],
+    ];
+    const d = decodeCalendarList(doubleA, "dx", "ex");
+    expect(d.eventRefs).toHaveLength(1);
+    expect(d.eventRefs[0][0]).toBe("31923:pk:xyz");
+    expect(d.eventRefs[0][1]).toBe("wss://r.test");
+    expect(d.eventRefs[0][2]).toBe("nsec1abc");
+  });
+
+  it("re-encoding healed refs produces valid tags (no double-a on next write)", () => {
+    const doubleA = [
+      ["title", "Bad"],
+      ["color", "#334155"],
+      ["a", "a", "31923:pk:xyz", "wss://r.test", "nsec1abc"],
+    ];
+    const healed = decodeCalendarList(doubleA, "dx", "ex");
+    const encoded = encodeCalendarList(healed);
+    expect(encoded).toContainEqual(["a", "31923:pk:xyz", "wss://r.test", "nsec1abc"]);
+    expect(encoded.filter((t) => t[0] === "a")).toHaveLength(1);
+    expect(encoded.find((t) => t[0] === "a" && t[1] === "a")).toBeUndefined();
+  });
 });

@@ -19,9 +19,16 @@ vi.mock("@formstr/app/services", () => ({
     rsvpToEvent: vi.fn(),
     fetchRsvpsForEvent: vi.fn(),
   },
+  calendarBooking: {
+    fetchSchedulingPages: vi.fn(),
+    fetchBookingRequests: vi.fn(),
+    bookingLinkUrl: vi.fn(() => "https://calendar.formstr.app/schedule/naddr1xxx"),
+    approveBookingRequest: vi.fn(),
+    declineBookingRequest: vi.fn(),
+  },
 }));
 
-import { calendar, calendarRsvp } from "@formstr/app/services";
+import { calendar, calendarBooking, calendarRsvp } from "@formstr/app/services";
 
 import { registerCalendar } from "../src/tools/calendar";
 
@@ -423,5 +430,140 @@ describe("calendar tools", () => {
       suggestedEnd: 2000,
       comment: "can we push?",
     });
+  });
+
+  // ── Booking links: scheduling pages + approve/decline ──────
+
+  it("booking read tools are available; approve/decline are gated behind allowWrites", () => {
+    const ro = fakeServer();
+    registerCalendar(ro.server, { allowWrites: false });
+    expect(ro.tools.has("list_scheduling_pages")).toBe(true);
+    expect(ro.tools.has("list_booking_requests")).toBe(true);
+    expect(ro.tools.has("approve_booking")).toBe(false);
+    expect(ro.tools.has("decline_booking")).toBe(false);
+
+    const rw = fakeServer();
+    registerCalendar(rw.server, { allowWrites: true });
+    expect(rw.tools.has("approve_booking")).toBe(true);
+    expect(rw.tools.has("decline_booking")).toBe(true);
+  });
+
+  it("list_scheduling_pages returns booking links with shareable urls", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    (calendarBooking.fetchSchedulingPages as any).mockResolvedValue([
+      {
+        id: "p1",
+        title: "Intro call",
+        description: "30m",
+        user: "pk",
+        viewKey: "nsec1",
+        createdAt: 0,
+      },
+    ]);
+    const res = await tools.get("list_scheduling_pages")!.handler({});
+    expect(res.structuredContent.bookingLinks[0]).toMatchObject({
+      id: "p1",
+      title: "Intro call",
+      url: "https://calendar.formstr.app/schedule/naddr1xxx",
+    });
+  });
+
+  it("list_booking_requests summarizes incoming requests", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    (calendarBooking.fetchBookingRequests as any).mockResolvedValue([
+      {
+        id: "r1",
+        title: "Coffee",
+        note: "looking forward",
+        start: 1000,
+        end: 2000,
+        bookerPubkey: "booker",
+        schedulingPageRef: "31927:pk:p1",
+      },
+    ]);
+    const res = await tools.get("list_booking_requests")!.handler({});
+    expect(res.structuredContent.requests[0]).toMatchObject({
+      id: "r1",
+      title: "Coffee",
+      booker: "booker",
+    });
+  });
+
+  it("approve_booking requires confirm then approves into the chosen calendar", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendarBooking.fetchBookingRequests as any).mockResolvedValue([
+      {
+        id: "r1",
+        title: "Coffee",
+        bookerPubkey: "booker",
+        start: 1,
+        end: 2,
+        schedulingPageRef: "31927:pk:p1",
+      },
+    ]);
+    (calendar.fetchCalendarLists as any).mockResolvedValue([
+      { id: "c1", title: "Work", eventRefs: [] },
+    ]);
+    (calendarBooking.approveBookingRequest as any).mockResolvedValue({
+      event: { id: "d1", kind: 32678, user: "pk" },
+      calendar: { id: "c1" },
+    });
+
+    const blocked = await tools
+      .get("approve_booking")!
+      .handler({ requestId: "r1", calendarId: "c1" });
+    expect(blocked.isError).toBe(true);
+    expect(calendarBooking.approveBookingRequest).not.toHaveBeenCalled();
+
+    const okRes = await tools
+      .get("approve_booking")!
+      .handler({ requestId: "r1", calendarId: "c1", confirm: true });
+    expect(calendarBooking.approveBookingRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "r1" }),
+      expect.objectContaining({ id: "c1" }),
+    );
+    expect(okRes.structuredContent.coordinate).toBe("32678:pk:d1");
+  });
+
+  it("approve_booking returns NOT_FOUND for an unknown request", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendarBooking.fetchBookingRequests as any).mockResolvedValue([]);
+    const res = await tools
+      .get("approve_booking")!
+      .handler({ requestId: "zzz", calendarId: "c1", confirm: true });
+    expect(res.isError).toBe(true);
+    expect(calendarBooking.approveBookingRequest).not.toHaveBeenCalled();
+  });
+
+  it("decline_booking requires confirm then declines", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendarBooking.fetchBookingRequests as any).mockResolvedValue([
+      {
+        id: "r1",
+        title: "Coffee",
+        bookerPubkey: "booker",
+        start: 1,
+        end: 2,
+        schedulingPageRef: "31927:pk:p1",
+      },
+    ]);
+
+    const blocked = await tools.get("decline_booking")!.handler({ requestId: "r1" });
+    expect(blocked.isError).toBe(true);
+    expect(calendarBooking.declineBookingRequest).not.toHaveBeenCalled();
+
+    const okRes = await tools
+      .get("decline_booking")!
+      .handler({ requestId: "r1", reason: "unavailable", confirm: true });
+    expect(calendarBooking.declineBookingRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "r1" }),
+      "unavailable",
+    );
+    expect(okRes.isError).toBeFalsy();
   });
 });

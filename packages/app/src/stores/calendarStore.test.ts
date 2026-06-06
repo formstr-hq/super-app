@@ -113,6 +113,73 @@ describe("createEvent membership", () => {
       ["31923:pub:d9", "", ""],
     );
   });
+
+  it("auto-creates a default calendar for a private event with no calendar (viewKey must persist)", async () => {
+    useCalendarStore.setState({ calendars: [] });
+    (calendarService.publishPrivateCalendarEvent as any).mockResolvedValue(
+      evt({
+        id: "p1",
+        kind: 32678,
+        user: "pub",
+        isPrivate: true,
+        viewKey: "nsec1xyz",
+        relayHint: "wss://r",
+      }),
+    );
+    (calendarService.createCalendarList as any).mockResolvedValue({
+      id: "auto1",
+      title: "My Calendar",
+      color: "#334155",
+      eventRefs: [],
+    });
+    (calendarService.addEventToCalendarList as any).mockResolvedValue({
+      id: "auto1",
+      eventRefs: [["32678:pub:p1", "wss://r", "nsec1xyz"]],
+    });
+    await useCalendarStore.getState().createEvent({
+      title: "Secret",
+      description: "",
+      begin: new Date(0),
+      end: new Date(0),
+      isPrivate: true,
+    } as any);
+    expect(calendarService.createCalendarList).toHaveBeenCalled();
+    expect(calendarService.addEventToCalendarList).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "auto1" }),
+      ["32678:pub:p1", "wss://r", "nsec1xyz"],
+    );
+  });
+
+  it("links a private event with no chosen calendar to the first existing calendar", async () => {
+    const cal = { id: "c1", title: "Work", eventRefs: [] };
+    useCalendarStore.setState({ calendars: [cal as any] });
+    (calendarService.publishPrivateCalendarEvent as any).mockResolvedValue(
+      evt({
+        id: "p2",
+        kind: 32678,
+        user: "pub",
+        isPrivate: true,
+        viewKey: "nsec1abc",
+        relayHint: "",
+      }),
+    );
+    (calendarService.addEventToCalendarList as any).mockResolvedValue({
+      ...cal,
+      eventRefs: [["32678:pub:p2", "", "nsec1abc"]],
+    });
+    await useCalendarStore.getState().createEvent({
+      title: "Secret2",
+      description: "",
+      begin: new Date(0),
+      end: new Date(0),
+      isPrivate: true,
+    } as any);
+    expect(calendarService.createCalendarList).not.toHaveBeenCalled();
+    expect(calendarService.addEventToCalendarList).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "c1" }),
+      ["32678:pub:p2", "", "nsec1abc"],
+    );
+  });
 });
 
 describe("updateEvent", () => {

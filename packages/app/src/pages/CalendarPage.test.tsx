@@ -18,9 +18,16 @@ const calStore = {
   deleteEvent: vi.fn(),
 };
 
+const bookingState = {
+  schedulingPages: [],
+  requests: [] as Array<{ status: string }>,
+  fetchAll: vi.fn(),
+};
+
 vi.mock("../stores", () => ({
-  useCalendarStore: () => calStore,
+  useCalendarStore: (sel?: (s: typeof calStore) => unknown) => (sel ? sel(calStore) : calStore),
   useAuthStore: (sel: (s: { pubkey: string }) => unknown) => sel({ pubkey: "pk" }),
+  useBookingStore: (sel: (s: typeof bookingState) => unknown) => sel(bookingState),
 }));
 
 const invState = {

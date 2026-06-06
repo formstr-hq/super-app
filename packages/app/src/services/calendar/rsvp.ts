@@ -3,18 +3,10 @@ import type { Event as NostrEvent, EventTemplate, Filter } from "nostr-tools";
 
 import type { RSVPStatus } from "./types";
 import { CALENDAR_KINDS, type RSVPResponse } from "./types";
+import { encryptWithViewKey, decryptWithViewKey } from "./viewKey";
 
 // ── Publish an RSVP ─────────────────────────────────────
-/**
- * Publish an RSVP (NIP-52 kind 31925) for a calendar event. When `isPrivate`
- * is true the RSVP is wrapped per NIP-59 so the event author sees it but
- * relays only see a gift-wrap.
- *
- * We guard upstream PR-105's race: if the caller passes a coordinate that
- * points to a missing event we still publish an RSVP but also log — the
- * inbox's `onInvitation` resolver is expected to fetch and ingest the event
- * *before* letting the UI trigger an RSVP.
- */
+
 /** Optional questionnaire extras: a "suggest a new time" proposal and/or a note. */
 export interface RSVPExtra {
   suggestedStart?: number; // unix seconds
@@ -22,71 +14,118 @@ export interface RSVPExtra {
   comment?: string;
 }
 
+/**
+ * Publish an RSVP for a calendar event.
+ *
+ * - Public events → kind 31925 (NIP-52, unencrypted).
+ * - Private events with `viewKey` → kind 32069 (NIP-44 payload encrypted with
+ *   the event's viewKey), matching calendar.formstr.app exactly so the organiser
+ *   can read it there.
+ * - Private events without `viewKey` → NIP-59 gift-wrap fallback (old behaviour;
+ *   used by callers that don't yet have the viewKey in scope, e.g. MCP).
+ *
+ * All paths use a deterministic d-tag = sha256("responder:author:eventDTag")[:30]
+ * so re-RSVPing replaces the previous RSVP instead of accumulating new events.
+ */
 export async function rsvpToEvent(
   eventCoordinate: string,
   status: "accepted" | "declined" | "tentative",
   isPrivate = false,
   extra?: RSVPExtra,
+  viewKey?: string,
 ): Promise<void> {
   const signer = await signerManager.getSigner();
-  const [kindStr, authorPubkey, d] = eventCoordinate.split(":");
-  if (!kindStr || !authorPubkey || !d) {
+  const [kindStr, authorPubkey, eventDTag] = eventCoordinate.split(":");
+  if (!kindStr || !authorPubkey || !eventDTag) {
     throw new Error(`Invalid event coordinate: ${eventCoordinate}`);
   }
 
-  const rsvpId = crypto.randomUUID().slice(0, 8);
+  // Deterministic d-tag matching the standalone: sha256("responder:author:eventDTag")[:30].
+  // Ensures re-RSVPing replaces the previous RSVP (same NIP-33 key) rather than
+  // accumulating additional events on relays. Random UUIDs caused unbounded growth.
+  const responderPubkey = await signer.getPublicKey();
+  const hashBuf = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${responderPubkey}:${authorPubkey}:${eventDTag}`),
+  );
+  const rsvpId = Array.from(new Uint8Array(hashBuf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 30);
+
+  const relays = relayManager.getRelaysForModule("calendar");
+
+  if (isPrivate && viewKey) {
+    // Standalone-compatible private RSVP: full payload NIP-44 encrypted with the
+    // event viewKey; status and suggested times are inside the ciphertext, not tags.
+    const payload: Record<string, unknown> = { status };
+    if (extra?.suggestedStart !== undefined) payload.suggestedStart = extra.suggestedStart;
+    if (extra?.suggestedEnd !== undefined) payload.suggestedEnd = extra.suggestedEnd;
+    if (extra?.comment) payload.comment = extra.comment;
+    const encryptedContent = await encryptWithViewKey(viewKey, JSON.stringify(payload));
+    const signed = await signer.signEvent({
+      kind: CALENDAR_KINDS.privateRsvp,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ["a", eventCoordinate],
+        ["d", rsvpId],
+      ],
+      content: encryptedContent,
+    } satisfies EventTemplate);
+    await nostrRuntime.publish(relays, signed);
+    return;
+  }
+
+  // Public RSVP or private without viewKey (gift-wrap fallback).
+  const content = extra?.comment ?? "";
   const tags: string[][] = [
     ["d", rsvpId],
     ["a", eventCoordinate],
     ["status", status],
-    ["p", authorPubkey],
   ];
-  // Suggested-time proposal: standalone parity (start/end in unix seconds).
   if (extra?.suggestedStart) tags.push(["start", String(extra.suggestedStart)]);
   if (extra?.suggestedEnd) tags.push(["end", String(extra.suggestedEnd)]);
-  // The free-text note rides in content, matching the standalone's RSVP reader.
-  const content = extra?.comment ?? "";
-
-  const kind = isPrivate ? CALENDAR_KINDS.privateRsvp : CALENDAR_KINDS.publicRsvp;
-  const template: EventTemplate = {
-    kind,
-    created_at: Math.floor(Date.now() / 1000),
-    tags,
-    content,
-  };
-
-  const relays = relayManager.getRelaysForModule("calendar");
 
   if (isPrivate) {
     const wrap = await wrapEvent(
-      {
-        kind: CALENDAR_KINDS.rsvpRumor,
-        content,
-        tags,
-      },
+      { kind: CALENDAR_KINDS.rsvpRumor, content, tags },
       signer,
       authorPubkey,
       CALENDAR_KINDS.rsvpGiftWrap,
     );
     await nostrRuntime.publish(relays, wrap);
   } else {
-    const signed = await signer.signEvent(template);
+    const signed = await signer.signEvent({
+      kind: CALENDAR_KINDS.publicRsvp,
+      created_at: Math.floor(Date.now() / 1000),
+      tags,
+      content,
+    } satisfies EventTemplate);
     await nostrRuntime.publish(relays, signed);
   }
 }
 
 // ── Fetch RSVPs for events ──────────────────────────────
 
-export async function fetchRsvpsForEvent(eventCoordinate: string): Promise<RSVPResponse[]> {
+/**
+ * Fetch RSVPs for a calendar event, deduped newest-wins per pubkey.
+ *
+ * Pass `viewKey` to also include private RSVPs (kind 32069) that were
+ * published by calendar.formstr.app users or by this app's private RSVP path.
+ */
+export async function fetchRsvpsForEvent(
+  eventCoordinate: string,
+  viewKey?: string,
+): Promise<RSVPResponse[]> {
   const relays = relayManager.getRelaysForModule("calendar");
-  const filter: Filter = {
+  const latestByPubkey = new Map<string, RSVPResponse>();
+
+  // 1) Public RSVPs (kind 31925) — status/suggested-times in tags, comment in content.
+  const publicEvents = await nostrRuntime.querySync(relays, {
     kinds: [CALENDAR_KINDS.publicRsvp],
     "#a": [eventCoordinate],
-  };
-  const events = await nostrRuntime.querySync(relays, filter);
-
-  const latestByPubkey = new Map<string, RSVPResponse>();
-  for (const evt of events) {
+  } as Filter);
+  for (const evt of publicEvents) {
     const status = evt.tags.find((t: string[]) => t[0] === "status")?.[1] as RSVPStatus | undefined;
     if (!status) continue;
     const existing = latestByPubkey.get(evt.pubkey);
@@ -103,6 +142,40 @@ export async function fetchRsvpsForEvent(eventCoordinate: string): Promise<RSVPR
       comment: evt.content || undefined,
     });
   }
+
+  // 2) Private RSVPs (kind 32069) — full payload NIP-44 encrypted with the viewKey.
+  if (viewKey) {
+    const privateEvents = await nostrRuntime.querySync(relays, {
+      kinds: [CALENDAR_KINDS.privateRsvp],
+      "#a": [eventCoordinate],
+    } as Filter);
+    for (const evt of privateEvents) {
+      try {
+        const decrypted = await decryptWithViewKey(viewKey, evt.content);
+        const payload = JSON.parse(decrypted) as {
+          status?: RSVPStatus;
+          suggestedStart?: number;
+          suggestedEnd?: number;
+          comment?: string;
+        };
+        if (!payload.status) continue;
+        const existing = latestByPubkey.get(evt.pubkey);
+        if (existing && existing.createdAt >= evt.created_at) continue;
+        latestByPubkey.set(evt.pubkey, {
+          pubkey: evt.pubkey,
+          status: payload.status,
+          eventCoordinate,
+          createdAt: evt.created_at,
+          suggestedStart: payload.suggestedStart,
+          suggestedEnd: payload.suggestedEnd,
+          comment: payload.comment || undefined,
+        });
+      } catch {
+        // Decryption failed — RSVP encrypted with a different viewKey; skip.
+      }
+    }
+  }
+
   return Array.from(latestByPubkey.values());
 }
 

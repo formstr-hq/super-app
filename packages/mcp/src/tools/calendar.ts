@@ -1,4 +1,4 @@
-import { calendar, calendarRsvp } from "@formstr/app/services";
+import { calendar, calendarBooking, calendarRsvp } from "@formstr/app/services";
 import { signerManager } from "@formstr/core";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -170,9 +170,109 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
     },
   );
 
+  server.registerTool(
+    "list_scheduling_pages",
+    {
+      description:
+        "List the user's booking links (appointment scheduling pages). Each has a shareable booking URL.",
+      inputSchema: {},
+    },
+    async () => {
+      const pages = await calendarBooking.fetchSchedulingPages();
+      return ok(`Found ${pages.length} booking link(s).`, {
+        bookingLinks: pages.map((p) => ({
+          id: p.id,
+          title: p.title,
+          description: p.description,
+          url: calendarBooking.bookingLinkUrl(p),
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
+    "list_booking_requests",
+    {
+      description:
+        "List incoming appointment booking requests (from your booking links) received via NIP-59 gift-wrap.",
+      inputSchema: {},
+    },
+    async () => {
+      const requests = await calendarBooking.fetchBookingRequests();
+      return ok(`Found ${requests.length} booking request(s).`, {
+        requests: requests.map((r) => ({
+          id: r.id,
+          title: r.title,
+          note: r.note,
+          start: r.start,
+          end: r.end,
+          booker: r.bookerPubkey,
+          schedulingPageRef: r.schedulingPageRef,
+        })),
+      });
+    },
+  );
+
   // Read tools and constructive creates (above) are always available; only
   // destructive/outward actions below are gated behind --allow-writes.
   if (!ctx.allowWrites) return;
+
+  server.registerTool(
+    "approve_booking",
+    {
+      description:
+        "Approve an incoming booking request by id, creating the appointment in the given calendar (id/d-tag) and notifying the booker. Requires confirm:true.",
+      inputSchema: {
+        requestId: z.string(),
+        calendarId: z.string(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async ({ requestId, calendarId, confirm }) => {
+      const blocked = requireConfirm(
+        "approve_booking",
+        { confirm },
+        `approves booking ${requestId}`,
+      );
+      if (blocked) return blocked;
+      const requests = await calendarBooking.fetchBookingRequests();
+      const request = requests.find((r) => r.id === requestId);
+      if (!request) return fail(`No booking request found for id ${requestId}.`, "NOT_FOUND");
+      const lists = await calendar.fetchCalendarLists();
+      const list = lists.find((c) => c.id === calendarId);
+      if (!list) return fail(`No calendar found for id ${calendarId}.`, "NOT_FOUND");
+      const { event } = await calendarBooking.approveBookingRequest(request, list);
+      return ok(`Approved booking "${request.title}".`, {
+        coordinate: `${event.kind}:${event.user}:${event.id}`,
+      });
+    },
+  );
+
+  server.registerTool(
+    "decline_booking",
+    {
+      description:
+        "Decline an incoming booking request by id, notifying the booker (optional reason). Requires confirm:true.",
+      inputSchema: {
+        requestId: z.string(),
+        reason: z.string().optional(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async ({ requestId, reason, confirm }) => {
+      const blocked = requireConfirm(
+        "decline_booking",
+        { confirm },
+        `declines booking ${requestId}`,
+      );
+      if (blocked) return blocked;
+      const requests = await calendarBooking.fetchBookingRequests();
+      const request = requests.find((r) => r.id === requestId);
+      if (!request) return fail(`No booking request found for id ${requestId}.`, "NOT_FOUND");
+      await calendarBooking.declineBookingRequest(request, reason);
+      return ok(`Declined booking "${request.title}".`);
+    },
+  );
 
   server.registerTool(
     "delete_calendar_event",

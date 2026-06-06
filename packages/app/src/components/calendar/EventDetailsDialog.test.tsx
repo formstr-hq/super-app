@@ -82,8 +82,38 @@ describe("EventDetailsDialog", () => {
         "accepted",
         false,
         expect.objectContaining({ status: "accepted" }),
+        undefined, // viewKey — public event has none
       ),
     );
+  });
+
+  it("shows a combined When row, Where, and the event's calendar by name", () => {
+    render(
+      <EventDetailsDialog
+        event={evt({ calendarId: "work", location: ["Signal call"] })}
+        calendars={[
+          {
+            id: "work",
+            eventId: "e",
+            title: "Work",
+            description: "",
+            color: "#4285f4",
+            eventRefs: [],
+            createdAt: 0,
+            isVisible: true,
+          },
+        ]}
+        currentUserPubkey="me"
+        onClose={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("When")).toBeInTheDocument();
+    expect(screen.getByText("Where")).toBeInTheDocument();
+    expect(screen.getByText("Signal call")).toBeInTheDocument();
+    expect(screen.getByText("Calendar")).toBeInTheDocument();
+    expect(screen.getByText("Work")).toBeInTheDocument();
   });
 
   it("renders an attendee's status, note and suggested time", async () => {
