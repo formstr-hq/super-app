@@ -2,55 +2,95 @@ import { create } from "zustand";
 
 import type { PageDocument, PageSummary, ShareResult } from "../services/pages";
 import * as pagesService from "../services/pages/service";
+import type { SavePageParams } from "../services/pages/service";
 
-const VIEW_KEY_STORAGE_PREFIX = "formstr:page-viewkey:";
+const VIEW_KEY_PREFIX = "formstr:page-viewkey:";
+const EDIT_KEY_PREFIX = "formstr:page-editkey:";
 
-function persistViewKey(address: string, viewKey: string) {
-  localStorage.setItem(`${VIEW_KEY_STORAGE_PREFIX}${address}`, viewKey);
+function persistViewKey(address: string, viewKey?: string, editKey?: string) {
+  if (viewKey) localStorage.setItem(`${VIEW_KEY_PREFIX}${address}`, viewKey);
+  if (editKey) localStorage.setItem(`${EDIT_KEY_PREFIX}${address}`, editKey);
 }
-
 function getViewKey(address: string): string | undefined {
-  return localStorage.getItem(`${VIEW_KEY_STORAGE_PREFIX}${address}`) ?? undefined;
+  return localStorage.getItem(`${VIEW_KEY_PREFIX}${address}`) ?? undefined;
+}
+function getEditKey(address: string): string | undefined {
+  return localStorage.getItem(`${EDIT_KEY_PREFIX}${address}`) ?? undefined;
+}
+/** All locally-known address → viewKey pairs (for decrypting the owner's own shared docs). */
+function allViewKeys(): Map<string, string> {
+  const map = new Map<string, string>();
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(VIEW_KEY_PREFIX)) {
+      const v = localStorage.getItem(key);
+      if (v) map.set(key.slice(VIEW_KEY_PREFIX.length), v);
+    }
+  }
+  return map;
 }
 
 interface PagesStore {
   pages: PageSummary[];
+  sharedPages: PageSummary[];
   currentPage: PageDocument | null;
+  tagsByAddress: Record<string, string[]>;
+  activeTag: string | null;
   isLoading: boolean;
   error: string | null;
 
   fetchMyPages(): Promise<void>;
+  fetchSharedPages(): Promise<void>;
   loadPage(pubkey: string, docId: string, viewKey?: string): Promise<void>;
-  savePage(params: pagesService.SavePageParams): Promise<PageDocument>;
+  savePage(params: SavePageParams): Promise<PageDocument>;
   deletePage(address: string): Promise<void>;
-  shareCurrentPage(): ShareResult | null;
-  sharePage(address: string): ShareResult | null;
+  sharePage(canEdit: boolean): Promise<ShareResult | null>;
+  setTags(address: string, tags: string[]): Promise<void>;
+  setActiveTag(tag: string | null): void;
   clearCurrent(): void;
 }
 
 export const usePagesStore = create<PagesStore>((set, get) => ({
   pages: [],
+  sharedPages: [],
   currentPage: null,
+  tagsByAddress: {},
+  activeTag: null,
   isLoading: false,
   error: null,
 
   async fetchMyPages() {
     set({ isLoading: true, error: null });
     try {
-      const pages = await pagesService.fetchMyPages();
-      set({ pages, isLoading: false });
+      const pages = await pagesService.fetchMyPages(allViewKeys());
+      const tagMap = await pagesService.fetchDocTags(pages.map((p) => p.address));
+      const tagsByAddress: Record<string, string[]> = {};
+      for (const [addr, tags] of tagMap) tagsByAddress[addr] = tags;
+      set((state) => ({
+        pages: pages.map((p) => ({ ...p, tags: tagsByAddress[p.address] })),
+        tagsByAddress: { ...state.tagsByAddress, ...tagsByAddress },
+        isLoading: false,
+      }));
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to fetch pages", isLoading: false });
+    }
+  },
+
+  async fetchSharedPages() {
+    try {
+      const sharedPages = await pagesService.fetchSharedPages();
+      set({ sharedPages });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to fetch shared pages" });
     }
   },
 
   async loadPage(pubkey, docId, viewKey) {
     set({ isLoading: true, error: null, currentPage: null });
     try {
-      const page = await pagesService.fetchPage(pubkey, docId, viewKey);
-      if (page?.viewKey) {
-        persistViewKey(page.address, page.viewKey);
-      }
+      const address = `33457:${pubkey}:${docId}`;
+      const page = await pagesService.fetchPage(pubkey, docId, viewKey ?? getViewKey(address));
+      if (page?.viewKey) persistViewKey(page.address, page.viewKey);
       set({ currentPage: page, isLoading: false });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to load page", isLoading: false });
@@ -61,12 +101,13 @@ export const usePagesStore = create<PagesStore>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const page = await pagesService.savePage(params);
-      if (page.viewKey) {
-        persistViewKey(page.address, page.viewKey);
-      }
-      // Also refresh the pages list so new/updated page appears
-      const pages = await pagesService.fetchMyPages();
-      set({ currentPage: page, pages, isLoading: false });
+      persistViewKey(page.address, page.viewKey, page.editKey);
+      const pages = await pagesService.fetchMyPages(allViewKeys());
+      set((state) => ({
+        currentPage: page,
+        pages: pages.map((p) => ({ ...p, tags: state.tagsByAddress[p.address] })),
+        isLoading: false,
+      }));
       return page;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to save page", isLoading: false });
@@ -77,7 +118,8 @@ export const usePagesStore = create<PagesStore>((set, get) => ({
   async deletePage(address) {
     try {
       await pagesService.deletePage(address);
-      localStorage.removeItem(`${VIEW_KEY_STORAGE_PREFIX}${address}`);
+      localStorage.removeItem(`${VIEW_KEY_PREFIX}${address}`);
+      localStorage.removeItem(`${EDIT_KEY_PREFIX}${address}`);
       set((state) => ({
         pages: state.pages.filter((p) => p.address !== address),
         currentPage: state.currentPage?.address === address ? null : state.currentPage,
@@ -87,16 +129,39 @@ export const usePagesStore = create<PagesStore>((set, get) => ({
     }
   },
 
-  shareCurrentPage() {
+  async sharePage(canEdit) {
     const page = get().currentPage;
-    if (!page?.viewKey) return null;
-    return pagesService.generateShareLink(page.address, page.viewKey, page.editKey);
+    if (!page) return null;
+    try {
+      const result = await pagesService.sharePage({
+        address: page.address,
+        content: page.content,
+        canEdit,
+        viewKey: page.viewKey ?? getViewKey(page.address),
+        editKey: page.editKey ?? getEditKey(page.address),
+      });
+      persistViewKey(result.address, result.viewKey, result.editKey);
+      return result;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to share page" });
+      return null;
+    }
   },
 
-  sharePage(address) {
-    const viewKey = getViewKey(address);
-    if (!viewKey) return null;
-    return pagesService.generateShareLink(address, viewKey);
+  async setTags(address, tags) {
+    try {
+      await pagesService.setDocTags(address, tags);
+      set((state) => ({
+        tagsByAddress: { ...state.tagsByAddress, [address]: tags },
+        pages: state.pages.map((p) => (p.address === address ? { ...p, tags } : p)),
+      }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to save tags" });
+    }
+  },
+
+  setActiveTag(tag) {
+    set({ activeTag: tag });
   },
 
   clearCurrent() {
