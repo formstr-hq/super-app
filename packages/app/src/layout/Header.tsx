@@ -13,9 +13,17 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { LogOut, Menu as MenuIcon, Moon, Search, Settings, Sparkles, Sun } from "lucide-react";
 import { useState } from "react";
-import { useLocation } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 
 import { useAuthStore, useSettingsStore } from "../stores";
+
+const NAV_ITEMS = [
+  { label: "Forms", path: "/forms" },
+  { label: "Calendar", path: "/calendar" },
+  { label: "Pages", path: "/pages" },
+  { label: "Drive", path: "/drive" },
+  { label: "Polls", path: "/polls" },
+] as const;
 
 const ROUTE_LABELS: Record<string, string> = {
   "/forms": "Forms",
@@ -55,32 +63,51 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
       }}
     >
       <Toolbar variant="dense" sx={{ minHeight: 48, gap: 1, px: 2 }}>
-        {/* Sidebar toggle */}
+        {/* Sidebar toggle — mobile/tablet only (desktop switches modules via the tabs) */}
         <IconButton
           size="small"
           onClick={toggleSidebar}
           aria-label="Toggle sidebar"
-          sx={{ color: "text.secondary", flexShrink: 0 }}
+          sx={{ color: "text.secondary", flexShrink: 0, display: { xs: "flex", md: "none" } }}
         >
           <MenuIcon size={18} />
         </IconButton>
 
-        {/* Breadcrumb */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
-          {!isMobile && (
-            <>
-              <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                Formstr
-              </Typography>
-              <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                /
-              </Typography>
-            </>
-          )}
-          <Typography variant="body2" fontWeight={600} noWrap>
+        {/* Brand */}
+        <Typography variant="body2" fontWeight={700} noWrap sx={{ letterSpacing: "-0.02em" }}>
+          Formstr
+        </Typography>
+
+        {/* Module tabs (desktop) */}
+        <Box sx={{ display: { xs: "none", md: "flex" }, alignItems: "center", gap: 0.25, ml: 1 }}>
+          {NAV_ITEMS.map(({ label, path }) => (
+            <NavLink key={path} to={path} style={{ textDecoration: "none" }}>
+              {({ isActive }) => (
+                <Box
+                  sx={{
+                    px: 1.25,
+                    py: 0.5,
+                    borderRadius: "7px",
+                    fontSize: 13.5,
+                    fontWeight: isActive ? 600 : 500,
+                    color: isActive ? "text.primary" : "text.secondary",
+                    bgcolor: isActive ? "action.selected" : "transparent",
+                    "&:hover": { bgcolor: "action.hover" },
+                  }}
+                >
+                  {label}
+                </Box>
+              )}
+            </NavLink>
+          ))}
+        </Box>
+
+        {/* Route label (mobile only) */}
+        {isMobile && (
+          <Typography variant="body2" fontWeight={600} noWrap sx={{ ml: 0.5 }}>
             {routeLabel}
           </Typography>
-        </Box>
+        )}
 
         <Box sx={{ flex: 1 }} />
 

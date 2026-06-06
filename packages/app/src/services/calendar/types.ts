@@ -13,6 +13,13 @@ export const CALENDAR_KINDS = {
   rsvpGiftWrap: 1055,
   rsvpRumor: 55,
   participantRemoval: 84,
+  // Appointment scheduling (Calendly-style booking links).
+  schedulingPage: 31927,
+  schedulingPagesList: 32680,
+  bookingRequestGiftWrap: 1057,
+  bookingRequestRumor: 57,
+  bookingResponseGiftWrap: 1058,
+  bookingResponseRumor: 58,
 } as const;
 
 // ── Data Structures ─────────────────────────────────────
@@ -77,6 +84,11 @@ export interface RSVPResponse {
   status: RSVPStatus;
   eventCoordinate: string;
   createdAt: number;
+  /** Unix seconds — responder's "suggest a new time" proposal. */
+  suggestedStart?: number;
+  suggestedEnd?: number;
+  /** Free-text note the responder attached to their RSVP. */
+  comment?: string;
 }
 
 export interface CalendarEventDraft {
@@ -98,4 +110,9 @@ export interface CalendarEventDraft {
   website?: string;
   /** When updating, re-use the same addressable `d` identifier. */
   existingId?: string;
+  /**
+   * When editing a private event, re-use its existing viewKey (nsec) so prior
+   * invitees keep decryption access. Omitted on create → a fresh key is minted.
+   */
+  viewKey?: string;
 }

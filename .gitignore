@@ -12,3 +12,6 @@ coverage/
 
 # TS incremental build cache
 *.tsbuildinfo
+
+# Brainstorming visual-companion mockups (local only)
+.superpowers/

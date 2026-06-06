@@ -1,38 +1,20 @@
-import {
-  Box,
-  Button,
-  IconButton,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from "@mui/material";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Box, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
 
+import { BookingsView } from "../components/calendar/BookingsView";
+import { CalendarHeader } from "../components/calendar/CalendarHeader";
 import { CalendarListView } from "../components/calendar/CalendarListView";
+import { CalendarManageDialog } from "../components/calendar/CalendarManageDialog";
 import { CalendarMonthView } from "../components/calendar/CalendarMonthView";
 import { CalendarSidebar } from "../components/calendar/CalendarSidebar";
-import { CreateCalendarDialog } from "../components/calendar/CreateCalendarDialog";
 import { EventDetailsDialog } from "../components/calendar/EventDetailsDialog";
 import { EventDialog } from "../components/calendar/EventDialog";
-import { InvitationInbox } from "../components/calendar/InvitationInbox";
-import type { CalendarEvent } from "../services/calendar";
-import { useAuthStore, useCalendarStore } from "../stores";
-
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
+import { InvitationsView } from "../components/calendar/InvitationsView";
+import { filterEventsByCalendarVisibility } from "../lib/calendarMembership";
+import type { CalendarEvent, CalendarList } from "../services/calendar";
+import { CALENDAR_KINDS } from "../services/calendar";
+import { useAuthStore, useBookingStore, useCalendarStore } from "../stores";
+import { useInvitationsStore } from "../stores/invitationsStore";
 
 export function CalendarPage() {
   const {
@@ -46,44 +28,58 @@ export function CalendarPage() {
     createEvent,
     updateEvent,
     createCalendar,
+    updateCalendar,
+    deleteCalendar,
     deleteEvent,
   } = useCalendarStore();
   const pubkey = useAuthStore((s) => s.pubkey);
-  const pubkeyRef = useRef(pubkey);
+  const pendingInvitations = useInvitationsStore(
+    (s) => s.invitations.filter((i) => !i.rsvp).length,
+  );
+  const schedulingPages = useBookingStore((s) => s.schedulingPages);
+  const pendingBookings = useBookingStore(
+    (s) => s.requests.filter((r) => r.status === "pending").length,
+  );
+  const fetchBookings = useBookingStore((s) => s.fetchAll);
 
+  const [view, setView] = useState<"calendar" | "invitations" | "bookings">("calendar");
   const [viewMode, setViewMode] = useState<"month" | "list">("month");
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null);
-  const [createCalOpen, setCreateCalOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [editCalendar, setEditCalendar] = useState<CalendarList | null>(null);
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<Set<string>>(new Set());
   const [showAllPublic, setShowAllPublic] = useState(false);
 
   useEffect(() => {
-    pubkeyRef.current = pubkey;
-  }, [pubkey]);
-  useEffect(() => {
     fetchCalendars();
   }, [fetchCalendars]);
+  useEffect(() => {
+    if (pubkey) fetchBookings();
+  }, [pubkey, fetchBookings]);
   useEffect(() => {
     if (calendars.length > 0 && visibleCalendarIds.size === 0) {
       setVisibleCalendarIds(new Set(calendars.map((c) => c.id)));
     }
   }, [calendars, visibleCalendarIds.size]);
+  // Fetch events independent of the viewed month: relays filter `since`/`until`
+  // on publish time, not the event's start, so a month-coupled window drops
+  // events created in a different month than they occur. We fetch the user's
+  // events broadly (+ private members once calendars load) and the views filter
+  // by date client-side. Month navigation is purely client-side. "Show all
+  // public" browses a recent window of public events instead.
   useEffect(() => {
-    if (!showAllPublic && !pubkeyRef.current) return;
-    const start = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-    const end = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
-    const params: Parameters<typeof fetchEvents>[0] = {
-      since: Math.floor(start.getTime() / 1000),
-      until: Math.floor(end.getTime() / 1000),
-    };
-    if (!showAllPublic && pubkeyRef.current) params.authors = [pubkeyRef.current];
-    fetchEvents(params);
-  }, [selectedDate, fetchEvents, showAllPublic]);
+    if (!showAllPublic && !pubkey) return;
+    const opts = showAllPublic
+      ? { since: Math.floor((Date.now() - 1000 * 60 * 60 * 24 * 90) / 1000) }
+      : { authors: [pubkey!] };
+    fetchEvents(opts);
+  }, [fetchEvents, showAllPublic, pubkey, calendars.length]);
 
   const year = selectedDate.getFullYear();
   const month = selectedDate.getMonth();
+  const monthLabel = selectedDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   const toggleCalendar = (calId: string) =>
     setVisibleCalendarIds((prev) => {
@@ -93,9 +89,7 @@ export function CalendarPage() {
       return next;
     });
 
-  const filteredEvents = events.filter(
-    (e) => !e.calendarId || visibleCalendarIds.has(e.calendarId),
-  );
+  const filteredEvents = filterEventsByCalendarVisibility(events, calendars, visibleCalendarIds);
 
   const handleDelete = (event: CalendarEvent) => {
     deleteEvent(event.id, `${event.kind}:${event.user}:${event.id}`);
@@ -111,94 +105,86 @@ export function CalendarPage() {
     setEditEvent(event);
     setEventDialogOpen(true);
   };
+  const openNewCalendar = () => {
+    setEditCalendar(null);
+    setManageOpen(true);
+  };
+  const openEditCalendar = (calendar: CalendarList) => {
+    setEditCalendar(calendar);
+    setManageOpen(true);
+  };
 
   return (
-    <Box sx={{ display: "flex", gap: 0, mx: { xs: -2, sm: -3, lg: -4 } }}>
+    <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
       <CalendarSidebar
         calendars={calendars}
         visibleCalendarIds={visibleCalendarIds}
         onToggleCalendar={toggleCalendar}
-        onNewCalendar={() => setCreateCalOpen(true)}
+        onNewCalendar={openNewCalendar}
+        onEditCalendar={openEditCalendar}
         showAllPublic={showAllPublic}
         onToggleShowAllPublic={setShowAllPublic}
+        pendingInvitations={pendingInvitations}
+        view={view}
+        onOpenInvitations={() => setView("invitations")}
+        schedulingPages={schedulingPages}
+        pendingBookings={pendingBookings}
+        onOpenBookings={() => setView("bookings")}
       />
 
-      <Box sx={{ flex: 1, minWidth: 0, px: { xs: 2, sm: 3, lg: 4 } }}>
-        <Box
-          sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2.5 }}
-        >
-          <Typography variant="h6" fontWeight={600}>
-            Calendar
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={viewMode}
-              onChange={(_, v) => v && setViewMode(v)}
-            >
-              <ToggleButton value="month">Month</ToggleButton>
-              <ToggleButton value="list">List</ToggleButton>
-            </ToggleButtonGroup>
-            <Button
-              variant="contained"
-              size="small"
-              startIcon={<Plus size={16} />}
-              onClick={openCreate}
-            >
-              New Event
-            </Button>
-          </Box>
-        </Box>
-
-        {error && (
-          <Typography variant="body2" color="error" sx={{ mb: 2 }}>
-            {error}
-          </Typography>
-        )}
-
-        <InvitationInbox />
-
-        {viewMode === "month" && (
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          p: { xs: 2, sm: 3 },
+        }}
+      >
+        {view === "invitations" ? (
+          <InvitationsView onBack={() => setView("calendar")} />
+        ) : view === "bookings" ? (
+          <BookingsView onBack={() => setView("calendar")} />
+        ) : (
           <>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 1.5,
-                mb: 2,
-              }}
-            >
-              <IconButton
-                size="small"
-                onClick={() => setSelectedDate(new Date(year, month - 1, 1))}
-              >
-                <ChevronLeft size={18} />
-              </IconButton>
-              <Typography variant="body1" fontWeight={600} sx={{ width: 144, textAlign: "center" }}>
-                {MONTHS[month]} {year}
-              </Typography>
-              <IconButton
-                size="small"
-                onClick={() => setSelectedDate(new Date(year, month + 1, 1))}
-              >
-                <ChevronRight size={18} />
-              </IconButton>
-            </Box>
-            <CalendarMonthView
-              events={filteredEvents}
-              year={year}
-              month={month}
-              calendars={calendars}
-              onEventClick={setDetailEvent}
-              onDeleteEvent={handleDelete}
+            <CalendarHeader
+              monthLabel={monthLabel}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              onPrev={() => setSelectedDate(new Date(year, month - 1, 1))}
+              onNext={() => setSelectedDate(new Date(year, month + 1, 1))}
+              onToday={() => setSelectedDate(new Date())}
+              onNewEvent={openCreate}
             />
-          </>
-        )}
 
-        {viewMode === "list" && (
-          <CalendarListView events={filteredEvents} onEventClick={setDetailEvent} />
+            {error && (
+              <Typography variant="body2" color="error" sx={{ mb: 2 }}>
+                {error}
+              </Typography>
+            )}
+
+            {viewMode === "month" && (
+              <CalendarMonthView
+                events={filteredEvents}
+                year={year}
+                month={month}
+                calendars={calendars}
+                onEventClick={setDetailEvent}
+                onDeleteEvent={handleDelete}
+              />
+            )}
+
+            {viewMode === "list" && (
+              <CalendarListView
+                events={filteredEvents}
+                year={year}
+                month={month}
+                calendars={calendars}
+                onEventClick={setDetailEvent}
+              />
+            )}
+          </>
         )}
       </Box>
 
@@ -209,14 +195,28 @@ export function CalendarPage() {
         calendars={calendars}
         event={editEvent}
       />
-      <CreateCalendarDialog
-        open={createCalOpen}
-        onClose={() => setCreateCalOpen(false)}
-        onCreate={createCalendar}
+      <CalendarManageDialog
+        open={manageOpen}
+        calendar={editCalendar}
+        onClose={() => setManageOpen(false)}
+        onSave={({ id, title, color, description }) =>
+          id && editCalendar
+            ? updateCalendar({ ...editCalendar, title, color, description })
+            : createCalendar(title, color, description)
+        }
+        onDelete={
+          editCalendar
+            ? (cal) => {
+                deleteCalendar(`${CALENDAR_KINDS.calendarList}:${pubkey}:${cal.id}`, cal.id);
+                setManageOpen(false);
+              }
+            : undefined
+        }
       />
       <EventDetailsDialog
         event={detailEvent}
         currentUserPubkey={pubkey}
+        calendars={calendars}
         onClose={() => setDetailEvent(null)}
         onEdit={openEdit}
         onDelete={handleDelete}

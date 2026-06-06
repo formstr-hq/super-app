@@ -38,4 +38,14 @@ describe("EventCard", () => {
     render(<EventCard event={evt({ isPrivate: true })} onClick={vi.fn()} />);
     expect(screen.getByLabelText(/private/i)).toBeInTheDocument();
   });
+
+  it("shows the start time", () => {
+    render(<EventCard event={evt()} onClick={vi.fn()} />);
+    expect(screen.getByText(/9:00/)).toBeInTheDocument();
+  });
+
+  it("applies the calendar color as a left accent", () => {
+    render(<EventCard event={evt()} onClick={vi.fn()} color="#4285f4" />);
+    expect(screen.getByRole("button")).toHaveStyle({ borderLeftColor: "#4285f4" });
+  });
 });

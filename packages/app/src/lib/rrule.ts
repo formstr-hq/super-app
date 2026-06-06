@@ -162,6 +162,83 @@ export function parseRRuleString(rruleStr: string | null | undefined): RRulePart
   }
 }
 
+// ── Preset layer (matches the standalone nostr-calendar dropdown) ───────────
+//
+// The standalone offers a fixed set of recurrence presets plus a "Custom Rule"
+// escape hatch, rather than exposing raw RRULE parts. We mirror that exact set
+// of options here so both apps present identical choices.
+
+export type RecurrencePreset =
+  | "none"
+  | "daily"
+  | "weekly"
+  | "weekdays"
+  | "monthly"
+  | "quarterly"
+  | "yearly"
+  | "custom";
+
+export const WEEKDAYS_BYDAY = ["MO", "TU", "WE", "TH", "FR"] as const;
+
+function isWeekdaySet(byDay: RRuleParts["byDay"]): boolean {
+  if (!byDay || byDay.length !== 5) return false;
+  const set = new Set(byDay);
+  return WEEKDAYS_BYDAY.every((d) => set.has(d));
+}
+
+/**
+ * Classify an `RRuleParts` value into one of the standalone's dropdown presets.
+ * Anything that doesn't map cleanly onto a preset (odd interval, partial weekday
+ * set, BYDAY on a non-weekly rule, …) is reported as "custom". Mirrors
+ * upstream's `getFrequencyFromParts`.
+ */
+export function partsToPreset(parts: RRuleParts | null): RecurrencePreset {
+  if (!parts) return "none";
+  const { freq, interval, byDay } = parts;
+  const hasDays = !!byDay && byDay.length > 0;
+
+  if (freq === "WEEKLY" && interval === 1 && hasDays) {
+    return isWeekdaySet(byDay) ? "weekdays" : "custom";
+  }
+  if (hasDays) return "custom";
+  if (interval === 1) {
+    if (freq === "DAILY") return "daily";
+    if (freq === "WEEKLY") return "weekly";
+    if (freq === "MONTHLY") return "monthly";
+    if (freq === "YEARLY") return "yearly";
+  }
+  if (freq === "MONTHLY" && interval === 3) return "quarterly";
+  return "custom";
+}
+
+/**
+ * Build the `RRuleParts` for a preset, preserving any existing end condition
+ * (`until`/`count`) from `prev`. Returns `null` for "none". "custom" returns
+ * `prev` unchanged (the caller opens the custom dialog instead).
+ */
+export function presetToParts(
+  preset: RecurrencePreset,
+  prev: RRuleParts | null,
+): RRuleParts | null {
+  if (preset === "none") return null;
+  if (preset === "custom") return prev ?? { freq: "WEEKLY", interval: 1 };
+  const end = { until: prev?.until, count: prev?.count };
+  switch (preset) {
+    case "daily":
+      return { freq: "DAILY", interval: 1, ...end };
+    case "weekly":
+      return { freq: "WEEKLY", interval: 1, ...end };
+    case "weekdays":
+      return { freq: "WEEKLY", interval: 1, byDay: [...WEEKDAYS_BYDAY], ...end };
+    case "monthly":
+      return { freq: "MONTHLY", interval: 1, ...end };
+    case "quarterly":
+      return { freq: "MONTHLY", interval: 3, ...end };
+    case "yearly":
+      return { freq: "YEARLY", interval: 1, ...end };
+  }
+}
+
 export function describeRRule(rruleStr: string | null | undefined): string {
   if (!rruleStr) return "";
   try {

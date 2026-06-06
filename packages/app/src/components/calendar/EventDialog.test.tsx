@@ -42,9 +42,10 @@ describe("EventDialog", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
-  it("reveals the recurrence builder under Advanced", () => {
+  it("reveals the recurrence selector under Advanced", () => {
     render(<EventDialog open onClose={vi.fn()} onSubmit={vi.fn()} calendars={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-    expect(screen.getByText("Repeats")).toBeInTheDocument();
+    // The recurrence dropdown defaults to "Does not repeat" (standalone parity).
+    expect(screen.getByText("Does not repeat")).toBeInTheDocument();
   });
 });

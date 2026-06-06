@@ -9,6 +9,11 @@ vi.mock("@formstr/core", () => ({
   unwrapEvent: vi.fn(),
 }));
 
+vi.mock("./viewKey", () => ({
+  encryptWithViewKey: vi.fn().mockResolvedValue("encrypted-rsvp-payload"),
+  decryptWithViewKey: vi.fn(),
+}));
+
 import { rsvpToEvent, fetchRsvpsForEvent, extractInvitationFromWrap } from "./rsvp";
 import { CALENDAR_KINDS } from "./types";
 
@@ -34,17 +39,111 @@ describe("rsvpToEvent", () => {
     expect(e.tags).toContainEqual(["status", "accepted"]);
   });
 
+  it("uses a deterministic 30-char d-tag (same for same responder+event)", async () => {
+    await rsvpToEvent("31923:author:abc12345", "accepted", false);
+    const d1 = (nostrRuntime.publish as any).mock.calls[0][1].tags.find(
+      (t: string[]) => t[0] === "d",
+    )?.[1] as string;
+    vi.clearAllMocks();
+    (signerManager.getSigner as any).mockResolvedValue(mockSigner);
+    (nostrRuntime.publish as any).mockResolvedValue(undefined);
+    await rsvpToEvent("31923:author:abc12345", "declined", false);
+    const d2 = (nostrRuntime.publish as any).mock.calls[0][1].tags.find(
+      (t: string[]) => t[0] === "d",
+    )?.[1] as string;
+    expect(d1).toBe(d2);
+    expect(d1).toHaveLength(30);
+  });
+
+  it("does not include a p-tag (not in the upstream wire format)", async () => {
+    await rsvpToEvent("31923:author:abc12345", "accepted", false);
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.tags.find((t: string[]) => t[0] === "p")).toBeUndefined();
+  });
+
   it("throws on a malformed coordinate", async () => {
     await expect(rsvpToEvent("bad", "accepted")).rejects.toThrow();
   });
 
-  it("wraps a private RSVP and publishes a gift-wrap", async () => {
+  it("wraps a private RSVP and publishes a gift-wrap when no viewKey (fallback)", async () => {
     (wrapEvent as any).mockResolvedValue({ id: "wrap1", kind: CALENDAR_KINDS.rsvpGiftWrap });
     await rsvpToEvent("31923:author:abc12345", "declined", true);
     expect(wrapEvent).toHaveBeenCalledTimes(1);
     expect((nostrRuntime.publish as any).mock.calls[0][1]).toMatchObject({
       kind: CALENDAR_KINDS.rsvpGiftWrap,
     });
+  });
+
+  it("publishes kind-32069 (viewKey-encrypted) when isPrivate + viewKey provided", async () => {
+    const { encryptWithViewKey } = await import("./viewKey");
+    (encryptWithViewKey as any).mockResolvedValue("encrypted-rsvp-payload");
+    await rsvpToEvent("32678:author:priv123", "accepted", true, undefined, "nsec1viewkey");
+    expect(wrapEvent).not.toHaveBeenCalled();
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.kind).toBe(CALENDAR_KINDS.privateRsvp);
+    expect(e.content).toBe("encrypted-rsvp-payload");
+    expect(e.tags).toContainEqual(["a", "32678:author:priv123"]);
+    // status must be inside the encrypted payload, not a plain tag
+    expect(e.tags.find((t: string[]) => t[0] === "status")).toBeUndefined();
+    expect(encryptWithViewKey).toHaveBeenCalledWith(
+      "nsec1viewkey",
+      JSON.stringify({ status: "accepted" }),
+    );
+  });
+
+  it("includes suggested times in encrypted payload for private RSVP", async () => {
+    const { encryptWithViewKey } = await import("./viewKey");
+    await rsvpToEvent(
+      "32678:author:priv123",
+      "tentative",
+      true,
+      { suggestedStart: 1000, suggestedEnd: 2000, comment: "maybe" },
+      "nsec1viewkey",
+    );
+    expect(encryptWithViewKey).toHaveBeenCalledWith(
+      "nsec1viewkey",
+      JSON.stringify({
+        status: "tentative",
+        suggestedStart: 1000,
+        suggestedEnd: 2000,
+        comment: "maybe",
+      }),
+    );
+  });
+});
+
+describe("rsvpToEvent wire format (suggested time + note)", () => {
+  it("adds start/end tags and puts the comment in content (public)", async () => {
+    await rsvpToEvent("31923:author:abc12345", "accepted", false, {
+      suggestedStart: 1000,
+      suggestedEnd: 2000,
+      comment: "running late",
+    });
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.tags).toContainEqual(["start", "1000"]);
+    expect(e.tags).toContainEqual(["end", "2000"]);
+    expect(e.content).toBe("running late");
+  });
+
+  it("omits start/end and uses empty content when no extras are given", async () => {
+    await rsvpToEvent("31923:author:abc12345", "accepted", false);
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.tags.find((t: string[]) => t[0] === "start")).toBeUndefined();
+    expect(e.tags.find((t: string[]) => t[0] === "end")).toBeUndefined();
+    expect(e.content).toBe("");
+  });
+
+  it("carries the questionnaire into the wrapped rumor for a private RSVP", async () => {
+    (wrapEvent as any).mockResolvedValue({ id: "wrap1", kind: CALENDAR_KINDS.rsvpGiftWrap });
+    await rsvpToEvent("32678:author:abc12345", "tentative", true, {
+      suggestedStart: 1000,
+      suggestedEnd: 2000,
+      comment: "maybe",
+    });
+    const rumor = (wrapEvent as any).mock.calls[0][0];
+    expect(rumor.tags).toContainEqual(["start", "1000"]);
+    expect(rumor.tags).toContainEqual(["end", "2000"]);
+    expect(rumor.content).toBe("maybe");
   });
 });
 
@@ -100,6 +199,87 @@ describe("fetchRsvpsForEvent", () => {
     const rsvps = await fetchRsvpsForEvent("31923:author:abc");
     expect(rsvps).toHaveLength(0);
   });
+
+  it("also decrypts kind-32069 private RSVPs when viewKey is provided", async () => {
+    const { decryptWithViewKey } = await import("./viewKey");
+    (decryptWithViewKey as any).mockResolvedValue(
+      JSON.stringify({ status: "accepted", comment: "looks good" }),
+    );
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([]) // public (31925)
+      .mockResolvedValueOnce([
+        {
+          id: "r_priv",
+          pubkey: "p_priv",
+          kind: CALENDAR_KINDS.privateRsvp,
+          created_at: 15,
+          sig: "s",
+          content: "encrypted-blob",
+          tags: [["a", "32678:author:abc"]],
+        },
+      ]);
+    const rsvps = await fetchRsvpsForEvent("32678:author:abc", "nsec1viewkey");
+    expect(rsvps).toHaveLength(1);
+    expect(rsvps[0]).toMatchObject({ pubkey: "p_priv", status: "accepted", comment: "looks good" });
+    expect(decryptWithViewKey).toHaveBeenCalledWith("nsec1viewkey", "encrypted-blob");
+  });
+
+  it("private RSVP takes precedence over public if newer for same pubkey", async () => {
+    const { decryptWithViewKey } = await import("./viewKey");
+    (decryptWithViewKey as any).mockResolvedValue(JSON.stringify({ status: "declined" }));
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([
+        {
+          id: "r_pub",
+          pubkey: "p1",
+          kind: CALENDAR_KINDS.publicRsvp,
+          created_at: 10,
+          sig: "s",
+          content: "",
+          tags: [["status", "accepted"]],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "r_priv",
+          pubkey: "p1",
+          kind: CALENDAR_KINDS.privateRsvp,
+          created_at: 20,
+          sig: "s",
+          content: "enc",
+          tags: [["a", "32678:author:abc"]],
+        },
+      ]);
+    const rsvps = await fetchRsvpsForEvent("32678:author:abc", "nsec1viewkey");
+    expect(rsvps).toHaveLength(1);
+    expect(rsvps[0].status).toBe("declined");
+  });
+
+  it("parses suggested times and the comment", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "r1",
+        pubkey: "u1",
+        kind: CALENDAR_KINDS.publicRsvp,
+        created_at: 9,
+        sig: "s",
+        content: "ok?",
+        tags: [
+          ["status", "tentative"],
+          ["start", "1000"],
+          ["end", "2000"],
+        ],
+      },
+    ]);
+    const rsvps = await fetchRsvpsForEvent("31923:author:abc");
+    expect(rsvps[0]).toMatchObject({
+      pubkey: "u1",
+      status: "tentative",
+      suggestedStart: 1000,
+      suggestedEnd: 2000,
+      comment: "ok?",
+    });
+  });
 });
 
 describe("extractInvitationFromWrap", () => {
@@ -118,5 +298,22 @@ describe("extractInvitationFromWrap", () => {
   it("returns null when the unwrapped rumor is not a calendar kind", async () => {
     (unwrapEvent as any).mockResolvedValue({ kind: 1, pubkey: "x", content: "{}" });
     expect(await extractInvitationFromWrap({ id: "w" } as any)).toBeNull();
+  });
+
+  it("reads the standalone invitation rumor shape (a + viewKey tags)", async () => {
+    (unwrapEvent as any).mockResolvedValue({
+      kind: CALENDAR_KINDS.rumor,
+      pubkey: "author",
+      content: "",
+      tags: [
+        ["a", "32678:author:d9", "wss://r"],
+        ["viewKey", "nsec1xyz"],
+      ],
+    });
+    const inv = await extractInvitationFromWrap({ id: "w1", created_at: 7 } as any);
+    expect(inv?.eventCoordinate).toBe("32678:author:d9");
+    expect(inv?.kind).toBe(32678);
+    expect(inv?.authorPubkey).toBe("author");
+    expect(inv?.viewKey).toBe("nsec1xyz");
   });
 });

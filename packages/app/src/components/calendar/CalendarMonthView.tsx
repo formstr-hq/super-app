@@ -1,9 +1,87 @@
-import { Box, Paper, Typography } from "@mui/material";
+import { Box, Paper, Popover, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { Lock, X } from "lucide-react";
+import { useState } from "react";
 
+import { calendarForEvent } from "../../lib/calendarMembership";
 import { expandEvents } from "../../lib/rrule";
 import type { CalendarEvent, CalendarList } from "../../services/calendar";
+
+/** Cap of chips rendered inline per day before collapsing into "+N more". */
+const MAX_CHIPS_PER_DAY = 5;
+
+/** A single event chip — colored left accent, time prefix, title, hover-delete. */
+function EventChip({
+  event,
+  color,
+  onClick,
+  onDelete,
+}: {
+  event: CalendarEvent;
+  color: string;
+  onClick: () => void;
+  onDelete: () => void;
+}) {
+  const time = new Date(event.begin).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return (
+    <Box
+      onClick={onClick}
+      style={{ borderLeft: `3px solid ${color}` }}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.5,
+        borderRadius: 0.5,
+        pl: 0.5,
+        pr: 0.25,
+        py: 0.25,
+        fontSize: 10,
+        fontWeight: 500,
+        lineHeight: 1.3,
+        cursor: "pointer",
+        bgcolor: "action.hover",
+        color: "text.primary",
+        "&:hover": { bgcolor: "action.selected" },
+        "&:hover .evt-del": { opacity: 1 },
+      }}
+    >
+      {event.isPrivate && <Lock size={8} />}
+      <Box component="span" sx={{ color: "text.secondary", flexShrink: 0 }}>
+        {time}
+      </Box>
+      <Box
+        component="span"
+        sx={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+      >
+        {event.title}
+      </Box>
+      <Box
+        className="evt-del"
+        component="button"
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        aria-label="Delete event"
+        sx={{
+          opacity: 0,
+          bgcolor: "transparent",
+          border: "none",
+          cursor: "pointer",
+          p: 0,
+          color: "inherit",
+          display: "flex",
+          flexShrink: 0,
+        }}
+      >
+        <X size={8} />
+      </Box>
+    </Box>
+  );
+}
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -28,6 +106,8 @@ export function CalendarMonthView({
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
+  // Anchor + payload for the "+N more" overflow popover.
+  const [more, setMore] = useState<{ anchor: HTMLElement; events: CalendarEvent[] } | null>(null);
 
   const expanded = expandEvents(
     events,
@@ -38,20 +118,33 @@ export function CalendarMonthView({
   const eventsForDay = (day: number) => {
     const dayStart = new Date(year, month, day).getTime();
     const dayEnd = dayStart + 86400000;
-    return expanded.filter((e) => e.begin >= dayStart && e.begin < dayEnd);
+    // Chronological within the day so the earliest event renders first.
+    return expanded
+      .filter((e) => e.begin >= dayStart && e.begin < dayEnd)
+      .sort((a, b) => a.begin - b.begin);
   };
   const colorFor = (e: CalendarEvent) =>
-    (e.calendarId ? calendars.find((c) => c.id === e.calendarId)?.color : undefined) ??
-    theme.palette.primary.main;
+    calendarForEvent(e, calendars)?.color ?? theme.palette.primary.main;
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 1.5, overflow: "hidden" }}>
+    <Paper
+      variant="outlined"
+      sx={{
+        borderRadius: 1.5,
+        overflow: "hidden",
+        flex: 1,
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <Box
         sx={{
           display: "grid",
           gridTemplateColumns: "repeat(7, 1fr)",
           borderBottom: `1px solid ${theme.palette.divider}`,
           bgcolor: "action.hover",
+          flexShrink: 0,
         }}
       >
         {DAYS.map((day) => (
@@ -68,7 +161,15 @@ export function CalendarMonthView({
         ))}
       </Box>
 
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gridAutoRows: "minmax(72px, 1fr)",
+        }}
+      >
         {Array.from({ length: firstDay }, (_, i) => (
           <Box
             key={`pre-${i}`}
@@ -120,78 +221,68 @@ export function CalendarMonthView({
               </Box>
 
               <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
-                {dayEvents.slice(0, 2).map((evtItem) => {
-                  const calColor = colorFor(evtItem);
-                  return (
-                    <Box
-                      key={`${evtItem.eventId}-${evtItem.begin}`}
-                      onClick={() => onEventClick(evtItem)}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 0.25,
-                        borderRadius: 0.5,
-                        px: 0.5,
-                        py: 0.25,
-                        fontSize: 10,
-                        fontWeight: 500,
-                        lineHeight: 1.3,
-                        cursor: "pointer",
-                        bgcolor: calColor + "22",
-                        color: calColor,
-                        "&:hover .evt-del": { opacity: 1 },
-                      }}
-                    >
-                      {evtItem.isPrivate && <Lock size={8} />}
-                      <Box
-                        component="span"
-                        sx={{
-                          flex: 1,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {evtItem.title}
-                      </Box>
-                      <Box
-                        className="evt-del"
-                        component="button"
-                        onClick={(e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          onDeleteEvent(evtItem);
-                        }}
-                        aria-label="Delete event"
-                        sx={{
-                          opacity: 0,
-                          bgcolor: "transparent",
-                          border: "none",
-                          cursor: "pointer",
-                          p: 0,
-                          color: "inherit",
-                          display: "flex",
-                          flexShrink: 0,
-                        }}
-                      >
-                        <X size={8} />
-                      </Box>
-                    </Box>
-                  );
-                })}
-                {dayEvents.length > 2 && (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontSize: 10, pl: 0.5 }}
+                {dayEvents.slice(0, MAX_CHIPS_PER_DAY).map((evtItem) => (
+                  <EventChip
+                    key={`${evtItem.eventId}-${evtItem.begin}`}
+                    event={evtItem}
+                    color={colorFor(evtItem)}
+                    onClick={() => onEventClick(evtItem)}
+                    onDelete={() => onDeleteEvent(evtItem)}
+                  />
+                ))}
+                {dayEvents.length > MAX_CHIPS_PER_DAY && (
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={(e: React.MouseEvent<HTMLButtonElement>) =>
+                      setMore({ anchor: e.currentTarget, events: dayEvents })
+                    }
+                    sx={{
+                      alignSelf: "flex-start",
+                      border: "none",
+                      bgcolor: "transparent",
+                      cursor: "pointer",
+                      p: 0,
+                      pl: 0.5,
+                      fontSize: 10,
+                      fontWeight: 500,
+                      color: "text.secondary",
+                      "&:hover": { color: "text.primary", textDecoration: "underline" },
+                    }}
                   >
-                    +{dayEvents.length - 2} more
-                  </Typography>
+                    +{dayEvents.length - MAX_CHIPS_PER_DAY} more
+                  </Box>
                 )}
               </Box>
             </Box>
           );
         })}
       </Box>
+
+      <Popover
+        open={!!more}
+        anchorEl={more?.anchor ?? null}
+        onClose={() => setMore(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        <Box sx={{ p: 1, display: "flex", flexDirection: "column", gap: 0.5, minWidth: 200 }}>
+          {more?.events.map((evtItem) => (
+            <EventChip
+              key={`${evtItem.eventId}-${evtItem.begin}`}
+              event={evtItem}
+              color={colorFor(evtItem)}
+              onClick={() => {
+                onEventClick(evtItem);
+                setMore(null);
+              }}
+              onDelete={() => {
+                onDeleteEvent(evtItem);
+                setMore(null);
+              }}
+            />
+          ))}
+        </Box>
+      </Popover>
     </Paper>
   );
 }

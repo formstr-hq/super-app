@@ -2,18 +2,19 @@ import { relayManager } from "@formstr/core";
 import { Box, Drawer } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 
 import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
 import { LoginDialog } from "../components/LoginDialog";
 import { useAuthStore, useSettingsStore, useInvitationsStore } from "../stores";
 
+import { isFullBleedRoute } from "./fullBleed";
 import { Header } from "./Header";
-import { Sidebar, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from "./Sidebar";
+import { Sidebar, SIDEBAR_WIDTH } from "./Sidebar";
 
 export function AppShell() {
-  const { sidebarOpen, sidebarCollapsed, aiPanelOpen, setSidebarOpen } = useSettingsStore();
+  const { sidebarOpen, aiPanelOpen, setSidebarOpen } = useSettingsStore();
   const [loginOpen, setLoginOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -39,12 +40,14 @@ export function AppShell() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  const showDesktopSidebar = !isMobile && !isTablet;
-  const sidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
+  // Module switching lives in the navbar (Header). On smaller screens the nav
+  // collapses into an overlay drawer; on desktop there is no module rail.
+  const isDesktop = !isMobile && !isTablet;
+  const fullBleed = isFullBleedRoute(useLocation().pathname);
 
   const sidebarContent = (
     <Sidebar
-      collapsed={showDesktopSidebar ? sidebarCollapsed : false}
+      collapsed={false}
       onLoginClick={() => {
         setLoginOpen(true);
         setSidebarOpen(false);
@@ -54,30 +57,8 @@ export function AppShell() {
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
-      {/* Desktop persistent sidebar */}
-      {showDesktopSidebar && (
-        <Box
-          component="aside"
-          sx={{
-            width: sidebarWidth,
-            flexShrink: 0,
-            position: "fixed",
-            top: 0,
-            bottom: 0,
-            left: 0,
-            zIndex: theme.zIndex.drawer,
-            bgcolor: "background.paper",
-            borderRight: `1px solid ${theme.palette.divider}`,
-            transition: "width 200ms ease",
-            overflow: "hidden",
-          }}
-        >
-          {sidebarContent}
-        </Box>
-      )}
-
       {/* Mobile / tablet overlay sidebar */}
-      {(isMobile || isTablet) && (
+      {!isDesktop && (
         <Drawer
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
@@ -93,15 +74,14 @@ export function AppShell() {
         </Drawer>
       )}
 
-      {/* Main content */}
+      {/* Main content — full width; the navbar owns module switching */}
       <Box
         sx={{
           display: "flex",
           flexDirection: "column",
           flex: 1,
           minWidth: 0,
-          ml: showDesktopSidebar ? `${sidebarWidth}px` : 0,
-          mr: !isMobile && !isTablet && aiPanelOpen ? "380px" : 0,
+          mr: isDesktop && aiPanelOpen ? "380px" : 0,
           transition: "margin 200ms ease",
         }}
       >
@@ -110,22 +90,35 @@ export function AppShell() {
           onOpenCommandPalette={() => setPaletteOpen(true)}
           isMobile={isMobile || isTablet}
         />
-        <Box component="main" sx={{ flex: 1, overflow: "auto" }}>
-          <Box sx={{ mx: "auto", maxWidth: "1280px", px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
+        <Box
+          component="main"
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflow: fullBleed ? "hidden" : "auto",
+            display: fullBleed ? "flex" : "block",
+            flexDirection: "column",
+          }}
+        >
+          {fullBleed ? (
             <Outlet />
-          </Box>
+          ) : (
+            <Box sx={{ mx: "auto", maxWidth: "1280px", px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
+              <Outlet />
+            </Box>
+          )}
         </Box>
       </Box>
 
       {/* AI Chat Panel — desktop docked right */}
-      {!isMobile && !isTablet && (
+      {isDesktop && (
         <Box sx={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: theme.zIndex.drawer }}>
           <AIChatPanel />
         </Box>
       )}
 
       {/* AI Chat Panel — mobile full-screen overlay */}
-      {(isMobile || isTablet) && aiPanelOpen && (
+      {!isDesktop && aiPanelOpen && (
         <Box
           sx={{
             position: "fixed",
