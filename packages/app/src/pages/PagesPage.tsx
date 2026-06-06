@@ -1,432 +1,171 @@
-import { createRef } from "@formstr/core";
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  IconButton,
-  Paper,
-  Skeleton,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import { useTheme } from "@mui/material/styles";
-import { Plus, FileEdit, Trash2, Share2, Edit, Link2, Lock, Tag } from "lucide-react";
+import { Alert, Box, Snackbar, Typography } from "@mui/material";
+import { FileEdit } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
-import { RichEditor } from "../components/pages/RichEditor";
-import { PAGES_KINDS, type PageSummary } from "../services/pages/types";
-import { usePagesStore } from "../stores";
+import { PageEditorSurface } from "../components/pages/PageEditorSurface";
+import { PagesSidebar } from "../components/pages/PagesSidebar";
+import { PageTagsPopover } from "../components/pages/PageTagsPopover";
+import { SharePageDialog } from "../components/pages/SharePageDialog";
+import type { PageDocument, PageSummary } from "../services/pages";
+import { useAuthStore, usePagesStore } from "../stores";
 
 export function PagesPage() {
   const {
     pages,
+    sharedPages,
     currentPage,
-    isLoading,
+    tagsByAddress,
+    activeTag,
     error,
     fetchMyPages,
+    fetchSharedPages,
     loadPage,
     savePage,
     deletePage,
     sharePage,
+    setTags,
+    setActiveTag,
     clearCurrent,
   } = usePagesStore();
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [shareError, setShareError] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const theme = useTheme();
+  const pubkey = useAuthStore((s) => s.pubkey);
+
+  const [mode, setMode] = useState<"empty" | "new" | "open">("empty");
+  const [saving, setSaving] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [tagsAnchor, setTagsAnchor] = useState<HTMLElement | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchMyPages();
-  }, [fetchMyPages]);
+    if (pubkey) {
+      fetchMyPages();
+      fetchSharedPages();
+    }
+  }, [pubkey, fetchMyPages, fetchSharedPages]);
 
-  const handleNewPage = () => {
-    clearCurrent();
-    setEditorOpen(true);
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const list of Object.values(tagsByAddress)) for (const t of list) set.add(t);
+    return [...set].sort();
+  }, [tagsByAddress]);
+
+  const visiblePages = useMemo(
+    () =>
+      activeTag
+        ? pages.filter((p) => (p.tags ?? tagsByAddress[p.address])?.includes(activeTag))
+        : pages,
+    [pages, activeTag, tagsByAddress],
+  );
+
+  const openPage = async (page: PageSummary) => {
+    setMode("open");
+    await loadPage(page.pubkey, page.id, page.viewKey);
   };
 
-  const handleCopyLink = async (page: PageSummary) => {
+  const handleNew = () => {
+    clearCurrent();
+    setMode("new");
+  };
+
+  const handleSave = async (content: string) => {
+    setSaving(true);
     try {
-      const naddr = createRef("pages", PAGES_KINDS.document, page.pubkey, page.id);
-      await navigator.clipboard.writeText(naddr);
-      setCopiedId(page.id);
-      window.setTimeout(() => setCopiedId((cur) => (cur === page.id ? null : cur)), 1500);
+      const existing = mode === "open" ? currentPage : null;
+      const saved: PageDocument = await savePage({
+        content,
+        existingId: existing?.id,
+        viewKey: existing?.viewKey,
+        editKey: existing?.editKey,
+      });
+      setMode("open");
+      setToast("Saved");
+      void saved;
     } catch {
-      /* ignore */
+      /* surfaced via store error */
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleEdit = async (page: { pubkey: string; id: string }) => {
-    await loadPage(page.pubkey, page.id);
-    setEditorOpen(true);
+  const handleDelete = async () => {
+    if (!currentPage) return;
+    await deletePage(currentPage.address);
+    setMode("empty");
   };
 
-  const handleShare = (address: string) => {
-    setShareError(null);
-    const result = sharePage(address);
-    if (result) {
-      setShareUrl(result.url);
-      navigator.clipboard.writeText(result.url);
-    } else setShareError("Open the page first to enable sharing (viewKey required).");
-  };
+  const editorPage = mode === "new" ? null : currentPage;
+  const showEditor = mode !== "empty";
+  // A shared doc opened with only a viewKey (someone else's, no editKey) is read-only.
+  const readOnly = !!currentPage && currentPage.pubkey !== pubkey && !currentPage.editKey;
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography variant="h6" fontWeight={600}>
-          Pages
-        </Typography>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<Plus size={16} />}
-          onClick={handleNewPage}
-        >
-          New Page
-        </Button>
-      </Box>
+    <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
+      <PagesSidebar
+        pages={visiblePages}
+        sharedPages={sharedPages}
+        selectedAddress={currentPage?.address}
+        allTags={allTags}
+        activeTag={activeTag}
+        onSelect={openPage}
+        onNew={handleNew}
+        onToggleTag={setActiveTag}
+      />
 
-      <AIPendingRow module="pages" />
+      <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <AIPendingRow module="pages" />
+        {error && (
+          <Alert severity="error" sx={{ m: 2, mb: 0, py: 0.5 }}>
+            {error}
+          </Alert>
+        )}
 
-      {error && (
-        <Alert severity="error" sx={{ py: 0.5 }}>
-          {error}
-        </Alert>
-      )}
-      {shareError && (
-        <Alert severity="warning" sx={{ py: 0.5 }}>
-          {shareError}
-        </Alert>
-      )}
-      {shareUrl && (
-        <Alert severity="success" sx={{ py: 0.5 }} onClose={() => setShareUrl(null)}>
-          Link copied to clipboard!
-        </Alert>
-      )}
-
-      {isLoading ? (
-        <Paper variant="outlined" sx={{ borderRadius: 1.5 }}>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Box
-              key={i}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1.5,
-                px: 2,
-                py: 1.5,
-                borderBottom: i < 4 ? `1px solid ${theme.palette.divider}` : "none",
-              }}
-            >
-              <Skeleton variant="rounded" width={16} height={16} />
-              <Skeleton variant="text" sx={{ flex: 1 }} />
-              <Skeleton variant="text" width={80} />
-            </Box>
-          ))}
-        </Paper>
-      ) : pages.length === 0 ? (
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            py: 10,
-            gap: 1.5,
-            textAlign: "center",
-          }}
-        >
+        {showEditor ? (
+          <PageEditorSurface
+            page={editorPage}
+            tags={editorPage ? tagsByAddress[editorPage.address] : undefined}
+            readOnly={readOnly}
+            saving={saving}
+            onSave={handleSave}
+            onShare={() => setShareOpen(true)}
+            onDelete={handleDelete}
+            onOpenTags={setTagsAnchor}
+          />
+        ) : (
           <Box
             sx={{
-              width: 56,
-              height: 56,
-              borderRadius: 2,
-              bgcolor: "action.hover",
+              flex: 1,
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
+              gap: 1.5,
+              color: "text.secondary",
             }}
           >
-            <FileEdit size={28} color={theme.palette.text.secondary} />
+            <FileEdit size={40} strokeWidth={1.4} />
+            <Typography variant="body2" fontWeight={500}>
+              Select a page or create a new one
+            </Typography>
           </Box>
-          <Typography variant="body2" fontWeight={500}>
-            No pages yet
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Create your first page to get started
-          </Typography>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<Plus size={14} />}
-            onClick={handleNewPage}
-            sx={{ mt: 0.5 }}
-          >
-            New Page
-          </Button>
-        </Box>
-      ) : (
-        <Paper variant="outlined" sx={{ borderRadius: 1.5, overflow: "hidden" }}>
-          {pages.map((page, idx) => (
-            <Box
-              key={page.id}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1.5,
-                px: 2,
-                py: 1.5,
-                borderBottom:
-                  idx < pages.length - 1 ? `1px solid ${theme.palette.divider}` : "none",
-                "&:hover": { bgcolor: "action.hover" },
-                "&:hover .page-actions": { opacity: 1 },
-              }}
-            >
-              <FileEdit size={16} color={theme.palette.text.secondary} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={500} noWrap>
-                  {page.title}
-                </Typography>
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 0.75,
-                    mt: 0.25,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <Typography variant="caption" color="text.secondary">
-                    {new Date(page.createdAt * 1000).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </Typography>
-                  {page.isEncrypted && (
-                    <Chip
-                      icon={<Lock size={10} />}
-                      label="Encrypted"
-                      size="small"
-                      sx={{ height: 16, fontSize: 10 }}
-                    />
-                  )}
-                  {page.tags?.map((tag) => (
-                    <Chip
-                      key={tag}
-                      icon={<Tag size={10} />}
-                      label={tag}
-                      size="small"
-                      variant="outlined"
-                      sx={{ height: 16, fontSize: 10 }}
-                    />
-                  ))}
-                </Box>
-              </Box>
+        )}
+      </Box>
 
-              <Box
-                className="page-actions"
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 0.25,
-                  opacity: 0,
-                  transition: "opacity 150ms",
-                }}
-              >
-                <Tooltip title="Edit">
-                  <IconButton size="small" onClick={() => handleEdit(page)}>
-                    <Edit size={14} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Share">
-                  <IconButton size="small" onClick={() => handleShare(page.address)}>
-                    <Share2 size={14} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title={copiedId === page.id ? "Copied!" : "Copy cross-app link"}>
-                  <IconButton size="small" onClick={() => handleCopyLink(page)}>
-                    <Link2 size={14} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Delete">
-                  <IconButton size="small" color="error" onClick={() => deletePage(page.address)}>
-                    <Trash2 size={14} />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            </Box>
-          ))}
-        </Paper>
+      <SharePageDialog open={shareOpen} onClose={() => setShareOpen(false)} onShare={sharePage} />
+      {currentPage && (
+        <PageTagsPopover
+          anchorEl={tagsAnchor}
+          tags={tagsByAddress[currentPage.address] ?? []}
+          onClose={() => setTagsAnchor(null)}
+          onChange={(t) => setTags(currentPage.address, t)}
+        />
       )}
-
-      <PageEditorDialog
-        open={editorOpen}
-        onClose={() => {
-          setEditorOpen(false);
-          clearCurrent();
-        }}
-        onSave={savePage}
-        initialContent={currentPage?.content}
-        initialTitle={currentPage?.title}
-        existingId={currentPage?.id}
-        viewKey={currentPage?.viewKey}
+      <Snackbar
+        open={!!toast}
+        autoHideDuration={1500}
+        onClose={() => setToast(null)}
+        message={toast}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
     </Box>
   );
-}
-
-// ── Page Editor Dialog ────────────────────────────────────
-
-function PageEditorDialog({
-  open,
-  onClose,
-  onSave,
-  initialContent,
-  initialTitle,
-  existingId,
-  viewKey,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSave: (params: {
-    content: string;
-    title?: string;
-    existingId?: string;
-    viewKey?: string;
-  }) => Promise<unknown>;
-  initialContent?: string;
-  initialTitle?: string;
-  existingId?: string;
-  viewKey?: string;
-}) {
-  const [title, setTitle] = useState(initialTitle ?? "");
-  const [content, setContent] = useState(initialContent ?? "");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const theme = useTheme();
-
-  useEffect(() => {
-    setTitle(initialTitle ?? "");
-    setContent(initialContent ?? "");
-  }, [initialContent, initialTitle]);
-
-  const bodyMarkdown = useMemo(() => stripLeadingTitle(content, title), [content, title]);
-
-  const handleSave = async () => {
-    setIsSubmitting(true);
-    try {
-      const cleanBody = stripLeadingTitle(content, title);
-      await onSave({
-        content: title ? `# ${title}\n\n${cleanBody}` : cleanBody,
-        title,
-        existingId,
-        viewKey,
-      });
-      onClose();
-    } catch {
-      /* handled by store */
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      fullWidth
-      maxWidth="md"
-      PaperProps={{ sx: { height: "85vh", display: "flex", flexDirection: "column" } }}
-    >
-      <DialogTitle sx={{ borderBottom: `1px solid ${theme.palette.divider}`, py: 1.5 }}>
-        <Typography variant="body1" fontWeight={600}>
-          {existingId ? "Edit Page" : "New Page"}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          Type{" "}
-          <Box
-            component="kbd"
-            sx={{ bgcolor: "action.hover", px: 0.5, borderRadius: 0.5, fontFamily: "monospace" }}
-          >
-            /
-          </Box>{" "}
-          for blocks,{" "}
-          <Box
-            component="kbd"
-            sx={{ bgcolor: "action.hover", px: 0.5, borderRadius: 0.5, fontFamily: "monospace" }}
-          >
-            @
-          </Box>{" "}
-          to link another entity.
-        </Typography>
-      </DialogTitle>
-      <DialogContent
-        sx={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          gap: 1.5,
-          overflowY: "hidden",
-          px: 3,
-          py: 2,
-        }}
-      >
-        <TextField
-          placeholder="Page title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          size="small"
-          fullWidth
-          InputProps={{ sx: { fontSize: 16, fontWeight: 500 } }}
-        />
-        <Divider />
-        <Box
-          sx={{
-            flex: 1,
-            minHeight: 0,
-            overflowY: "auto",
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: 1,
-            px: 1.5,
-            py: 1,
-            "&:focus-within": { outline: `2px solid ${theme.palette.primary.main}` },
-          }}
-        >
-          <RichEditor
-            key={existingId ?? "new-page"}
-            initialMarkdown={bodyMarkdown}
-            onChangeMarkdown={setContent}
-          />
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ borderTop: `1px solid ${theme.palette.divider}`, px: 3, py: 1.5 }}>
-        <Button onClick={onClose} disabled={isSubmitting}>
-          Cancel
-        </Button>
-        <Button variant="contained" onClick={handleSave} disabled={!title.trim() || isSubmitting}>
-          {isSubmitting ? "Saving…" : "Save"}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-function stripLeadingTitle(markdown: string, title: string): string {
-  const trimmed = markdown.replace(/^\s+/, "");
-  const firstLineEnd = trimmed.indexOf("\n");
-  const firstLine = firstLineEnd === -1 ? trimmed : trimmed.slice(0, firstLineEnd);
-  const h1Match = /^#\s+(.+?)\s*$/.exec(firstLine);
-  if (!h1Match) return markdown;
-  if (!title || h1Match[1].trim() === title.trim()) {
-    return firstLineEnd === -1 ? "" : trimmed.slice(firstLineEnd + 1).replace(/^\s*/, "");
-  }
-  return markdown;
 }
