@@ -1,5 +1,4 @@
 import { signerManager, nostrRuntime, relayManager } from "@formstr/core";
-import type { SubscriptionHandle } from "@formstr/core";
 import type { EventTemplate, Event, Filter } from "nostr-tools";
 
 import {
@@ -67,13 +66,19 @@ export async function createPoll(draft: PollDraft): Promise<Poll> {
 
 // ── Submit Response ─────────────────────────────────────
 
+/** The poll's own `["relay"]` tags ∪ the module defaults — where votes are published/read. */
+function withModuleRelays(pollRelays?: string[]): string[] {
+  return Array.from(new Set([...(pollRelays ?? []), ...relayManager.getRelaysForModule("polls")]));
+}
+
 export async function submitPollResponse(
   pollId: string,
   pollAuthor: string,
   selectedOptionIds: string[],
+  pollRelays?: string[],
 ): Promise<void> {
   const signer = await signerManager.getSigner();
-  const relays = relayManager.getRelaysForModule("polls");
+  const relays = withModuleRelays(pollRelays);
 
   const tags: string[][] = [
     ["e", pollId],
@@ -95,6 +100,48 @@ export async function submitPollResponse(
   await nostrRuntime.publish(relays, signed);
 }
 
+// ── Delete / Clear (NIP-09) ─────────────────────────────
+
+/** Author deletes their poll: kind-5 `["e", pollId]` + `["k","1068"]`. */
+export async function deletePoll(pollId: string, pollRelays?: string[]): Promise<void> {
+  const signer = await signerManager.getSigner();
+  const event: EventTemplate = {
+    kind: 5,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ["e", pollId],
+      ["k", String(POLLS_KINDS.poll)],
+    ],
+    content: "",
+  };
+  const signed = await signer.signEvent(event);
+  await nostrRuntime.publish(withModuleRelays(pollRelays), signed);
+}
+
+/** Voter retracts their own votes on a poll: NIP-09 kind-5 over their response events. */
+export async function clearMyVotes(pollId: string, pollRelays?: string[]): Promise<void> {
+  const signer = await signerManager.getSigner();
+  const pubkey = await signer.getPublicKey();
+  const relays = withModuleRelays(pollRelays);
+
+  const mine = await nostrRuntime.querySync(relays, {
+    kinds: [POLLS_KINDS.response, POLLS_KINDS.responseLegacy],
+    authors: [pubkey],
+    "#e": [pollId],
+  } as Filter);
+  if (mine.length === 0) return;
+
+  const kinds = Array.from(new Set(mine.map((e: Event) => e.kind)));
+  const event: EventTemplate = {
+    kind: 5,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [...mine.map((e: Event) => ["e", e.id]), ...kinds.map((k) => ["k", String(k)])],
+    content: "",
+  };
+  const signed = await signer.signEvent(event);
+  await nostrRuntime.publish(relays, signed);
+}
+
 // ── Fetch Poll ──────────────────────────────────────────
 
 export async function fetchPoll(eventId: string): Promise<Poll | null> {
@@ -109,59 +156,46 @@ export async function fetchPoll(eventId: string): Promise<Poll | null> {
 
 // ── Fetch Results ───────────────────────────────────────
 
-export function subscribeToPollResults(
-  pollId: string,
-  onResults: (results: PollResults) => void,
-  onEose?: () => void,
-): SubscriptionHandle {
-  const relays = relayManager.getRelaysForModule("polls");
-  const responses = new Map<string, string[]>(); // pubkey → selectedOptionIds
-
-  const filter: Filter = {
-    kinds: [POLLS_KINDS.response, POLLS_KINDS.responseLegacy],
-    "#e": [pollId],
-  };
-
-  return nostrRuntime.subscribe(relays, [filter], {
-    onEvent: (event: Event) => {
-      const selected = event.tags
-        .filter((t: string[]) => t[0] === "response")
-        .map((t: string[]) => t[1]);
-
-      if (selected.length > 0) {
-        responses.set(event.pubkey, selected);
-        onResults(computeResults(responses));
-      }
-    },
-    onEose,
-  });
+/** Relays a poll's votes live on: the poll's own `["relay"]` tags ∪ the module defaults. */
+function resultRelays(poll: Poll): string[] {
+  return withModuleRelays(poll.relays);
 }
 
-export async function fetchPollResults(pollId: string): Promise<PollResults> {
-  const relays = relayManager.getRelaysForModule("polls");
-  const filter: Filter = {
-    kinds: [POLLS_KINDS.response, POLLS_KINDS.responseLegacy],
-    "#e": [pollId],
-  };
-
-  const events = await nostrRuntime.querySync(relays, filter);
-  const responses = new Map<string, string[]>();
-
-  for (const event of events) {
-    const selected = event.tags
-      .filter((t: string[]) => t[0] === "response")
-      .map((t: string[]) => t[1]);
-
-    if (selected.length > 0) {
-      // Latest response per pubkey wins
-      const existing = responses.get(event.pubkey);
-      if (!existing) {
-        responses.set(event.pubkey, selected);
-      }
-    }
+/** Map voter → their latest, non-cleared selected option ids (latest wins by created_at). */
+function latestResponsesByVoter(events: Event[], deleted: Set<string>): Map<string, string[]> {
+  const latest = new Map<string, Event>();
+  for (const e of events) {
+    if (isPollDeleted(e, deleted)) continue;
+    if (!e.tags.some((t) => t[0] === "response")) continue;
+    const prev = latest.get(e.pubkey);
+    if (!prev || e.created_at > prev.created_at) latest.set(e.pubkey, e);
   }
+  const out = new Map<string, string[]>();
+  for (const [pubkey, e] of latest) {
+    out.set(
+      pubkey,
+      e.tags.filter((t) => t[0] === "response").map((t) => t[1]),
+    );
+  }
+  return out;
+}
 
-  return computeResults(responses);
+/**
+ * Tally a poll's votes. Reads kind-1018 (+ legacy 1070) `#e`=poll.id from the poll's
+ * relays ∪ module defaults, bounded by `endsAt`; excludes cleared (NIP-09-deleted)
+ * votes and keeps only each voter's latest response by `created_at`.
+ */
+export async function fetchPollResults(poll: Poll): Promise<PollResults> {
+  const relays = resultRelays(poll);
+  const events = await nostrRuntime.querySync(relays, {
+    kinds: [POLLS_KINDS.response, POLLS_KINDS.responseLegacy],
+    "#e": [poll.id],
+    ...(poll.endsAt ? { until: poll.endsAt } : {}),
+  } as Filter);
+
+  const authors = Array.from(new Set(events.map((e: Event) => e.pubkey)));
+  const deleted = await fetchDeletions(relays, authors);
+  return computeResults(latestResponsesByVoter(events, deleted));
 }
 
 // ── Fetch Recent Polls ──────────────────────────────────
@@ -174,7 +208,12 @@ export async function fetchRecentPolls(limit = 20): Promise<Poll[]> {
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map(parsePollEvent).filter((p: Poll | null): p is Poll => p !== null);
+  const authors = Array.from(new Set(events.map((e: Event) => e.pubkey)));
+  const deleted = await fetchDeletions(relays, authors);
+  return events
+    .filter((e: Event) => !isPollDeleted(e, deleted))
+    .map(parsePollEvent)
+    .filter((p: Poll | null): p is Poll => p !== null);
 }
 
 export async function fetchMyPolls(): Promise<Poll[]> {
@@ -188,7 +227,36 @@ export async function fetchMyPolls(): Promise<Poll[]> {
   };
 
   const events = await nostrRuntime.querySync(relays, filter);
-  return events.map(parsePollEvent).filter((p: Poll | null): p is Poll => p !== null);
+  const deleted = await fetchDeletions(relays, [pubkey]);
+  return events
+    .filter((e: Event) => !isPollDeleted(e, deleted))
+    .map(parsePollEvent)
+    .filter((p: Poll | null): p is Poll => p !== null);
+}
+
+// ── Deletions (NIP-09) ──────────────────────────────────
+
+/**
+ * Set of `${pubkey}:${eventId}` for events deleted (kind-5) by their own author.
+ * Keying by the deleting author enforces NIP-09's same-author rule for free: a
+ * forged deletion of someone else's id keys under the forger and never matches.
+ */
+export async function fetchDeletions(relays: string[], authors: string[]): Promise<Set<string>> {
+  const deleted = new Set<string>();
+  if (authors.length === 0) return deleted;
+
+  const events = await nostrRuntime.querySync(relays, { kinds: [5], authors } as Filter);
+  for (const ev of events) {
+    for (const tag of ev.tags) {
+      if (tag[0] === "e" && tag[1]) deleted.add(`${ev.pubkey}:${tag[1]}`);
+    }
+  }
+  return deleted;
+}
+
+/** True when this event's own author published a NIP-09 deletion for it. */
+export function isPollDeleted(event: Event, deleted: Set<string>): boolean {
+  return deleted.has(`${event.pubkey}:${event.id}`);
 }
 
 // ── Helpers ─────────────────────────────────────────────
@@ -205,10 +273,12 @@ function parsePollEvent(event: Event): Poll | null {
   const relays = event.tags.filter((t) => t[0] === "relay").map((t) => t[1]);
   const hashtags = event.tags.filter((t) => t[0] === "t").map((t) => t[1]);
   const pow = event.tags.find((t) => t[0] === "PoW")?.[1];
+  // Question lives in content; some standalone polls carry it in a ["label"] tag instead.
+  const question = event.content || event.tags.find((t) => t[0] === "label")?.[1] || "";
 
   return {
     id: event.id,
-    content: event.content,
+    content: question,
     options,
     pollType: pollType as Poll["pollType"],
     pubkey: event.pubkey,
@@ -225,7 +295,7 @@ function computeResults(responses: Map<string, string[]>): PollResults {
   const results = new Map<string, OptionResult>();
   const totalVoters = responses.size;
 
-  // Count votes per option
+  // Count votes per option (a voter may select several in a multiple-choice poll).
   const counts = new Map<string, string[]>();
   for (const [pubkey, selected] of responses) {
     for (const optionId of selected) {
@@ -235,10 +305,13 @@ function computeResults(responses: Map<string, string[]>): PollResults {
     }
   }
 
+  // Percentage is each option's share of all selections (count / Σcounts) — matches
+  // the standalone, so multiple-choice bars are identical across apps.
+  const totalSelections = Array.from(counts.values()).reduce((sum, r) => sum + r.length, 0);
   for (const [optionId, responders] of counts) {
     results.set(optionId, {
       count: responders.length,
-      percentage: totalVoters > 0 ? (responders.length / totalVoters) * 100 : 0,
+      percentage: totalSelections > 0 ? (responders.length / totalSelections) * 100 : 0,
       responders,
     });
   }

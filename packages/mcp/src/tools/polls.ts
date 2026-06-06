@@ -8,6 +8,7 @@ import { requireConfirm } from "../safety";
 import type { RegisterCtx } from "./shared";
 
 export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
+  // ── Read ──────────────────────────────────────────────
   server.registerTool(
     "list_polls",
     { description: "List polls created by the user.", inputSchema: {} },
@@ -18,6 +19,27 @@ export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
           id: p.id,
           question: p.content,
           pollType: p.pollType,
+          createdAt: p.createdAt,
+          endsAt: p.endsAt,
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
+    "list_recent_polls",
+    {
+      description: "List recent public polls to discover/vote on.",
+      inputSchema: { limit: z.number().optional() },
+    },
+    async ({ limit }: { limit?: number }) => {
+      const recent = await polls.fetchRecentPolls(limit);
+      return ok(`${recent.length} recent poll(s).`, {
+        polls: recent.map((p) => ({
+          id: p.id,
+          question: p.content,
+          pollType: p.pollType,
+          pubkey: p.pubkey,
           createdAt: p.createdAt,
           endsAt: p.endsAt,
         })),
@@ -56,7 +78,9 @@ export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
       inputSchema: { pollEventId: z.string() },
     },
     async ({ pollEventId }) => {
-      const results = await polls.fetchPollResults(pollEventId);
+      const poll = await polls.fetchPoll(pollEventId);
+      if (!poll) return fail("Poll not found.");
+      const results = await polls.fetchPollResults(poll);
       const options = Array.from(results.results.entries()).map(([optionId, r]) => ({
         optionId,
         count: r.count,
@@ -69,6 +93,7 @@ export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
     },
   );
 
+  // ── Constructive ──────────────────────────────────────
   server.registerTool(
     "create_poll",
     {
@@ -93,8 +118,7 @@ export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
     },
   );
 
-  // Read tools and constructive creates (above) are always available; only
-  // destructive/outward actions below are gated behind --allow-writes.
+  // ── Gated (destructive / outward) ─────────────────────
   if (!ctx.allowWrites) return;
 
   server.registerTool(
@@ -116,8 +140,42 @@ export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
       if (blocked) return blocked;
       const poll = await polls.fetchPoll(pollEventId);
       if (!poll) return fail("Poll not found.");
-      await polls.submitPollResponse(pollEventId, poll.pubkey, optionIds);
+      await polls.submitPollResponse(pollEventId, poll.pubkey, optionIds, poll.relays);
       return ok(`Voted on poll ${pollEventId}.`);
+    },
+  );
+
+  server.registerTool(
+    "delete_poll",
+    {
+      description: "Delete a poll you authored (NIP-09). Requires confirm:true.",
+      inputSchema: { pollEventId: z.string(), confirm: z.boolean().optional() },
+    },
+    async ({ pollEventId, confirm }: { pollEventId: string; confirm?: boolean }) => {
+      const blocked = requireConfirm("delete_poll", { confirm }, `deletes poll ${pollEventId}`);
+      if (blocked) return blocked;
+      const poll = await polls.fetchPoll(pollEventId);
+      await polls.deletePoll(pollEventId, poll?.relays);
+      return ok(`Deleted poll ${pollEventId}.`);
+    },
+  );
+
+  server.registerTool(
+    "clear_my_vote",
+    {
+      description: "Retract your own votes on a poll (NIP-09). Requires confirm:true.",
+      inputSchema: { pollEventId: z.string(), confirm: z.boolean().optional() },
+    },
+    async ({ pollEventId, confirm }: { pollEventId: string; confirm?: boolean }) => {
+      const blocked = requireConfirm(
+        "clear_my_vote",
+        { confirm },
+        `clears your votes on ${pollEventId}`,
+      );
+      if (blocked) return blocked;
+      const poll = await polls.fetchPoll(pollEventId);
+      await polls.clearMyVotes(pollEventId, poll?.relays);
+      return ok(`Cleared your votes on ${pollEventId}.`);
     },
   );
 }
