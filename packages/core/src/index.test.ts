@@ -11,7 +11,8 @@ describe("@formstr/core exports", () => {
   it("exports crypto helpers", () => {
     expect(core.nip44Encrypt).toBeTypeOf("function");
     expect(core.wrapEvent).toBeTypeOf("function");
-    expect(core.generateFileKey).toBeTypeOf("function");
+    expect(core.encryptFileWithKey).toBeTypeOf("function");
+    expect(core.decryptFileWithKey).toBeTypeOf("function");
   });
 
   it("exports relay + runtime singletons", () => {
