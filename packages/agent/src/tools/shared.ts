@@ -1,11 +1,12 @@
+import { nip19 } from "nostr-tools";
+
 import {
   AnswerType,
   type FormField,
   type FormFieldValidation,
   type FormFieldFileConfig,
   type FormOption,
-} from "@formstr/app/services";
-import { nip19 } from "nostr-tools";
+} from "../services";
 
 export function normalizePubkey(value: string): string | null {
   const trimmed = value.trim();
@@ -77,6 +78,4 @@ export function aiFieldsToFormFields(value: unknown): FormField[] {
   }));
 }
 
-export interface RegisterCtx {
-  allowWrites: boolean;
-}
+export type { ToolCtx as RegisterCtx } from "./types";
