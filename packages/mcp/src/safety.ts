@@ -10,6 +10,8 @@ export const GATED_TOOLS = [
   "submit_form_response",
   "submit_poll_response",
   "rsvp_event",
+  "delete_page",
+  "share_page",
 ] as const;
 
 export type GatedTool = (typeof GATED_TOOLS)[number];
