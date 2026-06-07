@@ -43,7 +43,7 @@ describe("FormCard", () => {
     expect(screen.queryByText("Encrypted")).not.toBeInTheDocument();
   });
 
-  it("calls onFill with the form when Fill Form button is clicked", () => {
+  it("calls onFill with the form when the Fill form action is clicked", () => {
     const onFill = vi.fn();
     render(
       <FormCard
@@ -54,8 +54,23 @@ describe("FormCard", () => {
         onCopyLink={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByText("Fill Form"));
+    fireEvent.click(screen.getByRole("button", { name: /fill form/i }));
     expect(onFill).toHaveBeenCalledWith(base);
+  });
+
+  it("calls onDelete with the form when the Delete action is clicked", () => {
+    const onDelete = vi.fn();
+    render(
+      <FormCard
+        form={base}
+        onFill={vi.fn()}
+        onViewResponses={vi.fn()}
+        onDelete={onDelete}
+        onCopyLink={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    expect(onDelete).toHaveBeenCalledWith(base);
   });
 
   it("shows hover action buttons on mouse enter", () => {

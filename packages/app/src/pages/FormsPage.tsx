@@ -7,8 +7,8 @@ import { nip19 } from "nostr-tools";
 import { useCallback, useEffect, useState } from "react";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
-import { CreateFormDialog } from "../components/forms/CreateFormDialog";
 import { FillFormDialog } from "../components/forms/FillFormDialog";
+import { FormBuilderSurface } from "../components/forms/FormBuilderSurface";
 import { FormListView } from "../components/forms/FormListView";
 import { FormsSidebar, type FormsCategory } from "../components/forms/FormsSidebar";
 import { ResponsesDialog } from "../components/forms/ResponsesDialog";
@@ -99,6 +99,10 @@ export function FormsPage() {
     clearCurrent();
   }, [clearCurrent]);
 
+  if (activeDialog === "create") {
+    return <FormBuilderSurface onClose={handleClose} />;
+  }
+
   return (
     <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
       <FormsSidebar
@@ -165,7 +169,6 @@ export function FormsPage() {
         </Box>
       </Box>
 
-      <CreateFormDialog open={activeDialog === "create"} onClose={handleClose} />
       <FillFormDialog
         open={activeDialog === "fill"}
         form={currentForm}
