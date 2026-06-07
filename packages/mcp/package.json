@@ -41,8 +41,6 @@
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
-    "@formstr/app": "workspace:*",
-    "@formstr/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/keyring": "^1.1.6",
     "nostr-tools": "^2.23.3",
@@ -51,6 +49,8 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@formstr/agent": "workspace:*",
+    "@formstr/core": "workspace:*",
     "@types/node": "^25.6.0",
     "@types/qrcode": "^1.5.5",
     "@types/ws": "^8.5.0",
