@@ -21,11 +21,18 @@ describe("isFullBleedRoute", () => {
     expect(isFullBleedRoute("/polls/nevent1abc")).toBe(true);
   });
 
+  it("treats the drive route as full-bleed", () => {
+    expect(isFullBleedRoute("/drive")).toBe(true);
+    expect(isFullBleedRoute("/drive/")).toBe(true);
+    expect(isFullBleedRoute("/drive/work")).toBe(true);
+  });
+
   it("keeps other routes in the centered container", () => {
     expect(isFullBleedRoute("/")).toBe(false);
     expect(isFullBleedRoute("/forms")).toBe(false);
     expect(isFullBleedRoute("/calendarx")).toBe(false);
     expect(isFullBleedRoute("/pagesx")).toBe(false);
     expect(isFullBleedRoute("/pollsx")).toBe(false);
+    expect(isFullBleedRoute("/drivex")).toBe(false);
   });
 });
