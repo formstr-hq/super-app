@@ -1,11 +1,10 @@
-import { drive } from "@formstr/app/services";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { ok, fail } from "../result";
 import { requireConfirm } from "../safety";
+import { drive } from "../services";
 
-import type { RegisterCtx } from "./shared";
+import type { ToolEntry } from "./types";
 
 /** Metadata shape returned by the drive service (kept local — never imported into the AI surface). */
 interface DriveFile {
@@ -47,7 +46,21 @@ async function resolveFile(
   return { file: matches[0] };
 }
 
-export function registerDrive(server: McpServer, ctx: RegisterCtx): void {
+export const driveTools: ToolEntry[] = buildDriveTools();
+
+function buildDriveTools(): ToolEntry[] {
+  const tools: ToolEntry[] = [];
+  let write = false;
+  const server = {
+    registerTool(
+      name: string,
+      config: Pick<ToolEntry, "description" | "inputSchema">,
+      handler: ToolEntry["handler"],
+    ) {
+      tools.push({ name, ...config, handler, ...(write ? { write: true } : {}) });
+    },
+  };
+
   // ── Read ──────────────────────────────────────────────
   server.registerTool(
     "browse_files",
@@ -98,7 +111,7 @@ export function registerDrive(server: McpServer, ctx: RegisterCtx): void {
   );
 
   // ── Gated (destructive) ───────────────────────────────
-  if (!ctx.allowWrites) return;
+  write = true;
 
   server.registerTool(
     "delete_file",
@@ -185,4 +198,6 @@ export function registerDrive(server: McpServer, ctx: RegisterCtx): void {
       return ok(`Moved "${name}" to ${newFolder}.`);
     },
   );
+
+  return tools;
 }
