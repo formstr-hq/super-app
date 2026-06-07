@@ -30,3 +30,8 @@ export const DEFAULT_BLOSSOM_SERVERS = [
   "https://nostr.download",
   "https://blossom.oxtr.dev",
 ];
+
+export interface BlossomServerInfo {
+  url: string;
+  source: "default" | "relay" | "custom";
+}

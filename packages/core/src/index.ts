@@ -54,11 +54,11 @@ export {
   unwrapEvent,
   encodeNKeys,
   decodeNKeys,
-  generateFileKey,
   aesGcmEncrypt,
   aesGcmDecrypt,
+  encryptFileWithKey,
+  decryptFileWithKey,
 } from "./crypto";
-export type { EncryptedPayload } from "./crypto";
 
 // Linking
 export {
