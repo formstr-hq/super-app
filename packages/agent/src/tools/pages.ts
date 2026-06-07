@@ -1,18 +1,31 @@
-import { pages } from "@formstr/app/services";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { ok } from "../result";
 import { requireConfirm } from "../safety";
+import { pages } from "../services";
 
-import type { RegisterCtx } from "./shared";
+import type { ToolEntry } from "./types";
 
 /** Fold a title into the Markdown body as an H1 (the doc has no plaintext title tag). */
 function withTitle(title: string | undefined, content: string): string {
   return title ? `# ${title}\n\n${content}` : content;
 }
 
-export function registerPages(server: McpServer, ctx: RegisterCtx): void {
+export const pagesTools: ToolEntry[] = buildPagesTools();
+
+function buildPagesTools(): ToolEntry[] {
+  const tools: ToolEntry[] = [];
+  let write = false;
+  const server = {
+    registerTool(
+      name: string,
+      config: Pick<ToolEntry, "description" | "inputSchema">,
+      handler: ToolEntry["handler"],
+    ) {
+      tools.push({ name, ...config, handler, ...(write ? { write: true } : {}) });
+    },
+  };
+
   // ── Read ──────────────────────────────────────────────
   server.registerTool(
     "list_pages",
@@ -149,7 +162,7 @@ export function registerPages(server: McpServer, ctx: RegisterCtx): void {
   );
 
   // ── Gated (destructive / outward) ─────────────────────
-  if (!ctx.allowWrites) return;
+  write = true;
 
   server.registerTool(
     "delete_page",
@@ -202,4 +215,6 @@ export function registerPages(server: McpServer, ctx: RegisterCtx): void {
       });
     },
   );
+
+  return tools;
 }

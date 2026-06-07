@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@formstr/app/services", () => ({
+vi.mock("../src/services", () => ({
   pages: {
     fetchMyPages: vi.fn(),
     savePage: vi.fn(),
@@ -13,17 +13,24 @@ vi.mock("@formstr/app/services", () => ({
   },
 }));
 
-import { pages } from "@formstr/app/services";
+import { pages } from "../src/services";
+import { pagesTools } from "../src/tools/pages";
+import type { ToolCtx } from "../src/tools/types";
 
-import { registerPages } from "../src/tools/pages";
+type FakeTools = Map<string, { handler: (a: any) => Promise<any> }>;
 
-function fakeServer() {
-  const tools = new Map<string, { handler: (a: any) => Promise<any> }>();
-  const server = {
-    registerTool: (name: string, _cfg: unknown, handler: (a: any) => Promise<any>) =>
-      tools.set(name, { handler }),
-  } as any;
-  return { server, tools };
+function fakeServer(): { server: { tools: FakeTools }; tools: FakeTools } {
+  const tools: FakeTools = new Map();
+  return { server: { tools }, tools };
+}
+
+// Replicates the stdio adapter's gating: skip `write` tools unless allowWrites,
+// and inject the ctx so the existing single-arg handler call sites still work.
+function registerPages(server: { tools: FakeTools }, ctx: ToolCtx) {
+  for (const t of pagesTools) {
+    if (t.write && !ctx.allowWrites) continue;
+    server.tools.set(t.name, { handler: (a: any) => t.handler(a, ctx) });
+  }
 }
 
 describe("pages tools", () => {
@@ -62,7 +69,7 @@ describe("pages tools", () => {
     registerPages(server, { allowWrites: false });
     const res = await tools.get("create_page")!.handler({ title: "Notes", content: "Hi" });
     expect(pages.savePage).toHaveBeenCalledWith({ content: "# Notes\n\nHi" });
-    expect(res.structuredContent.address).toBe("33457:pk:abc");
+    expect(res.data.address).toBe("33457:pk:abc");
   });
 
   it("get_page fetches by pubkey + docId (+ optional viewKey)", async () => {
@@ -81,7 +88,7 @@ describe("pages tools", () => {
     const { server, tools } = fakeServer();
     registerPages(server, { allowWrites: true });
     const blocked = await tools.get("delete_page")!.handler({ address: "33457:pk:abc" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(pages.deletePage).not.toHaveBeenCalled();
     await tools.get("delete_page")!.handler({ address: "33457:pk:abc", confirm: true });
     expect(pages.deletePage).toHaveBeenCalledWith("33457:pk:abc");
@@ -100,6 +107,6 @@ describe("pages tools", () => {
     expect(pages.sharePage).toHaveBeenCalledWith(
       expect.objectContaining({ address: "33457:pk:abc", content: "# T", canEdit: false }),
     );
-    expect(res.structuredContent.url).toContain("#nkeys1");
+    expect(res.data.url).toContain("#nkeys1");
   });
 });
