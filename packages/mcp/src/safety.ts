@@ -14,6 +14,9 @@ export const GATED_TOOLS = [
   "share_page",
   "delete_poll",
   "clear_my_vote",
+  "delete_file",
+  "rename_file",
+  "move_file",
 ] as const;
 
 export type GatedTool = (typeof GATED_TOOLS)[number];
