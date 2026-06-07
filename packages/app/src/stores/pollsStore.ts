@@ -16,9 +16,11 @@ interface PollsStore {
   fetchMyPolls(): Promise<void>;
   fetchRecentPolls(): Promise<void>;
   loadPoll(eventId: string): Promise<void>;
-  loadResults(pollId: string): Promise<void>;
+  loadResults(poll: Poll): Promise<void>;
   createPoll(draft: PollDraft): Promise<Poll>;
-  submitResponse(pollId: string, pollAuthor: string, selectedOptionIds: string[]): Promise<void>;
+  submitResponse(poll: Poll, selectedOptionIds: string[]): Promise<void>;
+  deletePoll(poll: Poll): Promise<void>;
+  clearMyVotes(poll: Poll): Promise<void>;
   clearCurrent(): void;
 }
 
@@ -71,9 +73,9 @@ export const usePollsStore = create<PollsStore>((set) => ({
     }
   },
 
-  async loadResults(pollId) {
+  async loadResults(poll) {
     try {
-      const results = await pollsService.fetchPollResults(pollId);
+      const results = await pollsService.fetchPollResults(poll);
       set({ currentResults: results });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to load results" });
@@ -91,12 +93,37 @@ export const usePollsStore = create<PollsStore>((set) => ({
     }
   },
 
-  async submitResponse(pollId, pollAuthor, selectedOptionIds) {
+  async submitResponse(poll, selectedOptionIds) {
     try {
-      await pollsService.submitPollResponse(pollId, pollAuthor, selectedOptionIds);
+      await pollsService.submitPollResponse(poll.id, poll.pubkey, selectedOptionIds, poll.relays);
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to submit response" });
       throw e;
+    }
+  },
+
+  async deletePoll(poll) {
+    try {
+      await pollsService.deletePoll(poll.id, poll.relays);
+      set((state) => ({
+        myPolls: state.myPolls.filter((p) => p.id !== poll.id),
+        recentPolls: state.recentPolls.filter((p) => p.id !== poll.id),
+        currentPoll: state.currentPoll?.id === poll.id ? null : state.currentPoll,
+        currentResults: state.currentPoll?.id === poll.id ? null : state.currentResults,
+      }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to delete poll" });
+      throw e;
+    }
+  },
+
+  async clearMyVotes(poll) {
+    try {
+      await pollsService.clearMyVotes(poll.id, poll.relays);
+      const results = await pollsService.fetchPollResults(poll);
+      set({ currentResults: results });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to clear votes" });
     }
   },
 

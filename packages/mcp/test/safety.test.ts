@@ -7,6 +7,9 @@ describe("safety", () => {
     expect(GATED_TOOLS).toContain("delete_form");
     expect(GATED_TOOLS).toContain("submit_form_response");
     expect(GATED_TOOLS).toContain("rsvp_event");
+    expect(GATED_TOOLS).toContain("delete_file");
+    expect(GATED_TOOLS).toContain("rename_file");
+    expect(GATED_TOOLS).toContain("move_file");
     expect(GATED_TOOLS).not.toContain("create_form");
   });
 
