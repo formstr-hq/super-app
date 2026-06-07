@@ -89,7 +89,10 @@ export function markdownToHtml(md: string): string {
     if (/^\s*[-*]\s+\[[ xX]\]\s+/.test(line)) {
       const buf: string[] = [];
       while (i < lines.length && /^\s*[-*]\s+\[[ xX]\]\s+/.test(lines[i])) {
-        const m = /^\s*[-*]\s+\[([ xX])\]\s+(.+)$/.exec(lines[i]);
+        // `(.*)` (not `(.+)`) so an empty item ("- [ ] ") still matches and advances `i`;
+        // a `(.+)` here would fail to match, `break` without advancing, and the outer
+        // loop would re-enter this branch forever (infinite loop / frozen UI).
+        const m = /^\s*[-*]\s+\[([ xX])\]\s+(.*)$/.exec(lines[i]);
         if (!m) break;
         const checked = m[1].toLowerCase() === "x";
         buf.push(
@@ -109,7 +112,8 @@ export function markdownToHtml(md: string): string {
         /^\s*[-*]\s+/.test(lines[i]) &&
         !/^\s*[-*]\s+\[[ xX]\]\s+/.test(lines[i])
       ) {
-        const m = /^\s*[-*]\s+(.+)$/.exec(lines[i]);
+        // `(.*)` so an empty bullet ("- ") matches and advances `i` (see task-list note).
+        const m = /^\s*[-*]\s+(.*)$/.exec(lines[i]);
         if (!m) break;
         buf.push(`<li><p>${renderInline(m[1])}</p></li>`);
         i++;
@@ -122,7 +126,8 @@ export function markdownToHtml(md: string): string {
     if (/^\s*\d+\.\s+/.test(line)) {
       const buf: string[] = [];
       while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-        const m = /^\s*\d+\.\s+(.+)$/.exec(lines[i]);
+        // `(.*)` so an empty item ("1. ") matches and advances `i` (see task-list note).
+        const m = /^\s*\d+\.\s+(.*)$/.exec(lines[i]);
         if (!m) break;
         buf.push(`<li><p>${renderInline(m[1])}</p></li>`);
         i++;
