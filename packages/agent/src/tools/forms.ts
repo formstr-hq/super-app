@@ -1,13 +1,13 @@
-import { forms, FORM_KINDS, type FormField } from "@formstr/app/services";
 import { createRef, parseRef } from "@formstr/core";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { nip19 } from "nostr-tools";
 import { z } from "zod";
 
 import { ok, fail, table } from "../result";
 import { requireConfirm } from "../safety";
+import { forms, FORM_KINDS, type FormField } from "../services";
 
-import { aiFieldsToFormFields, normalizePubkeyList, type RegisterCtx } from "./shared";
+import { aiFieldsToFormFields, normalizePubkeyList } from "./shared";
+import type { ToolEntry } from "./types";
 
 const optionShape = z.union([
   z.string(),
@@ -65,11 +65,27 @@ function renderField(f: FormField): string {
   return `- [${f.type}] ${f.label}${req}${opts}`;
 }
 
-export function registerForms(server: McpServer, ctx: RegisterCtx): void {
-  server.registerTool(
-    "list_forms",
-    { description: "List the forms in the user's forms index, with metadata.", inputSchema: {} },
-    async () => {
+/** Parse a form reference: naddr1…, `pubkey:formId`, or `kind:pubkey:formId`. */
+function parseFormRef(ref: string): { pubkey: string; formId: string } | null {
+  const trimmed = ref.trim();
+  if (trimmed.startsWith("naddr1")) {
+    const parsed = parseRef(trimmed);
+    if (!parsed || parsed.module !== "forms") return null;
+    const { pubkey, identifier } = parsed.params;
+    return pubkey && identifier ? { pubkey, formId: identifier } : null;
+  }
+  const parts = trimmed.split(":");
+  if (parts.length === 2) return { pubkey: parts[0], formId: parts[1] };
+  if (parts.length === 3) return { pubkey: parts[1], formId: parts[2] };
+  return null;
+}
+
+export const formsTools: ToolEntry[] = [
+  {
+    name: "list_forms",
+    description: "List the forms in the user's forms index, with metadata.",
+    inputSchema: {},
+    handler: async () => {
       const list = await forms.fetchMyForms();
       const rows = list.map((f) => ({
         id: f.id,
@@ -93,15 +109,12 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
         })),
       });
     },
-  );
-
-  server.registerTool(
-    "get_form",
-    {
-      description: "Fetch a single form's definition. Provide viewKey for encrypted forms.",
-      inputSchema: { pubkey: z.string(), formId: z.string(), viewKey: z.string().optional() },
-    },
-    async ({ pubkey, formId, viewKey }) => {
+  },
+  {
+    name: "get_form",
+    description: "Fetch a single form's definition. Provide viewKey for encrypted forms.",
+    inputSchema: { pubkey: z.string(), formId: z.string(), viewKey: z.string().optional() },
+    handler: async ({ pubkey, formId, viewKey }) => {
       const form = await forms.fetchForm(pubkey, formId, viewKey);
       if (!form) return fail("Form not found on the configured relays.", "NOT_FOUND");
 
@@ -118,15 +131,12 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
       }
       return ok(lines.join("\n"), { form });
     },
-  );
-
-  server.registerTool(
-    "fetch_form_responses",
-    {
-      description: "Get all responses/submissions for a specific form.",
-      inputSchema: { formAuthorPubkey: z.string(), formId: z.string() },
-    },
-    async ({ formAuthorPubkey, formId }) => {
+  },
+  {
+    name: "fetch_form_responses",
+    description: "Get all responses/submissions for a specific form.",
+    inputSchema: { formAuthorPubkey: z.string(), formId: z.string() },
+    handler: async ({ formAuthorPubkey, formId }) => {
       // Decrypt with the form's signing key only if it's in the user's own forms list.
       const mine = await forms.fetchMyForms();
       const signingKey = mine.find(
@@ -159,30 +169,27 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
         })),
       });
     },
-  );
-
-  server.registerTool(
-    "create_form",
-    {
-      description:
-        "Create a new form/survey with fields. Supports all field types (text, choice, grid, " +
-        "file, signature, section), validation, images and a thank-you message. Returns formId, " +
-        "pubkey, and the naddr coordinate.",
-      inputSchema: {
-        name: z.string(),
-        description: z.string().optional(),
-        fields: z.array(fieldShape),
-        publicForm: z.boolean().optional(),
-        encrypted: z.boolean().optional(),
-        titleImageUrl: z.string().optional(),
-        coverImageUrl: z.string().optional(),
-        thankYouText: z.string().optional(),
-        allowedResponders: z.array(z.string()).optional(),
-        collaborators: z.array(z.string()).optional(),
-        notifyNpubs: z.array(z.string()).optional(),
-      },
+  },
+  {
+    name: "create_form",
+    description:
+      "Create a new form/survey with fields. Supports all field types (text, choice, grid, " +
+      "file, signature, section), validation, images and a thank-you message. Returns formId, " +
+      "pubkey, and the naddr coordinate.",
+    inputSchema: {
+      name: z.string(),
+      description: z.string().optional(),
+      fields: z.array(fieldShape),
+      publicForm: z.boolean().optional(),
+      encrypted: z.boolean().optional(),
+      titleImageUrl: z.string().optional(),
+      coverImageUrl: z.string().optional(),
+      thankYouText: z.string().optional(),
+      allowedResponders: z.array(z.string()).optional(),
+      collaborators: z.array(z.string()).optional(),
+      notifyNpubs: z.array(z.string()).optional(),
     },
-    async (args) => {
+    handler: async (args) => {
       const fields = aiFieldsToFormFields(args.fields);
       const encrypt = args.encrypted ?? false;
       const allowedResponders = normalizePubkeyList(args.allowedResponders);
@@ -218,16 +225,13 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
         { formId: result.formId, pubkey: result.pubkey, naddr },
       );
     },
-  );
-
-  server.registerTool(
-    "import_form_from_naddr",
-    {
-      description:
-        "Import a form by reference (naddr1…, pubkey:formId, or kind:pubkey:formId) into your forms list.",
-      inputSchema: { ref: z.string() },
-    },
-    async ({ ref }) => {
+  },
+  {
+    name: "import_form_from_naddr",
+    description:
+      "Import a form by reference (naddr1…, pubkey:formId, or kind:pubkey:formId) into your forms list.",
+    inputSchema: { ref: z.string() },
+    handler: async ({ ref }) => {
       const parsed = parseFormRef(ref);
       if (!parsed) return fail("Expected an naddr or pubkey:formId reference.", "BAD_INPUT");
       const summary = await forms.fetchFormSummaryFromRef(parsed.pubkey, parsed.formId);
@@ -239,27 +243,21 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
         pubkey: summary.pubkey,
       });
     },
-  );
-
-  // Read tools and constructive creates (above) are always available; only
-  // destructive/outward actions below are gated behind --allow-writes.
-  if (!ctx.allowWrites) return;
-
-  server.registerTool(
-    "update_form",
-    {
-      description:
-        "Update a form's name, fields, or description (republishes it). Requires confirm:true.",
-      inputSchema: {
-        formId: z.string(),
-        formPubkey: z.string(),
-        name: z.string().optional(),
-        description: z.string().optional(),
-        fields: z.array(fieldShape).optional(),
-        confirm: z.boolean().optional(),
-      },
+  },
+  {
+    name: "update_form",
+    description:
+      "Update a form's name, fields, or description (republishes it). Requires confirm:true.",
+    inputSchema: {
+      formId: z.string(),
+      formPubkey: z.string(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      fields: z.array(fieldShape).optional(),
+      confirm: z.boolean().optional(),
     },
-    async ({ formId, formPubkey, name, description, fields, confirm }) => {
+    write: true,
+    handler: async ({ formId, formPubkey, name, description, fields, confirm }) => {
       const blocked = requireConfirm("update_form", { confirm }, `republishes form ${formId}`);
       if (blocked) return blocked;
       await forms.updateForm({
@@ -271,22 +269,20 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
       });
       return ok(`Updated form ${formId}.`, { formId, naddr: formNaddr(formPubkey, formId) });
     },
-  );
-
-  server.registerTool(
-    "share_form",
-    {
-      description:
-        "Share an encrypted form's view key with collaborators via NIP-59 gift-wrap so they can " +
-        "decrypt it. Requires confirm:true.",
-      inputSchema: {
-        formId: z.string(),
-        formPubkey: z.string(),
-        recipients: z.array(z.string()),
-        confirm: z.boolean().optional(),
-      },
+  },
+  {
+    name: "share_form",
+    description:
+      "Share an encrypted form's view key with collaborators via NIP-59 gift-wrap so they can " +
+      "decrypt it. Requires confirm:true.",
+    inputSchema: {
+      formId: z.string(),
+      formPubkey: z.string(),
+      recipients: z.array(z.string()),
+      confirm: z.boolean().optional(),
     },
-    async ({ formId, formPubkey, recipients, confirm }) => {
+    write: true,
+    handler: async ({ formId, formPubkey, recipients, confirm }) => {
       const recipientHex = normalizePubkeyList(recipients);
       if (recipientHex.length === 0) return fail("No valid recipients provided.", "BAD_INPUT");
       const blocked = requireConfirm(
@@ -302,41 +298,37 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
         failed: result.failed,
       });
     },
-  );
-
-  server.registerTool(
-    "delete_form",
-    {
-      description: "Delete a form (publishes a NIP-09 deletion). Requires confirm:true.",
-      inputSchema: { formId: z.string(), formPubkey: z.string(), confirm: z.boolean().optional() },
-    },
-    async ({ formId, formPubkey, confirm }) => {
+  },
+  {
+    name: "delete_form",
+    description: "Delete a form (publishes a NIP-09 deletion). Requires confirm:true.",
+    inputSchema: { formId: z.string(), formPubkey: z.string(), confirm: z.boolean().optional() },
+    write: true,
+    handler: async ({ formId, formPubkey, confirm }) => {
       const blocked = requireConfirm("delete_form", { confirm }, `deletes form ${formId}`);
       if (blocked) return blocked;
       await forms.deleteForm(formId, formPubkey);
       return ok(`Deleted form ${formId}.`);
     },
-  );
-
-  server.registerTool(
-    "submit_form_response",
-    {
-      description: "Submit a response to a form on your identity. Requires confirm:true.",
-      inputSchema: {
-        formAuthorPubkey: z.string(),
-        formId: z.string(),
-        encrypt: z.boolean().optional(),
-        answers: z.array(
-          z.object({
-            fieldId: z.string(),
-            answer: z.string(),
-            metadata: z.string().optional(),
-          }),
-        ),
-        confirm: z.boolean().optional(),
-      },
+  },
+  {
+    name: "submit_form_response",
+    description: "Submit a response to a form on your identity. Requires confirm:true.",
+    inputSchema: {
+      formAuthorPubkey: z.string(),
+      formId: z.string(),
+      encrypt: z.boolean().optional(),
+      answers: z.array(
+        z.object({
+          fieldId: z.string(),
+          answer: z.string(),
+          metadata: z.string().optional(),
+        }),
+      ),
+      confirm: z.boolean().optional(),
     },
-    async ({ formAuthorPubkey, formId, encrypt, answers, confirm }) => {
+    write: true,
+    handler: async ({ formAuthorPubkey, formId, encrypt, answers, confirm }) => {
       const blocked = requireConfirm(
         "submit_form_response",
         { confirm },
@@ -346,25 +338,14 @@ export function registerForms(server: McpServer, ctx: RegisterCtx): void {
       await forms.submitResponse(
         formAuthorPubkey,
         formId,
-        answers.map((a) => ({ fieldId: a.fieldId, answer: a.answer, metadata: a.metadata })),
+        answers.map((a: { fieldId: string; answer: string; metadata?: string }) => ({
+          fieldId: a.fieldId,
+          answer: a.answer,
+          metadata: a.metadata,
+        })),
         Boolean(encrypt),
       );
       return ok(`Submitted ${answers.length} answer(s) to form ${formId}.`);
     },
-  );
-}
-
-/** Parse a form reference: naddr1…, `pubkey:formId`, or `kind:pubkey:formId`. */
-function parseFormRef(ref: string): { pubkey: string; formId: string } | null {
-  const trimmed = ref.trim();
-  if (trimmed.startsWith("naddr1")) {
-    const parsed = parseRef(trimmed);
-    if (!parsed || parsed.module !== "forms") return null;
-    const { pubkey, identifier } = parsed.params;
-    return pubkey && identifier ? { pubkey, formId: identifier } : null;
-  }
-  const parts = trimmed.split(":");
-  if (parts.length === 2) return { pubkey: parts[0], formId: parts[1] };
-  if (parts.length === 3) return { pubkey: parts[1], formId: parts[2] };
-  return null;
-}
+  },
+];
