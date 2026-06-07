@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@formstr/app/services", () => ({
+vi.mock("../src/services", () => ({
   calendar: {
     fetchCalendarEventsSync: vi.fn(),
     fetchCalendarEventByCoordinate: vi.fn(),
@@ -28,17 +28,24 @@ vi.mock("@formstr/app/services", () => ({
   },
 }));
 
-import { calendar, calendarBooking, calendarRsvp } from "@formstr/app/services";
+import { calendar, calendarBooking, calendarRsvp } from "../src/services";
+import { calendarTools } from "../src/tools/calendar";
+import type { ToolCtx } from "../src/tools/types";
 
-import { registerCalendar } from "../src/tools/calendar";
+type FakeTools = Map<string, { handler: (a: any) => Promise<any> }>;
 
-function fakeServer() {
-  const tools = new Map<string, { handler: (a: any) => Promise<any> }>();
-  const server = {
-    registerTool: (name: string, _cfg: unknown, handler: (a: any) => Promise<any>) =>
-      tools.set(name, { handler }),
-  } as any;
-  return { server, tools };
+function fakeServer(): { server: { tools: FakeTools }; tools: FakeTools } {
+  const tools: FakeTools = new Map();
+  return { server: { tools }, tools };
+}
+
+// Replicates the stdio adapter's gating: skip `write` tools unless allowWrites,
+// and inject the ctx so the existing single-arg handler call sites still work.
+function registerCalendar(server: { tools: FakeTools }, ctx: ToolCtx) {
+  for (const t of calendarTools) {
+    if (t.write && !ctx.allowWrites) continue;
+    server.tools.set(t.name, { handler: (a: any) => t.handler(a, ctx) });
+  }
 }
 
 describe("calendar tools", () => {
@@ -64,14 +71,14 @@ describe("calendar tools", () => {
     const blocked = await tools
       .get("rsvp_event")!
       .handler({ eventCoordinate: "31923:pk:d", status: "accepted" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(calendarRsvp.rsvpToEvent).not.toHaveBeenCalled();
 
     const okRes = await tools
       .get("rsvp_event")!
       .handler({ eventCoordinate: "31923:pk:d", status: "accepted", confirm: true });
     expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith("31923:pk:d", "accepted", false);
-    expect(okRes.isError).toBeFalsy();
+    expect(okRes.ok).toBeTruthy();
   });
 
   it("create_calendar_event publishes a public event with a coordinate", async () => {
@@ -87,7 +94,7 @@ describe("calendar tools", () => {
       .get("create_calendar_event")!
       .handler({ title: "Standup", start: "2026-06-10T10:00:00Z" });
     expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledOnce();
-    expect(res.structuredContent.coordinate).toBe("31923:pk:d1");
+    expect(res.data.coordinate).toBe("31923:pk:d1");
   });
 
   it("create_calendar_event routes to private publish when isPrivate", async () => {
@@ -113,7 +120,7 @@ describe("calendar tools", () => {
     registerCalendar(server, { allowWrites: false });
     (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValueOnce(null);
     const miss = await tools.get("get_calendar_event")!.handler({ coordinate: "31923:p:d" });
-    expect(miss.isError).toBe(true);
+    expect(miss.ok).toBe(false);
     (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValueOnce({
       id: "d",
       title: "Found",
@@ -121,7 +128,7 @@ describe("calendar tools", () => {
       user: "p",
     });
     const hit = await tools.get("get_calendar_event")!.handler({ coordinate: "31923:p:d" });
-    expect(hit.isError).toBeFalsy();
+    expect(hit.ok).toBeTruthy();
   });
 
   it("list_calendars and create_calendar are available without writes", async () => {
@@ -131,12 +138,12 @@ describe("calendar tools", () => {
       { id: "c1", title: "Work", color: "#fff" },
     ]);
     const list = await tools.get("list_calendars")!.handler({});
-    expect(list.structuredContent.calendars).toHaveLength(1);
+    expect(list.data.calendars).toHaveLength(1);
 
     (calendar.createCalendarList as any).mockResolvedValue({ id: "c2" });
     const created = await tools.get("create_calendar")!.handler({ title: "Personal" });
     expect(calendar.createCalendarList).toHaveBeenCalledWith("Personal", "#334155", "");
-    expect(created.isError).toBeFalsy();
+    expect(created.ok).toBeTruthy();
   });
 
   it("fetch_event_rsvps returns public RSVPs", async () => {
@@ -146,7 +153,7 @@ describe("calendar tools", () => {
       { pubkey: "p1", status: "accepted" },
     ]);
     const res = await tools.get("fetch_event_rsvps")!.handler({ coordinate: "31923:p:d" });
-    expect(res.structuredContent.rsvps).toEqual([{ pubkey: "p1", status: "accepted" }]);
+    expect(res.data.rsvps).toEqual([{ pubkey: "p1", status: "accepted" }]);
   });
 
   it("list_invitations summarizes received invitations", async () => {
@@ -163,7 +170,7 @@ describe("calendar tools", () => {
       },
     ]);
     const res = await tools.get("list_invitations")!.handler({});
-    expect(res.structuredContent.invitations[0]).toMatchObject({
+    expect(res.data.invitations[0]).toMatchObject({
       coordinate: "32678:a:d",
       title: "P",
     });
@@ -201,14 +208,14 @@ describe("calendar tools", () => {
     const blocked = await tools
       .get("update_calendar_event")!
       .handler({ coordinate: "31923:pk:d", title: "New" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     const okRes = await tools
       .get("update_calendar_event")!
       .handler({ coordinate: "31923:pk:d", title: "New", confirm: true });
     expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
       expect.objectContaining({ existingId: "d", title: "New" }),
     );
-    expect(okRes.isError).toBeFalsy();
+    expect(okRes.ok).toBeTruthy();
   });
 
   it("attach_form_to_event republishes with the form ref", async () => {
@@ -274,7 +281,7 @@ describe("calendar tools", () => {
     (calendar.updateCalendarList as any).mockResolvedValue({ id: "c1", title: "New" });
 
     const blocked = await tools.get("update_calendar")!.handler({ id: "c1", title: "New" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(calendar.updateCalendarList).not.toHaveBeenCalled();
 
     const okRes = await tools
@@ -289,7 +296,7 @@ describe("calendar tools", () => {
         eventRefs: [["31923:pk:x", "", ""]],
       }),
     );
-    expect(okRes.isError).toBeFalsy();
+    expect(okRes.ok).toBeTruthy();
   });
 
   it("update_calendar returns NOT_FOUND when the list is missing", async () => {
@@ -299,7 +306,7 @@ describe("calendar tools", () => {
     const res = await tools
       .get("update_calendar")!
       .handler({ id: "zzz", title: "x", confirm: true });
-    expect(res.isError).toBe(true);
+    expect(res.ok).toBe(false);
     expect(calendar.updateCalendarList).not.toHaveBeenCalled();
   });
 
@@ -308,14 +315,14 @@ describe("calendar tools", () => {
     registerCalendar(server, { allowWrites: true });
 
     const blocked = await tools.get("delete_calendar")!.handler({ coordinate: "32123:pk:c1" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(calendar.deleteCalendarList).not.toHaveBeenCalled();
 
     const okRes = await tools
       .get("delete_calendar")!
       .handler({ coordinate: "32123:pk:c1", confirm: true });
     expect(calendar.deleteCalendarList).toHaveBeenCalledWith("32123:pk:c1");
-    expect(okRes.isError).toBeFalsy();
+    expect(okRes.ok).toBeTruthy();
   });
 
   // ── Task 19: add/remove event ↔ calendar membership ────────
@@ -344,7 +351,7 @@ describe("calendar tools", () => {
     const blocked = await tools
       .get("add_event_to_calendar")!
       .handler({ calendarId: "c1", coordinate: "31923:pk:d" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(calendar.addEventToCalendarList).not.toHaveBeenCalled();
 
     const okRes = await tools.get("add_event_to_calendar")!.handler({
@@ -358,7 +365,7 @@ describe("calendar tools", () => {
       expect.objectContaining({ id: "c1" }),
       ["31923:pk:d", "wss://r", "nsec1view"],
     );
-    expect(okRes.isError).toBeFalsy();
+    expect(okRes.ok).toBeTruthy();
   });
 
   it("add_event_to_calendar returns NOT_FOUND when the calendar is missing", async () => {
@@ -368,7 +375,7 @@ describe("calendar tools", () => {
     const res = await tools
       .get("add_event_to_calendar")!
       .handler({ calendarId: "nope", coordinate: "31923:pk:d", confirm: true });
-    expect(res.isError).toBe(true);
+    expect(res.ok).toBe(false);
     expect(calendar.addEventToCalendarList).not.toHaveBeenCalled();
   });
 
@@ -387,7 +394,7 @@ describe("calendar tools", () => {
       expect.objectContaining({ id: "c1" }),
       "31923:pk:d",
     );
-    expect(okRes.isError).toBeFalsy();
+    expect(okRes.ok).toBeTruthy();
   });
 
   // ── Task 20: RSVP suggested-time + note ────────────────────
@@ -423,7 +430,7 @@ describe("calendar tools", () => {
       },
     ]);
     const res = await tools.get("fetch_event_rsvps")!.handler({ coordinate: "31923:p:d" });
-    expect(res.structuredContent.rsvps[0]).toMatchObject({
+    expect(res.data.rsvps[0]).toMatchObject({
       pubkey: "p1",
       status: "tentative",
       suggestedStart: 1000,
@@ -462,7 +469,7 @@ describe("calendar tools", () => {
       },
     ]);
     const res = await tools.get("list_scheduling_pages")!.handler({});
-    expect(res.structuredContent.bookingLinks[0]).toMatchObject({
+    expect(res.data.bookingLinks[0]).toMatchObject({
       id: "p1",
       title: "Intro call",
       url: "https://calendar.formstr.app/schedule/naddr1xxx",
@@ -484,7 +491,7 @@ describe("calendar tools", () => {
       },
     ]);
     const res = await tools.get("list_booking_requests")!.handler({});
-    expect(res.structuredContent.requests[0]).toMatchObject({
+    expect(res.data.requests[0]).toMatchObject({
       id: "r1",
       title: "Coffee",
       booker: "booker",
@@ -515,7 +522,7 @@ describe("calendar tools", () => {
     const blocked = await tools
       .get("approve_booking")!
       .handler({ requestId: "r1", calendarId: "c1" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(calendarBooking.approveBookingRequest).not.toHaveBeenCalled();
 
     const okRes = await tools
@@ -525,7 +532,7 @@ describe("calendar tools", () => {
       expect.objectContaining({ id: "r1" }),
       expect.objectContaining({ id: "c1" }),
     );
-    expect(okRes.structuredContent.coordinate).toBe("32678:pk:d1");
+    expect(okRes.data.coordinate).toBe("32678:pk:d1");
   });
 
   it("approve_booking returns NOT_FOUND for an unknown request", async () => {
@@ -535,7 +542,7 @@ describe("calendar tools", () => {
     const res = await tools
       .get("approve_booking")!
       .handler({ requestId: "zzz", calendarId: "c1", confirm: true });
-    expect(res.isError).toBe(true);
+    expect(res.ok).toBe(false);
     expect(calendarBooking.approveBookingRequest).not.toHaveBeenCalled();
   });
 
@@ -554,7 +561,7 @@ describe("calendar tools", () => {
     ]);
 
     const blocked = await tools.get("decline_booking")!.handler({ requestId: "r1" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(calendarBooking.declineBookingRequest).not.toHaveBeenCalled();
 
     const okRes = await tools
@@ -564,6 +571,6 @@ describe("calendar tools", () => {
       expect.objectContaining({ id: "r1" }),
       "unavailable",
     );
-    expect(okRes.isError).toBeFalsy();
+    expect(okRes.ok).toBeTruthy();
   });
 });

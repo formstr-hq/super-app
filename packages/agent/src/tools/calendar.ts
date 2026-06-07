@@ -1,14 +1,27 @@
-import { calendar, calendarBooking, calendarRsvp } from "@formstr/app/services";
 import { signerManager } from "@formstr/core";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { ok, fail } from "../result";
 import { requireConfirm } from "../safety";
+import { calendar, calendarBooking, calendarRsvp } from "../services";
 
-import type { RegisterCtx } from "./shared";
+import type { ToolEntry } from "./types";
 
-export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
+export const calendarTools: ToolEntry[] = buildCalendarTools();
+
+function buildCalendarTools(): ToolEntry[] {
+  const tools: ToolEntry[] = [];
+  let write = false;
+  const server = {
+    registerTool(
+      name: string,
+      config: Pick<ToolEntry, "description" | "inputSchema">,
+      handler: ToolEntry["handler"],
+    ) {
+      tools.push({ name, ...config, handler, ...(write ? { write: true } : {}) });
+    },
+  };
+
   server.registerTool(
     "list_calendar_events",
     {
@@ -215,7 +228,7 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
 
   // Read tools and constructive creates (above) are always available; only
   // destructive/outward actions below are gated behind --allow-writes.
-  if (!ctx.allowWrites) return;
+  write = true;
 
   server.registerTool(
     "approve_booking",
@@ -537,4 +550,6 @@ export function registerCalendar(server: McpServer, ctx: RegisterCtx): void {
       return ok(`Removed ${coordinate} from "${saved.title}".`, { id: saved.id });
     },
   );
+
+  return tools;
 }
