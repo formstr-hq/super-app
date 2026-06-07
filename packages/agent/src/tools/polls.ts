@@ -1,13 +1,26 @@
-import { polls } from "@formstr/app/services";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { ok, fail } from "../result";
 import { requireConfirm } from "../safety";
+import { polls } from "../services";
 
-import type { RegisterCtx } from "./shared";
+import type { ToolEntry } from "./types";
 
-export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
+export const pollsTools: ToolEntry[] = buildPollsTools();
+
+function buildPollsTools(): ToolEntry[] {
+  const tools: ToolEntry[] = [];
+  let write = false;
+  const server = {
+    registerTool(
+      name: string,
+      config: Pick<ToolEntry, "description" | "inputSchema">,
+      handler: ToolEntry["handler"],
+    ) {
+      tools.push({ name, ...config, handler, ...(write ? { write: true } : {}) });
+    },
+  };
+
   // ── Read ──────────────────────────────────────────────
   server.registerTool(
     "list_polls",
@@ -109,7 +122,7 @@ export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
     async (args) => {
       const poll = await polls.createPoll({
         question: args.question,
-        options: args.options.map((label) => ({ label })),
+        options: args.options.map((label: string) => ({ label })),
         pollType: args.pollType ?? "singlechoice",
         endsAt: args.endsAt ? new Date(args.endsAt) : undefined,
         hashtags: args.hashtags,
@@ -119,7 +132,7 @@ export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
   );
 
   // ── Gated (destructive / outward) ─────────────────────
-  if (!ctx.allowWrites) return;
+  write = true;
 
   server.registerTool(
     "submit_poll_response",
@@ -178,4 +191,6 @@ export function registerPolls(server: McpServer, ctx: RegisterCtx): void {
       return ok(`Cleared your votes on ${pollEventId}.`);
     },
   );
+
+  return tools;
 }

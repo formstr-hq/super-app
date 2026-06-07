@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@formstr/app/services", () => ({
+vi.mock("../src/services", () => ({
   polls: {
     fetchMyPolls: vi.fn(),
     fetchRecentPolls: vi.fn(),
@@ -13,17 +13,24 @@ vi.mock("@formstr/app/services", () => ({
   },
 }));
 
-import { polls } from "@formstr/app/services";
+import { polls } from "../src/services";
+import { pollsTools } from "../src/tools/polls";
+import type { ToolCtx } from "../src/tools/types";
 
-import { registerPolls } from "../src/tools/polls";
+type FakeTools = Map<string, { handler: (a: any) => Promise<any> }>;
 
-function fakeServer() {
-  const tools = new Map<string, { handler: (a: any) => Promise<any> }>();
-  const server = {
-    registerTool: (name: string, _cfg: unknown, handler: (a: any) => Promise<any>) =>
-      tools.set(name, { handler }),
-  } as any;
-  return { server, tools };
+function fakeServer(): { server: { tools: FakeTools }; tools: FakeTools } {
+  const tools: FakeTools = new Map();
+  return { server: { tools }, tools };
+}
+
+// Replicates the stdio adapter's gating: skip `write` tools unless allowWrites,
+// and inject the ctx so the existing single-arg handler call sites still work.
+function registerPolls(server: { tools: FakeTools }, ctx: ToolCtx) {
+  for (const t of pollsTools) {
+    if (t.write && !ctx.allowWrites) continue;
+    server.tools.set(t.name, { handler: (a: any) => t.handler(a, ctx) });
+  }
 }
 
 const POLL = {
@@ -73,7 +80,7 @@ describe("polls tools", () => {
     const blocked = await tools
       .get("submit_poll_response")!
       .handler({ pollEventId: "p1", optionIds: ["o1"] });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(polls.submitPollResponse).not.toHaveBeenCalled();
 
     const okRes = await tools
@@ -85,7 +92,7 @@ describe("polls tools", () => {
       ["o1"],
       ["wss://poll.relay"],
     );
-    expect(okRes.isError).toBeFalsy();
+    expect(okRes.ok).toBeTruthy();
   });
 
   it("fetch_poll_results fetches the poll then serializes the option map", async () => {
@@ -97,8 +104,8 @@ describe("polls tools", () => {
     registerPolls(server, { allowWrites: false });
     const res = await tools.get("fetch_poll_results")!.handler({ pollEventId: "p1" });
     expect(polls.fetchPollResults).toHaveBeenCalledWith(POLL);
-    expect(res.structuredContent.totalVotes).toBe(4);
-    expect(res.structuredContent.options).toEqual([{ optionId: "o1", count: 3, percentage: 75 }]);
+    expect(res.data.totalVotes).toBe(4);
+    expect(res.data.options).toEqual([{ optionId: "o1", count: 3, percentage: 75 }]);
   });
 
   it("list_recent_polls lists discoverable polls", async () => {
@@ -108,7 +115,7 @@ describe("polls tools", () => {
     const { server, tools } = fakeServer();
     registerPolls(server, { allowWrites: false });
     const res = await tools.get("list_recent_polls")!.handler({});
-    expect(res.structuredContent.polls[0]).toMatchObject({ id: "r1", question: "Q1" });
+    expect(res.data.polls[0]).toMatchObject({ id: "r1", question: "Q1" });
   });
 
   it("delete_poll requires confirm, then deletes via the poll's relays", async () => {
@@ -116,7 +123,7 @@ describe("polls tools", () => {
     registerPolls(server, { allowWrites: true });
 
     const blocked = await tools.get("delete_poll")!.handler({ pollEventId: "p1" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(polls.deletePoll).not.toHaveBeenCalled();
 
     await tools.get("delete_poll")!.handler({ pollEventId: "p1", confirm: true });
@@ -128,7 +135,7 @@ describe("polls tools", () => {
     registerPolls(server, { allowWrites: true });
 
     const blocked = await tools.get("clear_my_vote")!.handler({ pollEventId: "p1" });
-    expect(blocked.isError).toBe(true);
+    expect(blocked.ok).toBe(false);
     expect(polls.clearMyVotes).not.toHaveBeenCalled();
 
     await tools.get("clear_my_vote")!.handler({ pollEventId: "p1", confirm: true });
