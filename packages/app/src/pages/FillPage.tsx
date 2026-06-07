@@ -1,3 +1,6 @@
+import * as formsService from "@formstr/agent/services/forms/service";
+import type { FormTemplate, FormResponse } from "@formstr/agent/services/forms/types";
+import { AnswerType } from "@formstr/agent/services/forms/types";
 import { decodeNKeys } from "@formstr/core";
 import { Box, Button, CircularProgress, Container, Divider, Typography } from "@mui/material";
 import { generateSecretKey, getPublicKey, finalizeEvent, nip19, nip44 } from "nostr-tools";
@@ -7,9 +10,6 @@ import { useParams } from "react-router-dom";
 
 import { FormFieldsRenderer } from "../components/forms/FormFieldsRenderer";
 import { ResponderIdentityBar, type IdentityMode } from "../components/forms/ResponderIdentityBar";
-import * as formsService from "../services/forms/service";
-import type { FormTemplate, FormResponse } from "../services/forms/types";
-import { AnswerType } from "../services/forms/types";
 import { useAuthStore } from "../stores";
 
 export function FillPage() {

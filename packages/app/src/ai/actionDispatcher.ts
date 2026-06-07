@@ -17,10 +17,10 @@ export async function dispatchAction(_toolCall: ToolCall): Promise<ActionResult>
 import { createRef, parseRef } from "@formstr/core";
 import { nip19 } from "nostr-tools";
 
-import { rsvpToEvent } from "../services/calendar/rsvp";
-import * as formsService from "../services/forms/service";
-import type { AnswerType, FormField } from "../services/forms/types";
-import { FORM_KINDS } from "../services/forms/types";
+import { rsvpToEvent } from "@formstr/agent/services/calendar/rsvp";
+import * as formsService from "@formstr/agent/services/forms/service";
+import type { AnswerType, FormField } from "@formstr/agent/services/forms/types";
+import { FORM_KINDS } from "@formstr/agent/services/forms/types";
 import { useAIPendingStore, moduleForTool } from "../stores/aiPendingStore";
 import { useCalendarStore } from "../stores/calendarStore";
 import { useDriveStore } from "../stores/driveStore";

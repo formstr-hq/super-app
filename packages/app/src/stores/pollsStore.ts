@@ -1,7 +1,6 @@
+import type { Poll, PollDraft, PollResults } from "@formstr/agent/services/polls";
+import * as pollsService from "@formstr/agent/services/polls/service";
 import { create } from "zustand";
-
-import type { Poll, PollDraft, PollResults } from "../services/polls";
-import * as pollsService from "../services/polls/service";
 
 interface PollsStore {
   myPolls: Poll[];

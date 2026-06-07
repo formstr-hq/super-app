@@ -4,7 +4,7 @@ import {
   type FormOption,
   type FormResponseEvent,
   type FormTemplate,
-} from "../services/forms/types";
+} from "@formstr/agent/services/forms/types";
 
 // ── Summary stats ────────────────────────────────────────
 

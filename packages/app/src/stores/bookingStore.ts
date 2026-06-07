@@ -1,5 +1,3 @@
-import { create } from "zustand";
-
 import {
   approveBookingRequest,
   declineBookingRequest,
@@ -7,8 +5,9 @@ import {
   fetchSchedulingPages,
   type BookingRequest,
   type SchedulingPage,
-} from "../services/calendar/booking";
-import type { CalendarList } from "../services/calendar/types";
+} from "@formstr/agent/services/calendar/booking";
+import type { CalendarList } from "@formstr/agent/services/calendar/types";
+import { create } from "zustand";
 
 import { useCalendarStore } from "./calendarStore";
 

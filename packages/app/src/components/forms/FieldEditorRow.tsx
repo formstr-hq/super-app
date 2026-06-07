@@ -1,3 +1,4 @@
+import { AnswerType, type FormField } from "@formstr/agent/services/forms/types";
 import {
   Box,
   Button,
@@ -10,8 +11,6 @@ import {
   Typography,
 } from "@mui/material";
 import { GripVertical, PlusCircle, Trash2, X } from "lucide-react";
-
-import { AnswerType, type FormField } from "../../services/forms/types";
 
 const CHOICE_TYPES = new Set([AnswerType.radioButton, AnswerType.checkboxes, AnswerType.dropdown]);
 

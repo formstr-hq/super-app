@@ -1,3 +1,4 @@
+import type { Poll } from "@formstr/agent/services/polls";
 import { Alert, Box } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
@@ -5,7 +6,6 @@ import { AIPendingRow } from "../components/ai/AIPendingRow";
 import { CreatePollDialog } from "../components/polls/CreatePollDialog";
 import { PollDetail } from "../components/polls/PollDetail";
 import { PollsSidebar } from "../components/polls/PollsSidebar";
-import type { Poll } from "../services/polls";
 import { useAuthStore, usePollsStore } from "../stores";
 
 export function PollsPage() {

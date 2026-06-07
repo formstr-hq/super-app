@@ -1,3 +1,4 @@
+import type { FormSummary } from "@formstr/agent/services/forms/types";
 import { encodeNKeys } from "@formstr/core";
 import { Box, Snackbar, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -12,7 +13,6 @@ import { FormBuilderSurface } from "../components/forms/FormBuilderSurface";
 import { FormListView } from "../components/forms/FormListView";
 import { FormsSidebar, type FormsCategory } from "../components/forms/FormsSidebar";
 import { ResponsesDialog } from "../components/forms/ResponsesDialog";
-import type { FormSummary } from "../services/forms/types";
 import { useFormsStore, useSettingsStore } from "../stores";
 import type { FormsView } from "../stores/settingsStore";
 

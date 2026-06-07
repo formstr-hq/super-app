@@ -1,7 +1,7 @@
+import type { FormSummary } from "@formstr/agent/services/forms/types";
 import { Box, Button, Grid2 as MuiGrid, Paper, Skeleton, Tooltip, Typography } from "@mui/material";
 import { Lock, Plus } from "lucide-react";
 
-import type { FormSummary } from "../../services/forms/types";
 import type { FormsView } from "../../stores/settingsStore";
 
 import { FormActions } from "./FormActions";

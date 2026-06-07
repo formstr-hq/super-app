@@ -1,3 +1,5 @@
+import type { CalendarEvent, CalendarList, RSVPResponse } from "@formstr/agent/services/calendar";
+import { fetchRsvpsForEvent, rsvpToEvent } from "@formstr/agent/services/calendar/rsvp";
 import {
   Box,
   Button,
@@ -13,8 +15,6 @@ import { useEffect, useState } from "react";
 
 import { calendarForEvent } from "../../lib/calendarMembership";
 import { formatNpub } from "../../lib/npub";
-import type { CalendarEvent, CalendarList, RSVPResponse } from "../../services/calendar";
-import { fetchRsvpsForEvent, rsvpToEvent } from "../../services/calendar/rsvp";
 
 import { RSVPBar, type RSVPBarPayload, type RSVPBarStatus } from "./RSVPBar";
 

@@ -1,8 +1,7 @@
+import type { PageDocument } from "@formstr/agent/services/pages";
 import { Box, Button, Chip, TextField, Typography } from "@mui/material";
 import { Lock, Share2, Tag, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-import type { PageDocument } from "../../services/pages";
 
 import { RichEditor } from "./RichEditor";
 

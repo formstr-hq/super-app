@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../services/calendar/service", () => ({
+vi.mock("@formstr/agent/services/calendar/service", () => ({
   fetchCalendarEventsSync: vi.fn(),
   fetchCalendarLists: vi.fn(),
   publishPublicCalendarEvent: vi.fn(),
@@ -12,7 +12,7 @@ vi.mock("../services/calendar/service", () => ({
   deleteCalendarEvent: vi.fn(),
 }));
 
-import * as calendarService from "../services/calendar/service";
+import * as calendarService from "@formstr/agent/services/calendar/service";
 
 import { useCalendarStore } from "./calendarStore";
 

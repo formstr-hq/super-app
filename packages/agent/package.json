@@ -6,6 +6,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./services": "./src/services/index.ts",
+    "./services/forms": "./src/services/forms/index.ts",
+    "./services/calendar": "./src/services/calendar/index.ts",
+    "./services/pages": "./src/services/pages/index.ts",
+    "./services/drive": "./src/services/drive/index.ts",
+    "./services/polls": "./src/services/polls/index.ts",
     "./services/*": "./src/services/*.ts",
     "./tools": "./src/tools/index.ts"
   },

@@ -1,10 +1,10 @@
+import { rsvpToEvent } from "@formstr/agent/services/calendar/rsvp";
 import { Box, Button, Chip, CircularProgress, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { ArrowLeft, Check, CircleHelp, X } from "lucide-react";
 import { useSnackbar } from "notistack";
 import { useState } from "react";
 
-import { rsvpToEvent } from "../../services/calendar/rsvp";
 import { useInvitationsStore, type InvitationEntry } from "../../stores/invitationsStore";
 
 function formatDate(ms?: number) {

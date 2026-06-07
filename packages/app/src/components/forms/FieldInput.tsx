@@ -1,3 +1,5 @@
+import { DEFAULT_BLOSSOM_SERVERS } from "@formstr/agent/services/drive/types";
+import { AnswerType, type FormField } from "@formstr/agent/services/forms/types";
 import { signerManager, createBlossomAuthEvent, BlossomClient } from "@formstr/core";
 import {
   Box,
@@ -20,9 +22,6 @@ import {
 } from "@mui/material";
 import { Upload, X, Eraser, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
-
-import { DEFAULT_BLOSSOM_SERVERS } from "../../services/drive/types";
-import { AnswerType, type FormField } from "../../services/forms/types";
 
 // ── Validation ────────────────────────────────────────────
 

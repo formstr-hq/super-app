@@ -15,7 +15,7 @@ if (typeof globalThis.localStorage === "undefined") {
   } as Storage;
 }
 
-vi.mock("../services/pages/service", () => ({
+vi.mock("@formstr/agent/services/pages/service", () => ({
   fetchMyPages: vi.fn(),
   fetchSharedPages: vi.fn(),
   fetchPage: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock("../services/pages/service", () => ({
   setDocTags: vi.fn(),
 }));
 
-import * as pagesService from "../services/pages/service";
+import * as pagesService from "@formstr/agent/services/pages/service";
 
 import { usePagesStore } from "./pagesStore";
 

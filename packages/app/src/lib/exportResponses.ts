@@ -3,7 +3,7 @@ import {
   type FormField,
   type FormResponseEvent,
   type FormTemplate,
-} from "../services/forms/types";
+} from "@formstr/agent/services/forms/types";
 
 import { formatNpub } from "./npub";
 

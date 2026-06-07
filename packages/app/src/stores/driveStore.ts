@@ -1,8 +1,7 @@
+import type { BlossomServerInfo, FileMetadata } from "@formstr/agent/services/drive";
+import { DEFAULT_BLOSSOM_SERVERS } from "@formstr/agent/services/drive";
+import * as driveService from "@formstr/agent/services/drive/service";
 import { create } from "zustand";
-
-import type { BlossomServerInfo, FileMetadata } from "../services/drive";
-import { DEFAULT_BLOSSOM_SERVERS } from "../services/drive";
-import * as driveService from "../services/drive/service";
 
 const LS_SERVER = "formstr:drive-server";
 const LS_CUSTOM_SERVERS = "formstr:drive-custom-servers";

@@ -1,4 +1,4 @@
-import type { CalendarEvent, CalendarList } from "../services/calendar";
+import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
 
 /** Addressable coordinate of a calendar event: `kind:authorPubkey:dTag`. */
 export function eventCoordinate(event: CalendarEvent): string {

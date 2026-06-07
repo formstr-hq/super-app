@@ -1,8 +1,7 @@
+import type { PageDocument, PageSummary, ShareResult } from "@formstr/agent/services/pages";
+import * as pagesService from "@formstr/agent/services/pages/service";
+import type { SavePageParams } from "@formstr/agent/services/pages/service";
 import { create } from "zustand";
-
-import type { PageDocument, PageSummary, ShareResult } from "../services/pages";
-import * as pagesService from "../services/pages/service";
-import type { SavePageParams } from "../services/pages/service";
 
 const VIEW_KEY_PREFIX = "formstr:page-viewkey:";
 const EDIT_KEY_PREFIX = "formstr:page-editkey:";

@@ -1,8 +1,8 @@
+import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
 import { Box, Typography } from "@mui/material";
 
 import { calendarForEvent } from "../../lib/calendarMembership";
 import { expandEvents } from "../../lib/rrule";
-import type { CalendarEvent, CalendarList } from "../../services/calendar";
 
 import { EventCard } from "./EventCard";
 

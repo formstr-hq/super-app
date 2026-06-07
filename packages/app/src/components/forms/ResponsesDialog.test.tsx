@@ -13,7 +13,11 @@ afterAll(() => {
   vi.useRealTimers();
 });
 
-import { AnswerType, type FormTemplate, type FormResponseEvent } from "../../services/forms/types";
+import {
+  AnswerType,
+  type FormTemplate,
+  type FormResponseEvent,
+} from "@formstr/agent/services/forms/types";
 
 import { ResponsesDialog } from "./ResponsesDialog";
 

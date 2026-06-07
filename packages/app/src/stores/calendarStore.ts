@@ -1,7 +1,10 @@
+import type {
+  CalendarEvent,
+  CalendarList,
+  CalendarEventDraft,
+} from "@formstr/agent/services/calendar";
+import * as calendarService from "@formstr/agent/services/calendar/service";
 import { create } from "zustand";
-
-import type { CalendarEvent, CalendarList, CalendarEventDraft } from "../services/calendar";
-import * as calendarService from "../services/calendar/service";
 
 interface CalendarStore {
   events: CalendarEvent[];

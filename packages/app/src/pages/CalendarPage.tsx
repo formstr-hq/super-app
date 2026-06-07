@@ -1,3 +1,5 @@
+import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
+import { CALENDAR_KINDS } from "@formstr/agent/services/calendar";
 import { Box, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 
@@ -11,8 +13,6 @@ import { EventDetailsDialog } from "../components/calendar/EventDetailsDialog";
 import { EventDialog } from "../components/calendar/EventDialog";
 import { InvitationsView } from "../components/calendar/InvitationsView";
 import { filterEventsByCalendarVisibility } from "../lib/calendarMembership";
-import type { CalendarEvent, CalendarList } from "../services/calendar";
-import { CALENDAR_KINDS } from "../services/calendar";
 import { useAuthStore, useBookingStore, useCalendarStore } from "../stores";
 import { useInvitationsStore } from "../stores/invitationsStore";
 

@@ -1,3 +1,4 @@
+import type { ShareResult } from "@formstr/agent/services/pages";
 import {
   Box,
   Button,
@@ -15,8 +16,6 @@ import {
 } from "@mui/material";
 import { Check, Copy, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
-
-import type { ShareResult } from "../../services/pages";
 
 interface SharePageDialogProps {
   open: boolean;

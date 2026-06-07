@@ -1,12 +1,12 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../../services/calendar/rsvp", () => ({
+vi.mock("@formstr/agent/services/calendar/rsvp", () => ({
   fetchRsvpsForEvent: vi.fn().mockResolvedValue([]),
   rsvpToEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { fetchRsvpsForEvent, rsvpToEvent } from "../../services/calendar/rsvp";
+import { fetchRsvpsForEvent, rsvpToEvent } from "@formstr/agent/services/calendar/rsvp";
 
 import { EventDetailsDialog } from "./EventDetailsDialog";
 

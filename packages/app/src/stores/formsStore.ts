@@ -1,8 +1,7 @@
+import type { FormSummary, FormTemplate, FormResponseEvent } from "@formstr/agent/services/forms";
+import * as formsService from "@formstr/agent/services/forms/service";
 import type { SubscriptionHandle } from "@formstr/core";
 import { create } from "zustand";
-
-import type { FormSummary, FormTemplate, FormResponseEvent } from "../services/forms";
-import * as formsService from "../services/forms/service";
 
 let responsesSub: SubscriptionHandle | null = null;
 

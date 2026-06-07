@@ -1,9 +1,8 @@
+import type { FileMetadata } from "@formstr/agent/services/drive";
 import { Box, Button, IconButton, TextField, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { Check, FolderClosed, FolderOpen, HardDrive, Plus, X } from "lucide-react";
 import { useState } from "react";
-
-import type { FileMetadata } from "../../services/drive";
 
 interface DriveSidebarProps {
   folders: string[];

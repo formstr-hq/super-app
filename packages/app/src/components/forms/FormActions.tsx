@@ -1,7 +1,6 @@
+import type { FormSummary } from "@formstr/agent/services/forms/types";
 import { IconButton, Tooltip } from "@mui/material";
 import { BarChart3, Link, Pencil, Trash2 } from "lucide-react";
-
-import type { FormSummary } from "../../services/forms/types";
 
 interface Props {
   form: FormSummary;

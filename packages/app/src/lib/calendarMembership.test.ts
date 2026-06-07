@@ -1,6 +1,5 @@
+import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
 import { describe, it, expect } from "vitest";
-
-import type { CalendarEvent, CalendarList } from "../services/calendar";
 
 import { filterEventsByCalendarVisibility } from "./calendarMembership";
 

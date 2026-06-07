@@ -1,9 +1,8 @@
+import type { PageSummary } from "@formstr/agent/services/pages";
 import { Box, Button, Chip, Divider, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { FileText, Plus } from "lucide-react";
 import type { ReactNode } from "react";
-
-import type { PageSummary } from "../../services/pages";
 
 interface PagesSidebarProps {
   pages: PageSummary[];

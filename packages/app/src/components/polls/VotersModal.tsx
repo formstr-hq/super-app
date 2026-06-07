@@ -1,7 +1,6 @@
+import type { OptionResult, PollOption } from "@formstr/agent/services/polls";
 import { Box, Dialog, DialogContent, DialogTitle, Divider, Typography } from "@mui/material";
 import { nip19 } from "nostr-tools";
-
-import type { OptionResult, PollOption } from "../../services/polls";
 
 interface VotersModalProps {
   open: boolean;

@@ -1,12 +1,12 @@
+import { CALENDAR_KINDS } from "@formstr/agent/services/calendar/types";
+import { FORM_KINDS } from "@formstr/agent/services/forms/types";
+import { PAGES_KINDS } from "@formstr/agent/services/pages/types";
+import { POLLS_KINDS } from "@formstr/agent/services/polls/types";
 import { createRef as createNostrRef, type ModuleType } from "@formstr/core";
 import { Box, Typography, Paper } from "@mui/material";
 import { Calendar, ClipboardList, FileText, FolderOpen, Vote } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { CALENDAR_KINDS } from "../services/calendar/types";
-import { FORM_KINDS } from "../services/forms/types";
-import { PAGES_KINDS } from "../services/pages/types";
-import { POLLS_KINDS } from "../services/polls/types";
 import { useCalendarStore } from "../stores/calendarStore";
 import { useFormsStore } from "../stores/formsStore";
 import { usePagesStore } from "../stores/pagesStore";

@@ -1,3 +1,8 @@
+import type {
+  CalendarEvent,
+  CalendarEventDraft,
+  CalendarList,
+} from "@formstr/agent/services/calendar";
 import {
   Box,
   Button,
@@ -19,7 +24,6 @@ import { useEffect, useState } from "react";
 
 import { npubToHex } from "../../lib/npub";
 import { buildRRuleString, parseRRuleString, type RRuleParts } from "../../lib/rrule";
-import type { CalendarEvent, CalendarEventDraft, CalendarList } from "../../services/calendar";
 
 import { RecurrenceField } from "./RecurrenceField";
 

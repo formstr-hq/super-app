@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../services/polls/service", () => ({
+vi.mock("@formstr/agent/services/polls/service", () => ({
   fetchMyPolls: vi.fn(),
   fetchRecentPolls: vi.fn(),
   fetchPoll: vi.fn(),
@@ -11,8 +11,8 @@ vi.mock("../services/polls/service", () => ({
   clearMyVotes: vi.fn(),
 }));
 
-import type { Poll } from "../services/polls";
-import * as pollsService from "../services/polls/service";
+import type { Poll } from "@formstr/agent/services/polls";
+import * as pollsService from "@formstr/agent/services/polls/service";
 
 import { usePollsStore } from "./pollsStore";
 

@@ -1,3 +1,4 @@
+import type { FileMetadata } from "@formstr/agent/services/drive";
 import {
   Box,
   Chip,
@@ -23,8 +24,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
-
-import type { FileMetadata } from "../../services/drive";
 
 interface FileListProps {
   childFolders: string[];

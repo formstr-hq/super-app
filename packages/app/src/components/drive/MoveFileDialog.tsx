@@ -1,3 +1,4 @@
+import type { FileMetadata } from "@formstr/agent/services/drive";
 import {
   Button,
   Dialog,
@@ -9,8 +10,6 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-
-import type { FileMetadata } from "../../services/drive";
 
 interface MoveFileDialogProps {
   file: FileMetadata | null;
