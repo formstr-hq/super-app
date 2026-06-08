@@ -23,7 +23,8 @@
   "dependencies": {
     "@formstr/core": "workspace:*",
     "nostr-tools": "^2.23.3",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "zod-to-json-schema": "^3.24.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.4",

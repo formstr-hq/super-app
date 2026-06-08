@@ -23,6 +23,11 @@ export function isGated(tool: string): tool is GatedTool {
   return (GATED_TOOLS as readonly string[]).includes(tool);
 }
 
+/** Every `requireConfirm` rejection message starts with this — lets callers
+ *  (the in-app agent) distinguish a "needs confirmation" preview from a real
+ *  validation error without parsing the whole string. */
+export const CONFIRM_REQUIRED_PREFIX = "Confirmation required";
+
 /**
  * Returns a blocking `ToolResult` when a gated tool is invoked without `confirm: true`,
  * naming the irreversible effect. Returns null when allowed. The MCP adapter maps the
@@ -36,6 +41,6 @@ export function requireConfirm(
 ): ToolResult | null {
   if (args.confirm === true) return null;
   return fail(
-    `Confirmation required for "${tool}". This action is irreversible and acts on your Nostr identity: ${effect}. Re-call with "confirm": true to proceed.`,
+    `${CONFIRM_REQUIRED_PREFIX} for "${tool}". This action is irreversible and acts on your Nostr identity: ${effect}. Re-call with "confirm": true to proceed.`,
   );
 }

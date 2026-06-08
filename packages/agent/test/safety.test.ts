@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { requireConfirm, isGated, GATED_TOOLS } from "../src/safety";
+import { requireConfirm, isGated, GATED_TOOLS, CONFIRM_REQUIRED_PREFIX } from "../src/safety";
 
 describe("safety", () => {
   it("lists the destructive/outward tools", () => {
@@ -28,5 +28,14 @@ describe("safety", () => {
 
   it("allows a gated call when confirm is true", () => {
     expect(requireConfirm("delete_form", { confirm: true }, "deletes form abc")).toBeNull();
+  });
+});
+
+describe("CONFIRM_REQUIRED_PREFIX", () => {
+  it("prefixes every requireConfirm rejection", () => {
+    const blocked = requireConfirm("delete_form", {}, "deletes form f1");
+    expect(blocked).not.toBeNull();
+    expect(blocked!.ok).toBe(false);
+    expect(blocked!.text.startsWith(CONFIRM_REQUIRED_PREFIX)).toBe(true);
   });
 });
