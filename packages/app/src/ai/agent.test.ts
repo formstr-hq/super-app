@@ -224,3 +224,54 @@ describe("Agent (core loop)", () => {
     expect(c.done).toBe(true);
   });
 });
+
+describe("Agent (gated confirm gate)", () => {
+  beforeEach(() => {
+    Object.values(handlerSpies).forEach((s) => s.mockClear());
+  });
+
+  function provider() {
+    return new FakeProvider([
+      { toolCalls: [{ name: "delete_poll", arguments: { pollId: "p1" } }] },
+      { text: "Okay." },
+    ]);
+  }
+
+  it("requests confirmation and runs the tool with confirm:true on approve", async () => {
+    const seen: string[] = [];
+    const agent = new Agent(provider(), new ConversationContext());
+    const c = collectCallbacks({
+      onConfirmRequired: async (req) => {
+        seen.push(req.toolName);
+        expect(req.message).toMatch(/Confirmation required/);
+        return true;
+      },
+    });
+    await agent.run("delete it", "pk", c.cb);
+    expect(seen).toEqual(["delete_poll"]);
+    expect(handlerSpies.delete_poll).toHaveBeenLastCalledWith(
+      expect.objectContaining({ confirm: true }),
+      expect.anything(),
+    );
+    expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "success")).toBe(true);
+  });
+
+  it("does not execute the tool when the user declines", async () => {
+    const agent = new Agent(provider(), new ConversationContext());
+    const c = collectCallbacks({ onConfirmRequired: async () => false });
+    await agent.run("delete it", "pk", c.cb);
+    expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "declined")).toBe(true);
+    // only the no-confirm preview call ran; never with confirm:true
+    expect(handlerSpies.delete_poll).not.toHaveBeenCalledWith(
+      expect.objectContaining({ confirm: true }),
+      expect.anything(),
+    );
+  });
+
+  it("treats a missing confirm handler as a decline (safe default)", async () => {
+    const agent = new Agent(provider(), new ConversationContext());
+    const c = collectCallbacks(); // no onConfirmRequired
+    await agent.run("delete it", "pk", c.cb);
+    expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "declined")).toBe(true);
+  });
+});

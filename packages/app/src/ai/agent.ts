@@ -1,4 +1,10 @@
-import { toolRegistry, type ToolCtx, type ToolResult } from "@formstr/agent";
+import {
+  toolRegistry,
+  isGated,
+  CONFIRM_REQUIRED_PREFIX,
+  type ToolCtx,
+  type ToolResult,
+} from "@formstr/agent";
 
 import { moduleForTool, useAIPendingStore } from "../stores/aiPendingStore";
 
@@ -15,6 +21,7 @@ import type {
 } from "./types";
 
 const MAX_STEPS = 8;
+const DECLINED_TEXT = "User declined this action.";
 
 function msg(role: Message["role"], content: string, toolCallId?: string): Message {
   return { id: crypto.randomUUID(), role, content, timestamp: Date.now(), toolCallId };
@@ -153,10 +160,28 @@ export class Agent {
     this.context.addMessage(msg("tool", result.text, tc.id));
   }
 
-  /** Look up + invoke the registry handler. (Confirm gate added in Task 6.) */
-  private async execTool(tc: ToolCall, _cb: AgentCallbacks): Promise<ToolResult> {
+  /** Look up + invoke the registry handler, gating irreversible tools behind a confirm. */
+  private async execTool(tc: ToolCall, cb: AgentCallbacks): Promise<ToolResult> {
     const entry = toolRegistry.find((t) => t.name === tc.name);
     if (!entry) return { ok: false, text: `Unknown tool: ${tc.name}` };
-    return entry.handler(tc.arguments, this.ctx);
+
+    if (!isGated(tc.name)) return entry.handler(tc.arguments, this.ctx);
+
+    // Preview: requireConfirm short-circuits before any side effect and returns
+    // the effect text. A non-confirm failure here is a real validation error.
+    const preview = await entry.handler(tc.arguments, this.ctx);
+    if (preview.ok || !preview.text.startsWith(CONFIRM_REQUIRED_PREFIX)) return preview;
+
+    const approved = cb.onConfirmRequired
+      ? await cb.onConfirmRequired({
+          id: tc.id,
+          toolName: tc.name,
+          module: moduleForTool(tc.name),
+          message: preview.text,
+        })
+      : false;
+
+    if (!approved) return { ok: false, text: DECLINED_TEXT, errorCode: "DECLINED" };
+    return entry.handler({ ...tc.arguments, confirm: true }, this.ctx);
   }
 }
