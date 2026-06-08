@@ -27,6 +27,52 @@ function msg(role: Message["role"], content: string, toolCallId?: string): Messa
   return { id: crypto.randomUUID(), role, content, timestamp: Date.now(), toolCallId };
 }
 
+const VALID_TOOL_NAMES = new Set(toolRegistry.map((t) => t.name));
+
+/** Detect tool calls a small model embedded as plain-text JSON in its content. */
+function extractTextToolCalls(text: string): ToolCall[] {
+  const cleaned = text
+    .replace(/```(?:json)?\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const candidates: string[] = [];
+  let depth = 0;
+  let start = -1;
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (cleaned[i] === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        candidates.push(cleaned.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+
+  const calls: ToolCall[] = [];
+  for (const candidate of candidates) {
+    try {
+      const obj = JSON.parse(candidate) as Record<string, unknown>;
+      const fn = (obj.function ?? obj) as Record<string, unknown>;
+      const name = typeof fn.name === "string" ? fn.name.toLowerCase() : "";
+      const argsRaw = (fn.arguments ?? fn.parameters) as unknown;
+      if (VALID_TOOL_NAMES.has(name) && typeof argsRaw === "object" && argsRaw !== null) {
+        calls.push({
+          id: crypto.randomUUID(),
+          name,
+          arguments: argsRaw as Record<string, unknown>,
+        });
+      }
+    } catch {
+      // not JSON — skip
+    }
+  }
+  return calls;
+}
+
 /**
  * Provider-agnostic multi-step tool-use agent. Each iteration streams one
  * assistant turn from the provider; if it requests tools we run them against
@@ -67,7 +113,16 @@ export class Agent {
         const messages: Message[] = [msg("system", system), ...this.context.getMessages()];
         const { text, toolCalls } = await this.runStep(messages, tools, model, cb.onToken);
 
-        if (toolCalls.length === 0) {
+        let calls = toolCalls;
+        if (calls.length === 0 && text.includes("{")) {
+          const extracted = extractTextToolCalls(text);
+          if (extracted.length > 0) {
+            calls = extracted;
+            cb.onContentReset?.(); // the raw JSON will be replaced by the follow-up answer
+          }
+        }
+
+        if (calls.length === 0) {
           if (text.trim()) this.context.addMessage(msg("assistant", text));
           cb.onDone();
           return;
@@ -76,11 +131,11 @@ export class Agent {
         // Record the assistant turn (with its tool_calls) so the model sees its
         // own prior calls, then clear the live buffer before executing.
         const assistant = msg("assistant", text || "");
-        assistant.toolCalls = toolCalls;
+        assistant.toolCalls = calls;
         this.context.addMessage(assistant);
         cb.onContentReset?.();
 
-        for (const tc of toolCalls) {
+        for (const tc of calls) {
           await this.executeAndRecord(tc, cb);
         }
       }

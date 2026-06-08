@@ -275,3 +275,30 @@ describe("Agent (gated confirm gate)", () => {
     expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "declined")).toBe(true);
   });
 });
+
+describe("Agent (text-JSON tool-call fallback)", () => {
+  beforeEach(() => {
+    Object.values(handlerSpies).forEach((s) => s.mockClear());
+  });
+
+  it("parses a tool call embedded as plain-text JSON", async () => {
+    const provider = new FakeProvider([
+      { text: '{"name": "create_poll", "parameters": {"question": "Lunch?"}}' },
+      { text: "Created your poll." },
+    ]);
+    const agent = new Agent(provider, new ConversationContext());
+    const c = collectCallbacks();
+    await agent.run("make a poll", "pk", c.cb);
+    expect(handlerSpies.create_poll).toHaveBeenCalledOnce();
+    expect(c.entities).toContain("p1");
+  });
+
+  it("ignores JSON that is not a known tool", async () => {
+    const provider = new FakeProvider([{ text: 'Here is JSON: {"foo": 1} — not a tool.' }]);
+    const agent = new Agent(provider, new ConversationContext());
+    const c = collectCallbacks();
+    await agent.run("hi", "pk", c.cb);
+    expect(handlerSpies.create_poll).not.toHaveBeenCalled();
+    expect(c.tokens.join("")).toContain("not a tool");
+  });
+});
