@@ -4,6 +4,7 @@ import { useTheme } from "@mui/material/styles";
 import type { Message } from "../../ai/types";
 import { renderRefs } from "../../lib/renderRefs";
 
+import { AgentRunBlock } from "./AgentRunBlock";
 import { ToolCallChip } from "./ToolCallChip";
 
 interface MessageBubbleProps {
@@ -40,12 +41,16 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
           border: isUser ? "none" : `1px solid ${theme.palette.divider}`,
         }}
       >
-        {toolCalls.length > 0 && (
-          <Box sx={{ mb: 1, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-            {toolCalls.map((tc) => (
-              <ToolCallChip key={tc.id} toolCall={tc} />
-            ))}
-          </Box>
+        {message.run && message.run.length > 0 ? (
+          <AgentRunBlock steps={message.run} />
+        ) : (
+          toolCalls.length > 0 && (
+            <Box sx={{ mb: 1, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+              {toolCalls.map((tc) => (
+                <ToolCallChip key={tc.id} toolCall={tc} />
+              ))}
+            </Box>
+          )
         )}
         <Box sx={{ whiteSpace: "pre-wrap", wordBreak: "break-words" }}>
           {body.map((part, i) =>

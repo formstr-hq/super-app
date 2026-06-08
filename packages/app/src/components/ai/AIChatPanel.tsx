@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 
 import { useAIStore, useSettingsStore } from "../../stores";
 
+import { AgentRunBlock } from "./AgentRunBlock";
+import { ConfirmActionCard } from "./ConfirmActionCard";
 import { EntityCard } from "./EntityCard";
 import { MessageBubble } from "./MessageBubble";
 
@@ -39,6 +41,8 @@ export function AIChatPanel() {
     entities,
     isProcessing,
     streamingContent,
+    streamingSteps,
+    pendingConfirm,
     providerStatus,
     errorMessage,
     availableModels,
@@ -46,6 +50,7 @@ export function AIChatPanel() {
     initProvider,
     reset,
     setModel,
+    resolveConfirm,
   } = useAIStore();
   const { aiPanelOpen, setAIPanelOpen, aiModel } = useSettingsStore();
   const [input, setInput] = useState("");
@@ -182,10 +187,20 @@ export function AIChatPanel() {
         )}
 
         {messages
-          .filter((m) => m.role !== "assistant" || m.content.trim())
+          .filter((m) => m.role !== "assistant" || m.content.trim() || (m.run && m.run.length > 0))
           .map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
           ))}
+
+        {isProcessing && streamingSteps.length > 0 && <AgentRunBlock steps={streamingSteps} />}
+
+        {pendingConfirm && (
+          <ConfirmActionCard
+            request={pendingConfirm}
+            onApprove={() => resolveConfirm(true)}
+            onCancel={() => resolveConfirm(false)}
+          />
+        )}
 
         {streamingContent && (
           <MessageBubble
