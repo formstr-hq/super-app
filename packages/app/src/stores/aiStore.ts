@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
-import { createLLMProvider, ConversationContext, IntentRouter } from "../ai";
-import type { Message, LLMProvider, ActionResult, EntityRef } from "../ai/types";
+import { createLLMProvider, ConversationContext, Agent } from "../ai";
+import type { Message, LLMProvider, EntityRef, RunStep, ConfirmRequest } from "../ai/types";
 
 import { useAuthStore } from "./authStore";
 import { useSettingsStore } from "./settingsStore";
@@ -79,6 +79,8 @@ interface AIStore {
   entities: EntityRef[];
   isProcessing: boolean;
   streamingContent: string;
+  streamingSteps: RunStep[];
+  pendingConfirm: (ConfirmRequest & { resolve: (approved: boolean) => void }) | null;
   providerStatus: "disconnected" | "connecting" | "connected" | "error";
   availableModels: string[];
   errorMessage: string | null;
@@ -86,10 +88,11 @@ interface AIStore {
   // Internal refs (not reactive state)
   _provider: LLMProvider | null;
   _context: ConversationContext;
-  _router: IntentRouter | null;
+  _agent: Agent | null;
 
   initProvider(): Promise<void>;
   sendMessage(content: string): Promise<void>;
+  resolveConfirm(approved: boolean): void;
   setModel(model: string): void;
   reset(): void;
 }
@@ -99,13 +102,15 @@ export const useAIStore = create<AIStore>((set, get) => ({
   entities: _persistedEntities,
   isProcessing: false,
   streamingContent: "",
+  streamingSteps: [],
+  pendingConfirm: null,
   providerStatus: "disconnected",
   availableModels: [],
   errorMessage: null,
 
   _provider: null,
   _context: _initialContext,
-  _router: null,
+  _agent: null,
 
   async initProvider() {
     const { aiProvider, aiEndpoint, aiModel, aiApiKey } = useSettingsStore.getState();
@@ -115,7 +120,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
       const provider = await createLLMProvider({ aiProvider, aiEndpoint, aiModel, aiApiKey });
       const models = await provider.getAvailableModels();
       const context = get()._context;
-      const router = new IntentRouter(provider, context);
+      const agent = new Agent(provider, context);
 
       // Auto-select first model if none is configured
       if (!aiModel && models.length > 0) {
@@ -124,7 +129,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
       set({
         _provider: provider,
-        _router: router,
+        _agent: agent,
         availableModels: models,
         providerStatus: "connected",
       });
@@ -137,19 +142,17 @@ export const useAIStore = create<AIStore>((set, get) => ({
   },
 
   async sendMessage(content: string) {
-    const { _router, isProcessing } = get();
-    if (isProcessing) return;
+    if (get().isProcessing) return;
 
-    if (!_router) {
+    if (!get()._agent) {
       await get().initProvider();
-      const router = get()._router;
-      if (!router) {
+      if (!get()._agent) {
         set({ errorMessage: "AI provider not available. Check your settings." });
         return;
       }
     }
 
-    const router = get()._router!;
+    const agent = get()._agent!;
     const { aiModel } = useSettingsStore.getState();
     const pubkey = useAuthStore.getState().pubkey;
 
@@ -163,18 +166,23 @@ export const useAIStore = create<AIStore>((set, get) => ({
     set((state) => {
       const msgs = [...state.messages, userMsg];
       persistMessages(msgs);
-      return { messages: msgs, isProcessing: true, streamingContent: "", errorMessage: null };
+      return {
+        messages: msgs,
+        isProcessing: true,
+        streamingContent: "",
+        streamingSteps: [],
+        errorMessage: null,
+      };
     });
 
-    const assistantId = crypto.randomUUID();
     let fullContent = "";
 
     try {
-      await router.routeStream(
+      await agent.run(
         content,
         pubkey,
         {
-          onToken(token: string) {
+          onToken(token) {
             fullContent += token;
             set({ streamingContent: fullContent });
           },
@@ -182,41 +190,60 @@ export const useAIStore = create<AIStore>((set, get) => ({
             fullContent = "";
             set({ streamingContent: "" });
           },
-          onToolCall() {
-            // Tool call indicator is handled via action results
+          onStepStart(step) {
+            set((state) => ({ streamingSteps: [...state.streamingSteps, step] }));
           },
-          onActionResult(result: ActionResult) {
-            if (result.entity) {
-              set((state) => {
-                const ents = [...state.entities, result.entity!];
-                persistEntities(ents);
-                return { entities: ents };
-              });
-            }
+          onStepUpdate(step) {
+            set((state) => ({
+              streamingSteps: state.streamingSteps.map((s) => (s.id === step.id ? step : s)),
+            }));
           },
-          onDone: () => {
-            // Don't save empty assistant messages (can happen when small
-            // models return nothing, even after retry)
-            if (fullContent.trim()) {
+          onEntity(entity) {
+            set((state) => {
+              const ents = [...state.entities, entity];
+              persistEntities(ents);
+              return { entities: ents };
+            });
+          },
+          onConfirmRequired(req) {
+            return new Promise<boolean>((resolve) => {
+              set({ pendingConfirm: { ...req, resolve } });
+            });
+          },
+          onWarning(message) {
+            fullContent += `${fullContent ? "\n\n" : ""}_${message}_`;
+            set({ streamingContent: fullContent });
+          },
+          onDone() {
+            const steps = get().streamingSteps;
+            if (fullContent.trim() || steps.length > 0) {
               const assistantMsg: Message = {
-                id: assistantId,
+                id: crypto.randomUUID(),
                 role: "assistant",
                 content: fullContent,
+                run: steps.length > 0 ? steps : undefined,
                 timestamp: Date.now(),
               };
               set((state) => {
                 const msgs = [...state.messages, assistantMsg];
                 persistMessages(msgs);
-                return { messages: msgs, isProcessing: false, streamingContent: "" };
+                return {
+                  messages: msgs,
+                  isProcessing: false,
+                  streamingContent: "",
+                  streamingSteps: [],
+                };
               });
             } else {
-              set({ isProcessing: false, streamingContent: "" });
+              set({ isProcessing: false, streamingContent: "", streamingSteps: [] });
             }
           },
-          onError: (error: Error) => {
+          onError(error) {
             set({
               isProcessing: false,
               streamingContent: "",
+              streamingSteps: [],
+              pendingConfirm: null,
               errorMessage: error.message,
             });
           },
@@ -227,9 +254,18 @@ export const useAIStore = create<AIStore>((set, get) => ({
       set({
         isProcessing: false,
         streamingContent: "",
+        streamingSteps: [],
+        pendingConfirm: null,
         errorMessage: e instanceof Error ? e.message : "Failed to process message",
       });
     }
+  },
+
+  resolveConfirm(approved: boolean) {
+    const pc = get().pendingConfirm;
+    if (!pc) return;
+    set({ pendingConfirm: null });
+    pc.resolve(approved);
   },
 
   setModel(model: string) {
@@ -248,6 +284,8 @@ export const useAIStore = create<AIStore>((set, get) => ({
       messages: [],
       entities: [],
       streamingContent: "",
+      streamingSteps: [],
+      pendingConfirm: null,
       isProcessing: false,
       errorMessage: null,
     });

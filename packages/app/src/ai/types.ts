@@ -4,6 +4,7 @@ export interface Message {
   content: string;
   toolCalls?: ToolCall[];
   toolCallId?: string;
+  run?: RunStep[];
   timestamp: number;
 }
 

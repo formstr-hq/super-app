@@ -15,3 +15,4 @@ export { toolDefinitions } from "./tools";
 export { ConversationContext } from "./context";
 export { IntentRouter } from "./intentRouter";
 export { dispatchAction } from "./actionDispatcher";
+export { Agent } from "./agent";
