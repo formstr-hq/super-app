@@ -8,11 +8,14 @@ export type {
   LLMProvider,
   EntityRef,
   ActionResult,
+  RunStep,
+  RunStepStatus,
+  ConfirmRequest,
+  AgentCallbacks,
 } from "./types";
 
 export { OllamaProvider, CloudLLMProvider, createLLMProvider } from "./provider";
-export { toolDefinitions } from "./tools";
+export { buildToolDefinitions } from "./toolSchemas";
+export { entityFromTool } from "./entityMap";
 export { ConversationContext } from "./context";
-export { IntentRouter } from "./intentRouter";
-export { dispatchAction } from "./actionDispatcher";
 export { Agent } from "./agent";
