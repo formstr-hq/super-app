@@ -348,6 +348,9 @@ export function RichEditor({
     () => [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        // StarterKit v3 bundles Link; disable it so our configured Link below is
+        // the only one (avoids tiptap's "Duplicate extension names: ['link']").
+        link: false,
       }),
       Placeholder.configure({ placeholder }),
       Link.configure({

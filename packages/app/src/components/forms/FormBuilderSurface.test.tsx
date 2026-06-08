@@ -10,13 +10,13 @@ vi.mock("../../stores", () => ({
 
 import { useFormsStore } from "../../stores";
 
-import { CreateFormDialog } from "./CreateFormDialog";
+import { FormBuilderSurface } from "./FormBuilderSurface";
 
 const mockCreateForm = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // CreateFormDialog calls useFormsStore() with no selector, so we return the store object directly
+  // FormBuilderSurface calls useFormsStore() with no selector, so we return the store object directly
   (useFormsStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
     createForm: mockCreateForm,
   });
@@ -24,20 +24,17 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-describe("CreateFormDialog", () => {
-  it("does not render dialog content when open=false", () => {
-    render(<CreateFormDialog open={false} onClose={vi.fn()} />);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("renders dialog when open=true", () => {
-    render(<CreateFormDialog open onClose={vi.fn()} />);
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("New Form")).toBeInTheDocument();
+describe("FormBuilderSurface", () => {
+  it("renders the builder with build + live-preview panes", () => {
+    render(<FormBuilderSurface onClose={vi.fn()} />);
+    expect(screen.getByText("New form")).toBeInTheDocument();
+    expect(screen.getByText("Build")).toBeInTheDocument();
+    expect(screen.getByText("Live preview")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^create$/i })).toBeInTheDocument();
   });
 
   it("can type a form name and add a field", () => {
-    render(<CreateFormDialog open onClose={vi.fn()} />);
+    render(<FormBuilderSurface onClose={vi.fn()} />);
 
     const titleInput = screen.getByLabelText(/form title/i);
     fireEvent.change(titleInput, { target: { value: "My Survey" } });
@@ -56,17 +53,12 @@ describe("CreateFormDialog", () => {
     });
     const onClose = vi.fn();
 
-    render(<CreateFormDialog open onClose={onClose} />);
+    render(<FormBuilderSurface onClose={onClose} />);
 
-    // Fill in title
     fireEvent.change(screen.getByLabelText(/form title/i), {
       target: { value: "Test Form" },
     });
-
-    // Add a question
     fireEvent.click(screen.getByRole("button", { name: /add question/i }));
-
-    // Click Create
     fireEvent.click(screen.getByRole("button", { name: /^create$/i }));
 
     await waitFor(() => {
@@ -77,11 +69,10 @@ describe("CreateFormDialog", () => {
   });
 
   it("Create button is disabled while submitting", async () => {
-    // Make createForm never resolve so we stay in submitting state
+    // Make createForm never resolve so we stay in the submitting state
     mockCreateForm.mockReturnValue(new Promise(() => {}));
-    const onClose = vi.fn();
 
-    render(<CreateFormDialog open onClose={onClose} />);
+    render(<FormBuilderSurface onClose={vi.fn()} />);
 
     fireEvent.change(screen.getByLabelText(/form title/i), {
       target: { value: "Test" },
@@ -95,8 +86,8 @@ describe("CreateFormDialog", () => {
   });
 
   it("Create button is disabled when name is empty", () => {
-    render(<CreateFormDialog open onClose={vi.fn()} />);
-    // Add a field but leave name empty
+    render(<FormBuilderSurface onClose={vi.fn()} />);
+    // Add a field but leave the name empty
     fireEvent.click(screen.getByRole("button", { name: /add question/i }));
     expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
   });

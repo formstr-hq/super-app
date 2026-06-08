@@ -1,6 +1,5 @@
-import { Box, ButtonBase, Card, Divider, Tooltip, Typography } from "@mui/material";
+import { Box, Card, Divider, IconButton, Tooltip, Typography } from "@mui/material";
 import { BarChart3, Link, Lock, Pencil, Trash2 } from "lucide-react";
-import type React from "react";
 
 import type { FormSummary } from "../../services/forms/types";
 
@@ -12,34 +11,36 @@ interface Props {
   onCopyLink: (form: FormSummary) => void;
 }
 
-type ActionCell = {
-  label: string;
-  Icon: React.ComponentType<{ size?: number }>;
-  key: string;
-  danger?: boolean;
-};
-
-const ACTION_CELLS: ActionCell[] = [
-  { label: "Fill Form", Icon: Pencil, key: "fill" },
-  { label: "Responses", Icon: BarChart3, key: "responses" },
-  { label: "Copy Link", Icon: Link, key: "copy" },
-  { label: "Delete", Icon: Trash2, key: "delete", danger: true },
-];
-
 export function FormCard({ form, onFill, onViewResponses, onDelete, onCopyLink }: Props) {
-  const handlers: Record<string, () => void> = {
-    fill: () => onFill(form),
-    responses: () => onViewResponses(form),
-    copy: () => onCopyLink(form),
-    delete: () => onDelete(form),
-  };
+  const meta: string[] = [];
+  if (form.responseCount !== undefined) {
+    meta.push(`${form.responseCount} ${form.responseCount === 1 ? "response" : "responses"}`);
+  }
+  if (form.createdAt > 0) {
+    meta.push(
+      new Date(form.createdAt * 1000).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      }),
+    );
+  }
 
   return (
-    <Card variant="outlined" sx={{ overflow: "hidden" }}>
-      <Box sx={{ px: 2, pt: 2, pb: 1.75, display: "flex", alignItems: "flex-start", gap: 1 }}>
+    <Card
+      variant="outlined"
+      sx={{
+        p: 1.5,
+        display: "flex",
+        flexDirection: "column",
+        gap: 1,
+        transition: "border-color 0.15s ease",
+        "&:hover": { borderColor: "text.disabled" },
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
         <Typography
           variant="subtitle2"
-          sx={{ flex: 1, fontWeight: 600, lineHeight: 1.5, letterSpacing: "-0.01em" }}
+          sx={{ flex: 1, fontWeight: 600, lineHeight: 1.4, letterSpacing: "-0.01em" }}
         >
           {form.name}
         </Typography>
@@ -48,13 +49,7 @@ export function FormCard({ form, onFill, onViewResponses, onDelete, onCopyLink }
             <Box
               component="span"
               aria-label="Encrypted"
-              sx={{
-                color: "text.disabled",
-                display: "flex",
-                alignItems: "center",
-                flexShrink: 0,
-                mt: "2px",
-              }}
+              sx={{ color: "text.disabled", display: "flex", flexShrink: 0, mt: "2px" }}
             >
               <Lock size={13} />
             </Box>
@@ -62,49 +57,60 @@ export function FormCard({ form, onFill, onViewResponses, onDelete, onCopyLink }
         )}
       </Box>
 
-      <Divider />
+      <Typography variant="caption" color="text.secondary" sx={{ minHeight: 18 }}>
+        {meta.join(" · ") || "—"}
+      </Typography>
+
+      <Divider sx={{ mt: 0.25 }} />
 
       <Box
-        sx={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}
+        sx={{ display: "flex", alignItems: "center", gap: 0.25, color: "text.secondary" }}
         onClick={(e) => e.stopPropagation()}
       >
-        {ACTION_CELLS.map(({ label, Icon, key, danger }, i) => (
-          <ButtonBase
-            key={key}
-            onClick={handlers[key]}
+        <Tooltip title="Fill form">
+          <IconButton
+            size="small"
+            aria-label="Fill form"
+            onClick={() => onFill(form)}
+            sx={{ color: "inherit", "&:hover": { color: "text.primary" } }}
+          >
+            <Pencil size={15} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="View responses">
+          <IconButton
+            size="small"
+            aria-label="View responses"
+            onClick={() => onViewResponses(form)}
+            sx={{ color: "inherit", "&:hover": { color: "text.primary" } }}
+          >
+            <BarChart3 size={15} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Copy link">
+          <IconButton
+            size="small"
+            aria-label="Copy link"
+            onClick={() => onCopyLink(form)}
+            sx={{ color: "inherit", "&:hover": { color: "text.primary" } }}
+          >
+            <Link size={15} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Delete">
+          <IconButton
+            size="small"
+            aria-label="Delete"
+            onClick={() => onDelete(form)}
             sx={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 0.75,
-              py: 1.75,
-              borderTop: i >= 2 ? "1px solid" : undefined,
-              borderLeft: i % 2 === 1 ? "1px solid" : undefined,
-              borderColor: "divider",
-              color: danger ? "error.main" : "text.secondary",
-              transition: "background-color 0.15s ease, color 0.15s ease",
-              "&:hover": {
-                bgcolor: danger ? "rgba(220, 38, 38, 0.07)" : "action.hover",
-                color: danger ? "error.main" : "text.primary",
-              },
+              ml: "auto",
+              color: "error.main",
+              "&:hover": { bgcolor: "rgba(220, 38, 38, 0.08)" },
             }}
           >
-            <Icon size={15} />
-            <Typography
-              component="span"
-              sx={{
-                fontSize: 11.5,
-                fontWeight: 500,
-                letterSpacing: "0.01em",
-                color: "inherit",
-                lineHeight: 1,
-              }}
-            >
-              {label}
-            </Typography>
-          </ButtonBase>
-        ))}
+            <Trash2 size={15} />
+          </IconButton>
+        </Tooltip>
       </Box>
     </Card>
   );
