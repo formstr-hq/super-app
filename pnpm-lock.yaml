@@ -81,6 +81,9 @@ importers:
       '@formstr/core':
         specifier: workspace:*
         version: link:../core
+      '@formstr/signer':
+        specifier: ^0.1.0
+        version: 0.1.0(typescript@5.9.3)
       '@mui/material':
         specifier: ^6.4.0
         version: 6.5.0(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5))(@types/react@19.2.14)(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -943,6 +946,14 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@formstr/signer@0.1.0':
+    resolution: {integrity: sha512-RvLEuXCPVynMSuV7TCkxat2ihkMTyTEm8rLcoxuuqbxxRhRSLLr5h6BguBBAo1Y/xro5fbcfxfA4AoI1pa0DZQ==}
+    peerDependencies:
+      nostr-signer-capacitor-plugin: ^0.0.5
+    peerDependenciesMeta:
+      nostr-signer-capacitor-plugin:
+        optional: true
 
   '@hono/node-server@1.19.14':
     resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
@@ -4750,6 +4761,13 @@ snapshots:
 
   '@floating-ui/utils@0.2.11':
     optional: true
+
+  '@formstr/signer@0.1.0(typescript@5.9.3)':
+    dependencies:
+      nostr-tools: 2.23.3(typescript@5.9.3)
+      qrcode: 1.5.4
+    transitivePeerDependencies:
+      - typescript
 
   '@hono/node-server@1.19.14(hono@4.12.23)':
     dependencies:

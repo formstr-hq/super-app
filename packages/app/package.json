@@ -17,6 +17,7 @@
     "@emotion/styled": "^11.14.0",
     "@formstr/agent": "workspace:*",
     "@formstr/core": "workspace:*",
+    "@formstr/signer": "^0.1.0",
     "@mui/material": "^6.4.0",
     "@tiptap/core": "^3.22.4",
     "@tiptap/extension-link": "^3.22.4",
