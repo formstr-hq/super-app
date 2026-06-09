@@ -45,18 +45,12 @@ export interface GenerateOptions {
 export interface StreamCallbacks {
   onToken: (token: string) => void;
   onToolCall?: (toolCall: ToolCall) => void;
-  onToolResult?: (toolCallId: string, result: ActionResult) => void;
   onWarning?: (message: string) => void;
   onDone: () => void;
   onError: (error: Error) => void;
 }
 
 export interface LLMProvider {
-  generate(
-    messages: Message[],
-    options?: GenerateOptions,
-  ): Promise<{ content: string; toolCalls?: ToolCall[] }>;
-
   generateStream(
     messages: Message[],
     tools: ToolDefinition[],
