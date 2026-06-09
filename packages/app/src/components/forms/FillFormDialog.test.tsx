@@ -1,12 +1,12 @@
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../../services/forms/service", () => ({
+vi.mock("@formstr/agent/services/forms/service", () => ({
   submitResponse: vi.fn().mockResolvedValue(undefined),
 }));
 
-import * as formsService from "../../services/forms/service";
-import { AnswerType, type FormTemplate } from "../../services/forms/types";
+import * as formsService from "@formstr/agent/services/forms/service";
+import { AnswerType, type FormTemplate } from "@formstr/agent/services/forms/types";
 
 import { FillFormDialog } from "./FillFormDialog";
 

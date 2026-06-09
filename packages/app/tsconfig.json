@@ -11,6 +11,5 @@
     "types": ["@testing-library/jest-dom"]
   },
   "include": ["src"],
-  "exclude": ["src/ai/actionDispatcher.ts"],
   "references": [{ "path": "../core" }]
 }

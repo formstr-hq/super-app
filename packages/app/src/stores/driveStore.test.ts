@@ -15,7 +15,7 @@ if (typeof globalThis.localStorage === "undefined") {
   } as Storage;
 }
 
-vi.mock("../services/drive/service", () => ({
+vi.mock("@formstr/agent/services/drive/service", () => ({
   fetchFileIndex: vi.fn(() => Promise.resolve([])),
   uploadFile: vi.fn(),
   deleteFile: vi.fn(() => Promise.resolve()),
@@ -26,8 +26,8 @@ vi.mock("../services/drive/service", () => ({
   fetchBlossomServers: vi.fn(() => Promise.resolve([])),
 }));
 
-import type { FileMetadata } from "../services/drive";
-import * as driveService from "../services/drive/service";
+import type { FileMetadata } from "@formstr/agent/services/drive";
+import * as driveService from "@formstr/agent/services/drive/service";
 
 import { useDriveStore } from "./driveStore";
 

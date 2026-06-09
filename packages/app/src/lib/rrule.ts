@@ -1,7 +1,6 @@
+import type { CalendarEvent } from "@formstr/agent/services/calendar/types";
 import type { Weekday } from "rrule";
 import { RRule, RRuleSet, rrulestr } from "rrule";
-
-import type { CalendarEvent } from "../services/calendar/types";
 
 function asRRule(x: unknown): RRule | null {
   if (x instanceof RRule) return x;

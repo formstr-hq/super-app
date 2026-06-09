@@ -1,3 +1,5 @@
+import type { Poll, PollResults } from "@formstr/agent/services/polls";
+import { POLLS_KINDS } from "@formstr/agent/services/polls/types";
 import { createRef } from "@formstr/core";
 import {
   Alert,
@@ -15,9 +17,6 @@ import {
 } from "@mui/material";
 import { BarChart3, Check, Link2, MoreVertical, Trash2, Users, Vote } from "lucide-react";
 import { useEffect, useState } from "react";
-
-import type { Poll, PollResults } from "../../services/polls";
-import { POLLS_KINDS } from "../../services/polls/types";
 
 import { VotersModal } from "./VotersModal";
 

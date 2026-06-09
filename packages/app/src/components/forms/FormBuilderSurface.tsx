@@ -1,3 +1,4 @@
+import { AnswerType, type FormField, type FormSettings } from "@formstr/agent/services/forms/types";
 import {
   Box,
   Button,
@@ -15,7 +16,6 @@ import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 
 import { moveItem } from "../../lib/array";
-import { AnswerType, type FormField, type FormSettings } from "../../services/forms/types";
 import { useFormsStore } from "../../stores";
 
 import { FieldEditorRow } from "./FieldEditorRow";

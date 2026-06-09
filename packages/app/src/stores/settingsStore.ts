@@ -1,8 +1,13 @@
 import { create } from "zustand";
 
 type ThemeMode = "light" | "dark";
-export type AIProviderType = "ollama" | "openai" | "anthropic";
+export type AIProviderType = "anthropic" | "openai" | "gemini" | "ollama" | "openai-compat";
+export type CloudProvider = "anthropic" | "openai" | "gemini";
+export type ApiKeys = { anthropic?: string; openai?: string; gemini?: string };
 export type FormsView = "grid" | "list";
+
+const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+const DEFAULT_COMPAT_URL = "http://localhost:1234/v1";
 
 function applyTheme(mode: ThemeMode) {
   if (mode === "dark") {
@@ -12,8 +17,72 @@ function applyTheme(mode: ThemeMode) {
   }
 }
 
+interface AISettingsState {
+  aiProvider: AIProviderType;
+  apiKeys: ApiKeys;
+  aiModels: Partial<Record<AIProviderType, string>>;
+  ollamaUrl: string;
+  compatBaseUrl: string;
+  compatKey: string | null;
+}
+
+/** One-time migration from the legacy single-key shape. Idempotent: gated on the
+ *  presence of "formstr:ai-keys". Safe to call on every module load. */
+export function migrateAISettings(): void {
+  if (localStorage.getItem("formstr:ai-keys") !== null) return; // already migrated
+
+  const legacyProvider = localStorage.getItem("formstr:ai-provider");
+  const legacyKey = localStorage.getItem("formstr:ai-apikey");
+  const legacyModel = localStorage.getItem("formstr:ai-model");
+  const legacyEndpoint = localStorage.getItem("formstr:ai-endpoint");
+
+  const apiKeys: ApiKeys = {};
+  if (legacyKey && (legacyProvider === "openai" || legacyProvider === "anthropic")) {
+    apiKeys[legacyProvider] = legacyKey;
+  }
+  const aiModels: Partial<Record<AIProviderType, string>> = {};
+  if (legacyModel && legacyProvider && isAIProvider(legacyProvider)) {
+    aiModels[legacyProvider] = legacyModel;
+  }
+
+  localStorage.setItem("formstr:ai-keys", JSON.stringify(apiKeys));
+  localStorage.setItem("formstr:ai-models", JSON.stringify(aiModels));
+  if (legacyEndpoint) localStorage.setItem("formstr:ai-ollama-url", legacyEndpoint);
+}
+
+/** Read the (already-migrated) AI settings out of localStorage. */
+export function readAISettings(): AISettingsState {
+  return {
+    aiProvider: (localStorage.getItem("formstr:ai-provider") as AIProviderType) ?? "ollama",
+    apiKeys: parseJson<ApiKeys>(localStorage.getItem("formstr:ai-keys"), {}),
+    aiModels: parseJson<Partial<Record<AIProviderType, string>>>(
+      localStorage.getItem("formstr:ai-models"),
+      {},
+    ),
+    ollamaUrl: localStorage.getItem("formstr:ai-ollama-url") ?? DEFAULT_OLLAMA_URL,
+    compatBaseUrl: localStorage.getItem("formstr:ai-compat-base-url") ?? DEFAULT_COMPAT_URL,
+    compatKey: localStorage.getItem("formstr:ai-compat-key"),
+  };
+}
+
+function isAIProvider(v: string): v is AIProviderType {
+  return ["anthropic", "openai", "gemini", "ollama", "openai-compat"].includes(v);
+}
+
+function parseJson<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 const storedTheme = (localStorage.getItem("formstr:theme") as ThemeMode) ?? "light";
 applyTheme(storedTheme);
+
+migrateAISettings();
+const _ai = readAISettings();
 
 interface SettingsStore {
   themeMode: ThemeMode;
@@ -23,9 +92,11 @@ interface SettingsStore {
 
   // AI settings
   aiProvider: AIProviderType;
-  aiEndpoint: string;
-  aiModel: string | null;
-  aiApiKey: string | null;
+  apiKeys: ApiKeys;
+  aiModels: Partial<Record<AIProviderType, string>>;
+  ollamaUrl: string;
+  compatBaseUrl: string;
+  compatKey: string | null;
   aiPanelOpen: boolean;
 
   toggleTheme(): void;
@@ -33,9 +104,11 @@ interface SettingsStore {
   setSidebarOpen(open: boolean): void;
   toggleSidebarCollapsed(): void;
   setFormsView(view: FormsView): void;
-  setAIConfig(
-    config: Partial<Pick<SettingsStore, "aiProvider" | "aiEndpoint" | "aiModel" | "aiApiKey">>,
-  ): void;
+  setActiveProvider(provider: AIProviderType): void;
+  setApiKey(provider: CloudProvider, key: string | null): void;
+  setProviderModel(provider: AIProviderType, model: string | null): void;
+  setOllamaUrl(url: string): void;
+  setCompatConfig(config: { baseUrl?: string; key?: string | null }): void;
   setAIPanelOpen(open: boolean): void;
 }
 
@@ -45,14 +118,12 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   sidebarCollapsed: false,
   formsView: (localStorage.getItem("formstr:forms-view") as FormsView) ?? "grid",
 
-  aiProvider: (localStorage.getItem("formstr:ai-provider") as AIProviderType) ?? "ollama",
-  aiEndpoint: localStorage.getItem("formstr:ai-endpoint") ?? "http://localhost:11434",
-  // Default to qwen2.5:7b — reliably supports native tool_calls in Ollama
-  // and emits strict JSON when it has to, which is what our intent router
-  // needs. Still overridable via settings or the first-available fallback
-  // in initProvider when the model isn't installed.
-  aiModel: localStorage.getItem("formstr:ai-model") ?? "qwen2.5:7b",
-  aiApiKey: localStorage.getItem("formstr:ai-apikey") ?? null,
+  aiProvider: _ai.aiProvider,
+  apiKeys: _ai.apiKeys,
+  aiModels: _ai.aiModels,
+  ollamaUrl: _ai.ollamaUrl,
+  compatBaseUrl: _ai.compatBaseUrl,
+  compatKey: _ai.compatKey,
   aiPanelOpen: false,
 
   toggleTheme() {
@@ -81,21 +152,49 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     set({ formsView: view });
   },
 
-  setAIConfig(config) {
+  setActiveProvider(provider) {
+    localStorage.setItem("formstr:ai-provider", provider);
+    set({ aiProvider: provider });
+  },
+
+  setApiKey(provider, key) {
     set((state) => {
-      if (config.aiProvider !== undefined)
-        localStorage.setItem("formstr:ai-provider", config.aiProvider);
-      if (config.aiEndpoint !== undefined)
-        localStorage.setItem("formstr:ai-endpoint", config.aiEndpoint);
-      if (config.aiModel !== undefined) {
-        if (config.aiModel) localStorage.setItem("formstr:ai-model", config.aiModel);
-        else localStorage.removeItem("formstr:ai-model");
+      const apiKeys = { ...state.apiKeys };
+      if (key) apiKeys[provider] = key;
+      else delete apiKeys[provider];
+      localStorage.setItem("formstr:ai-keys", JSON.stringify(apiKeys));
+      return { apiKeys };
+    });
+  },
+
+  setProviderModel(provider, model) {
+    set((state) => {
+      const aiModels = { ...state.aiModels };
+      if (model) aiModels[provider] = model;
+      else delete aiModels[provider];
+      localStorage.setItem("formstr:ai-models", JSON.stringify(aiModels));
+      return { aiModels };
+    });
+  },
+
+  setOllamaUrl(url) {
+    localStorage.setItem("formstr:ai-ollama-url", url);
+    set({ ollamaUrl: url });
+  },
+
+  setCompatConfig(config) {
+    set((state) => {
+      const next: Partial<Pick<SettingsStore, "compatBaseUrl" | "compatKey">> = {};
+      if (config.baseUrl !== undefined) {
+        localStorage.setItem("formstr:ai-compat-base-url", config.baseUrl);
+        next.compatBaseUrl = config.baseUrl;
       }
-      if (config.aiApiKey !== undefined) {
-        if (config.aiApiKey) localStorage.setItem("formstr:ai-apikey", config.aiApiKey);
-        else localStorage.removeItem("formstr:ai-apikey");
+      if (config.key !== undefined) {
+        if (config.key) localStorage.setItem("formstr:ai-compat-key", config.key);
+        else localStorage.removeItem("formstr:ai-compat-key");
+        next.compatKey = config.key;
       }
-      return { ...state, ...config };
+      return { ...state, ...next };
     });
   },
 

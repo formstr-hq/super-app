@@ -1,9 +1,8 @@
+import type { Poll } from "@formstr/agent/services/polls";
 import { Box, Button, Chip, Divider, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { BarChart3, Plus } from "lucide-react";
 import type { ReactNode } from "react";
-
-import type { Poll } from "../../services/polls";
 
 interface PollsSidebarProps {
   myPolls: Poll[];

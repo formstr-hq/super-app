@@ -1,3 +1,4 @@
+import type { CalendarList } from "@formstr/agent/services/calendar";
 import {
   Box,
   Button,
@@ -9,8 +10,6 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-
-import type { CalendarList } from "../../services/calendar";
 
 /** Calendar swatch palette — the first eight standalone presets. */
 const PRESET_COLORS = [

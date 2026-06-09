@@ -1,7 +1,6 @@
+import type { FormSummary } from "@formstr/agent/services/forms/types";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
-
-import type { FormSummary } from "../../services/forms/types";
 
 import { FormCard } from "./FormCard";
 

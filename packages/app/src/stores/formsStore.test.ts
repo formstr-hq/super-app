@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../services/forms/service", () => ({
+vi.mock("@formstr/agent/services/forms/service", () => ({
   fetchMyForms: vi.fn(),
   fetchForm: vi.fn(),
   subscribeToResponses: vi.fn(),
@@ -9,7 +9,7 @@ vi.mock("../services/forms/service", () => ({
   saveToMyForms: vi.fn(),
 }));
 
-import * as formsService from "../services/forms/service";
+import * as formsService from "@formstr/agent/services/forms/service";
 
 import { useFormsStore } from "./formsStore";
 

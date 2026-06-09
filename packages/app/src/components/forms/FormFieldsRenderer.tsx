@@ -1,6 +1,5 @@
+import type { FormField } from "@formstr/agent/services/forms/types";
 import { Box } from "@mui/material";
-
-import type { FormField } from "../../services/forms/types";
 
 import { FieldInput } from "./FieldInput";
 

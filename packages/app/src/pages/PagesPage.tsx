@@ -1,3 +1,4 @@
+import type { PageDocument, PageSummary } from "@formstr/agent/services/pages";
 import { Alert, Box, Snackbar, Typography } from "@mui/material";
 import { FileEdit } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -7,7 +8,6 @@ import { PageEditorSurface } from "../components/pages/PageEditorSurface";
 import { PagesSidebar } from "../components/pages/PagesSidebar";
 import { PageTagsPopover } from "../components/pages/PageTagsPopover";
 import { SharePageDialog } from "../components/pages/SharePageDialog";
-import type { PageDocument, PageSummary } from "../services/pages";
 import { useAuthStore, usePagesStore } from "../stores";
 
 export function PagesPage() {

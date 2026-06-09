@@ -1,4 +1,4 @@
-import type { CalendarEvent } from "../services/calendar/types";
+import type { CalendarEvent } from "@formstr/agent/services/calendar/types";
 
 // ── ICS generation (RFC-5545) ───────────────────────────
 // Port of nostr-calendar/src/common/utils.ts `downloadIcs`, generalized so

@@ -1,3 +1,4 @@
+import type { FileMetadata } from "@formstr/agent/services/drive";
 import { Alert, Box, LinearProgress } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
 
@@ -7,7 +8,6 @@ import { DriveToolbar } from "../components/drive/DriveToolbar";
 import { FileList } from "../components/drive/FileList";
 import { MoveFileDialog } from "../components/drive/MoveFileDialog";
 import { RenameFileDialog } from "../components/drive/RenameFileDialog";
-import type { FileMetadata } from "../services/drive";
 import { useDriveStore } from "../stores";
 
 function depth(path: string): number {

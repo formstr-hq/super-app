@@ -1,3 +1,4 @@
+import type { FormSettings } from "@formstr/agent/services/forms/types";
 import {
   Box,
   Checkbox,
@@ -12,7 +13,6 @@ import { Plus, X } from "lucide-react";
 import { useState } from "react";
 
 import { npubToHex, formatNpub } from "../../lib/npub";
-import type { FormSettings } from "../../services/forms/types";
 
 interface Props {
   settings: FormSettings;

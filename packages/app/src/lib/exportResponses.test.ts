@@ -1,6 +1,9 @@
+import {
+  AnswerType,
+  type FormResponseEvent,
+  type FormTemplate,
+} from "@formstr/agent/services/forms/types";
 import { describe, it, expect } from "vitest";
-
-import { AnswerType, type FormResponseEvent, type FormTemplate } from "../services/forms/types";
 
 import { responsesToCsv, responsesToJson } from "./exportResponses";
 

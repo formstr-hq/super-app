@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 
 // ── Mocks (must appear before any imports that depend on them) ───────────────
 
-vi.mock("../services/forms/service", () => ({
+vi.mock("@formstr/agent/services/forms/service", () => ({
   fetchForm: vi.fn(),
   submitResponse: vi.fn().mockResolvedValue(undefined),
 }));
@@ -58,8 +58,9 @@ const VALID_HASH_FRAGMENT = "nkeys1testfragment";
 
 // ── Imports that depend on mocked modules ────────────────────────────────────
 
-import * as formsService from "../services/forms/service";
-import { AnswerType, type FormTemplate } from "../services/forms/types";
+import * as formsService from "@formstr/agent/services/forms/service";
+import { AnswerType, type FormTemplate } from "@formstr/agent/services/forms/types";
+
 import * as stores from "../stores";
 
 import { FillPage } from "./FillPage";

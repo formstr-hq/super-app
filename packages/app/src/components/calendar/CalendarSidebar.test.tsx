@@ -1,7 +1,6 @@
+import type { CalendarList } from "@formstr/agent/services/calendar";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-
-import type { CalendarList } from "../../services/calendar";
 
 import { CalendarSidebar } from "./CalendarSidebar";
 

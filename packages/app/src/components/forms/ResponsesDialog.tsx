@@ -1,4 +1,9 @@
 import {
+  AnswerType,
+  type FormResponseEvent,
+  type FormTemplate,
+} from "@formstr/agent/services/forms/types";
+import {
   Box,
   Button,
   Dialog,
@@ -26,7 +31,6 @@ import {
   responsesToJson,
 } from "../../lib/exportResponses";
 import { formatNpub } from "../../lib/npub";
-import { AnswerType, type FormResponseEvent, type FormTemplate } from "../../services/forms/types";
 
 import { FormAnalytics } from "./FormAnalytics";
 

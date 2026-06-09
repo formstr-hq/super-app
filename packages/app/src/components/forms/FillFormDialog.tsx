@@ -1,3 +1,9 @@
+import * as formsService from "@formstr/agent/services/forms/service";
+import {
+  AnswerType,
+  type FormResponse,
+  type FormTemplate,
+} from "@formstr/agent/services/forms/types";
 import {
   Box,
   Button,
@@ -11,9 +17,6 @@ import {
 } from "@mui/material";
 import { Check, Send } from "lucide-react";
 import { useEffect, useState } from "react";
-
-import * as formsService from "../../services/forms/service";
-import { AnswerType, type FormResponse, type FormTemplate } from "../../services/forms/types";
 
 import { FieldInput } from "./FieldInput";
 

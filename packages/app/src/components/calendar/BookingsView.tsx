@@ -1,3 +1,4 @@
+import type { BookingRequest } from "@formstr/agent/services/calendar/booking";
 import {
   Box,
   Button,
@@ -13,7 +14,6 @@ import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
 
 import { formatNpub } from "../../lib/npub";
-import type { BookingRequest } from "../../services/calendar/booking";
 import { useBookingStore, useCalendarStore } from "../../stores";
 
 function formatWhen(startMs: number, endMs: number) {

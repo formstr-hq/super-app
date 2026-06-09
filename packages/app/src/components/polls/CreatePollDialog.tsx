@@ -1,3 +1,4 @@
+import type { PollDraft, PollOption, PollType } from "@formstr/agent/services/polls";
 import {
   Box,
   Button,
@@ -16,8 +17,6 @@ import {
 } from "@mui/material";
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
-
-import type { PollDraft, PollOption, PollType } from "../../services/polls";
 
 interface CreatePollDialogProps {
   open: boolean;

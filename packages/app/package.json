@@ -3,9 +3,6 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "exports": {
-    "./services": "./src/services/index.ts"
-  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -18,6 +15,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@formstr/agent": "workspace:*",
     "@formstr/core": "workspace:*",
     "@mui/material": "^6.4.0",
     "@tiptap/core": "^3.22.4",

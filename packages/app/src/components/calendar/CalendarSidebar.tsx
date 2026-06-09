@@ -1,10 +1,9 @@
+import type { CalendarList } from "@formstr/agent/services/calendar";
+import { bookingLinkUrl, type SchedulingPage } from "@formstr/agent/services/calendar/booking";
 import { Box, Checkbox, Divider, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { CalendarClock, Copy, ExternalLink, Inbox, Plus, Settings2 } from "lucide-react";
 import { useSnackbar } from "notistack";
-
-import type { CalendarList } from "../../services/calendar";
-import { bookingLinkUrl, type SchedulingPage } from "../../services/calendar/booking";
 
 interface CalendarSidebarProps {
   calendars: CalendarList[];

@@ -1,3 +1,4 @@
+import type { BlossomServerInfo } from "@formstr/agent/services/drive";
 import {
   Box,
   Button,
@@ -13,8 +14,6 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { ChevronRight, CloudUpload, HardDrive, Plus, Server } from "lucide-react";
 import { useState } from "react";
-
-import type { BlossomServerInfo } from "../../services/drive";
 
 interface DriveToolbarProps {
   currentFolder: string;

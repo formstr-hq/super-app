@@ -3,7 +3,7 @@ import { SnackbarProvider } from "notistack";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 
 const rsvpToEvent = vi.fn().mockResolvedValue(undefined);
-vi.mock("../../services/calendar/rsvp", () => ({
+vi.mock("@formstr/agent/services/calendar/rsvp", () => ({
   rsvpToEvent: (...args: unknown[]) => rsvpToEvent(...args),
 }));
 

@@ -1,3 +1,4 @@
+import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
 import { Box, Paper, Popover, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { Lock, X } from "lucide-react";
@@ -5,7 +6,6 @@ import { useState } from "react";
 
 import { calendarForEvent } from "../../lib/calendarMembership";
 import { expandEvents } from "../../lib/rrule";
-import type { CalendarEvent, CalendarList } from "../../services/calendar";
 
 /** Cap of chips rendered inline per day before collapsing into "+N more". */
 const MAX_CHIPS_PER_DAY = 5;

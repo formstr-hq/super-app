@@ -6,11 +6,13 @@ vi.mock("@formstr/core", () => ({
   nostrRuntime: { subscribe: vi.fn() },
   relayManager: { getRelaysForModule: vi.fn(() => ["wss://relay.test"]) },
 }));
-vi.mock("../services/calendar/rsvp", () => ({ extractInvitationFromWrap: vi.fn() }));
-vi.mock("../services/calendar/service", () => ({ fetchCalendarEventByCoordinate: vi.fn() }));
+vi.mock("@formstr/agent/services/calendar/rsvp", () => ({ extractInvitationFromWrap: vi.fn() }));
+vi.mock("@formstr/agent/services/calendar/service", () => ({
+  fetchCalendarEventByCoordinate: vi.fn(),
+}));
 
-import { extractInvitationFromWrap } from "../services/calendar/rsvp";
-import { fetchCalendarEventByCoordinate } from "../services/calendar/service";
+import { extractInvitationFromWrap } from "@formstr/agent/services/calendar/rsvp";
+import { fetchCalendarEventByCoordinate } from "@formstr/agent/services/calendar/service";
 
 import { useCalendarStore } from "./calendarStore";
 import { useInvitationsStore } from "./invitationsStore";

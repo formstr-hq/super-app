@@ -2,6 +2,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { describe, it, expect } from "vitest";
 
+import { buildServer } from "../src/server";
+
 const NSEC = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
 
 // process.env has string|undefined values; StdioClientTransport requires Record<string,string>
@@ -42,4 +44,21 @@ describe("smoke: stdio handshake", () => {
     expect(names.has("rsvp_event")).toBe(true);
     expect(names.has("submit_poll_response")).toBe(true);
   }, 30_000);
+});
+
+describe("buildServer", () => {
+  const count = (s: ReturnType<typeof buildServer>): number =>
+    Object.keys(
+      (s as unknown as { _registeredTools?: Record<string, unknown> })._registeredTools ?? {},
+    ).length;
+
+  it("registers fewer tools in read-only mode than with writes", () => {
+    const ro = buildServer({ allowWrites: false });
+    const rw = buildServer({ allowWrites: true });
+    expect(count(rw)).toBeGreaterThan(count(ro));
+  });
+
+  it("registers all 51 tools with writes enabled", () => {
+    expect(count(buildServer({ allowWrites: true }))).toBe(51);
+  });
 });

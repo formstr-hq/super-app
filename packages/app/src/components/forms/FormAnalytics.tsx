@@ -1,3 +1,8 @@
+import {
+  AnswerType,
+  type FormResponseEvent,
+  type FormTemplate,
+} from "@formstr/agent/services/forms/types";
 import { Box, Chip, Grid2 as Grid, Paper, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { BarChart3, CheckCircle2, Clock, MessageSquare, Users } from "lucide-react";
@@ -20,7 +25,6 @@ import {
   formatPercent,
   type FieldBreakdown,
 } from "../../lib/analytics";
-import { AnswerType, type FormResponseEvent, type FormTemplate } from "../../services/forms/types";
 
 const CHART_COLORS = [
   "hsl(222 83% 58%)",
