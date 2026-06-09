@@ -7,6 +7,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
 import { LoginDialog } from "../components/LoginDialog";
+import { MigrationDialog } from "../components/MigrationDialog";
 import { UnlockDialog } from "../components/UnlockDialog";
 import { useAuthStore, useSettingsStore, useInvitationsStore } from "../stores";
 
@@ -137,6 +138,7 @@ export function AppShell() {
 
       <LoginDialog open={authModalOpen && authModalMode === "login"} onClose={closeAuthModal} />
       <UnlockDialog open={authModalOpen && authModalMode === "unlock"} onClose={closeAuthModal} />
+      <MigrationDialog />
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
