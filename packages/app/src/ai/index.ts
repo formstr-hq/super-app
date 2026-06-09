@@ -14,7 +14,15 @@ export type {
   AgentCallbacks,
 } from "./types";
 
-export { OllamaProvider, CloudLLMProvider, createLLMProvider } from "./provider";
+export {
+  AnthropicProvider,
+  GeminiProvider,
+  OllamaProvider,
+  OpenAIProvider,
+  OpenAICompatibleProvider,
+  createProvider,
+} from "./providers";
+export type { AIProviderType, ProviderSettings } from "./providers";
 export { buildToolDefinitions } from "./toolSchemas";
 export { entityFromTool } from "./entityMap";
 export { ConversationContext } from "./context";
