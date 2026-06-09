@@ -168,6 +168,13 @@ describe("SignerManager", () => {
     expect(seen.at(-1)).toEqual({ pubkey: "pk123", method: "nip07" });
   });
 
+  it("setActiveSigner wipes any legacy plaintext secret from localStorage", () => {
+    localStorage.setItem("formstr:client-secret", "deadbeefdeadbeef");
+    const mgr = new SignerManager();
+    mgr.setActiveSigner(null, "local", "lockedPk");
+    expect(localStorage.getItem("formstr:client-secret")).toBeNull();
+  });
+
   it("setActiveSigner(null, …) is a locked state: pubkey set but no signer", () => {
     const mgr = new SignerManager();
     mgr.setActiveSigner(null, "local", "lockedPk");

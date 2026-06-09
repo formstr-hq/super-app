@@ -137,6 +137,14 @@ export class SignerManager {
    * only — never any secret.
    */
   setActiveSigner(signer: NostrSigner | null, method: SignerMethod, pubkey: string): void {
+    // Zeroize any prior in-memory key before swapping (mirrors logout()).
+    if (this.signer instanceof LocalSigner && this.signer !== signer) {
+      this.signer.dispose();
+    }
+    // The @formstr/signer-backed model never persists a raw identity key. Wipe
+    // any legacy plaintext secret so the next boot can't resurrect a stale
+    // identity via resolveSignerAsync()'s local/guest path.
+    localStorage.removeItem(KEY_SECRET);
     this.signer = signer;
     this.method = method;
     this.pubkey = pubkey;
@@ -152,9 +160,7 @@ export class SignerManager {
   }
 
   logout(): void {
-    if (this.signer instanceof LocalSigner) {
-      this.signer.dispose();
-    }
+    this.disposeCurrentSigner();
     this.signer = null;
     this.pubkey = null;
     this.method = null;
@@ -163,6 +169,13 @@ export class SignerManager {
     localStorage.removeItem(KEY_PUBKEY);
     localStorage.removeItem(KEY_SECRET);
     this.notify();
+  }
+
+  /** Zero the in-memory secret of the active signer if it holds one. */
+  private disposeCurrentSigner(): void {
+    if (this.signer instanceof LocalSigner) {
+      this.signer.dispose();
+    }
   }
 
   // ── Access ──────────────────────────────────────────────
