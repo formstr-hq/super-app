@@ -1,4 +1,4 @@
-import { Box, Divider, IconButton, MenuItem, Select, TextField, Typography } from "@mui/material";
+import { Box, Divider, IconButton, TextField, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { AlertCircle, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
@@ -9,6 +9,7 @@ import { AgentRunBlock } from "./AgentRunBlock";
 import { ConfirmActionCard } from "./ConfirmActionCard";
 import { EntityCard } from "./EntityCard";
 import { MessageBubble } from "./MessageBubble";
+import { ProviderModelPill } from "./ProviderModelPill";
 
 function StatusDot({ status }: { status: string }) {
   const color =
@@ -45,15 +46,12 @@ export function AIChatPanel() {
     pendingConfirm,
     providerStatus,
     errorMessage,
-    availableModels,
     sendMessage,
     initProvider,
     reset,
-    setModel,
     resolveConfirm,
   } = useAIStore();
-  const { aiPanelOpen, setAIPanelOpen, aiProvider, aiModels } = useSettingsStore();
-  const aiModel = aiModels[aiProvider] ?? null;
+  const { aiPanelOpen, setAIPanelOpen } = useSettingsStore();
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
@@ -128,26 +126,7 @@ export function AIChatPanel() {
           <StatusDot status={providerStatus} />
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          {availableModels.length > 0 && (
-            <Select
-              value={aiModel ?? availableModels[0] ?? ""}
-              onChange={(e) => setModel(e.target.value)}
-              variant="standard"
-              disableUnderline
-              sx={{
-                fontSize: 11,
-                color: "text.secondary",
-                maxWidth: 110,
-                "& .MuiSelect-select": { py: 0 },
-              }}
-            >
-              {availableModels.map((m) => (
-                <MenuItem key={m} value={m} sx={{ fontSize: 12 }}>
-                  {m.replace(/:latest$/, "")}
-                </MenuItem>
-              ))}
-            </Select>
-          )}
+          <ProviderModelPill />
           <IconButton
             size="small"
             onClick={reset}
