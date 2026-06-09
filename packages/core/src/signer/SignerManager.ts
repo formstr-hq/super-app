@@ -129,6 +129,22 @@ export class SignerManager {
     this.notify();
   }
 
+  /**
+   * Inject an externally-managed active signer. The web app drives identity via
+   * `@formstr/signer` and pushes the unlocked signer in here. Pass `null` for a
+   * locked account: `pubkey`/`method` are set (so the UI shows the account) but
+   * `getSigner()` will route to the login/unlock modal. Persists method+pubkey
+   * only — never any secret.
+   */
+  setActiveSigner(signer: NostrSigner | null, method: SignerMethod, pubkey: string): void {
+    this.signer = signer;
+    this.method = method;
+    this.pubkey = pubkey;
+    this.ready = true;
+    this.persist();
+    this.notify();
+  }
+
   async createGuestAccount(): Promise<void> {
     const signer = new LocalSigner();
     localStorage.setItem(KEY_SECRET, bytesToHex(signer.getSecretKey()));

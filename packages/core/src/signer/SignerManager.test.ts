@@ -148,4 +148,41 @@ describe("SignerManager", () => {
     expect(mgr.getState().method).toBe("guest");
     expect(mgr.getPublicKey()).toBeTypeOf("string");
   });
+
+  it("setActiveSigner sets state, persists method+pubkey (no secret), and notifies", () => {
+    const mgr = new SignerManager();
+    const fake = {
+      getPublicKey: async () => "pk",
+      signEvent: async () => ({}) as any,
+    } as any;
+    const seen: Array<{ pubkey: string | null; method: string | null }> = [];
+    mgr.onChange((s) => seen.push({ pubkey: s.pubkey, method: s.method }));
+
+    mgr.setActiveSigner(fake, "nip07", "pk123");
+
+    expect(mgr.getSignerIfAvailable()).toBe(fake);
+    expect(mgr.getState()).toMatchObject({ pubkey: "pk123", method: "nip07", ready: true });
+    expect(localStorage.getItem("formstr:pubkey")).toBe("pk123");
+    expect(localStorage.getItem("formstr:signer-method")).toBe("nip07");
+    expect(localStorage.getItem("formstr:client-secret")).toBeNull();
+    expect(seen.at(-1)).toEqual({ pubkey: "pk123", method: "nip07" });
+  });
+
+  it("setActiveSigner(null, …) is a locked state: pubkey set but no signer", () => {
+    const mgr = new SignerManager();
+    mgr.setActiveSigner(null, "local", "lockedPk");
+    expect(mgr.getSignerIfAvailable()).toBeNull();
+    expect(mgr.getState()).toMatchObject({ pubkey: "lockedPk", method: "local", ready: true });
+  });
+
+  it("locked getSigner() (signer null) routes to the registered login modal", async () => {
+    const mgr = new SignerManager();
+    const resolved = {
+      getPublicKey: async () => "pk",
+      signEvent: async () => ({}) as any,
+    } as any;
+    mgr.registerLoginModal(async () => resolved);
+    mgr.setActiveSigner(null, "local", "lockedPk");
+    await expect(mgr.getSigner()).resolves.toBe(resolved);
+  });
 });
