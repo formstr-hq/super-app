@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import { createLLMProvider, ConversationContext, Agent } from "../ai";
+import { createProvider, ConversationContext, Agent } from "../ai";
 import type { Message, LLMProvider, EntityRef, RunStep, ConfirmRequest } from "../ai/types";
 
 import { useAuthStore } from "./authStore";
@@ -67,6 +67,14 @@ function persistEntities(entities: EntityRef[]): void {
   }
 }
 
+function unavailableMessage(provider: string): string {
+  if (provider === "ollama")
+    return "Ollama is not reachable. Start it or pick a cloud provider in Settings.";
+  if (provider === "openai-compat")
+    return "No local endpoint configured. Set a base URL in Settings.";
+  return "No API key configured for this provider. Add one in Settings.";
+}
+
 // ── Load persisted state and hydrate context ────────────
 
 const _persistedMessages = loadPersistedMessages();
@@ -113,18 +121,30 @@ export const useAIStore = create<AIStore>((set, get) => ({
   _agent: null,
 
   async initProvider() {
-    const { aiProvider, aiEndpoint, aiModel, aiApiKey } = useSettingsStore.getState();
+    const settings = useSettingsStore.getState();
     set({ providerStatus: "connecting", errorMessage: null });
 
     try {
-      const provider = await createLLMProvider({ aiProvider, aiEndpoint, aiModel, aiApiKey });
+      const provider = createProvider({
+        aiProvider: settings.aiProvider,
+        apiKeys: settings.apiKeys,
+        ollamaUrl: settings.ollamaUrl,
+        compatBaseUrl: settings.compatBaseUrl,
+        compatKey: settings.compatKey,
+      });
+
+      if (!(await provider.isAvailable())) {
+        set({ providerStatus: "error", errorMessage: unavailableMessage(settings.aiProvider) });
+        return;
+      }
+
       const models = await provider.getAvailableModels();
       const context = get()._context;
       const agent = new Agent(provider, context);
 
-      // Auto-select first model if none is configured
-      if (!aiModel && models.length > 0) {
-        useSettingsStore.getState().setAIConfig({ aiModel: models[0] });
+      // Auto-select the first model when none is chosen for this provider.
+      if (!settings.aiModels[settings.aiProvider] && models.length > 0) {
+        useSettingsStore.getState().setProviderModel(settings.aiProvider, models[0]);
       }
 
       set({
@@ -153,7 +173,8 @@ export const useAIStore = create<AIStore>((set, get) => ({
     }
 
     const agent = get()._agent!;
-    const { aiModel } = useSettingsStore.getState();
+    const { aiProvider, aiModels } = useSettingsStore.getState();
+    const aiModel = aiModels[aiProvider] ?? undefined;
     const pubkey = useAuthStore.getState().pubkey;
 
     const userMsg: Message = {
@@ -248,7 +269,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
             });
           },
         },
-        aiModel ?? undefined,
+        aiModel,
       );
     } catch (e) {
       set({
@@ -269,7 +290,8 @@ export const useAIStore = create<AIStore>((set, get) => ({
   },
 
   setModel(model: string) {
-    useSettingsStore.getState().setAIConfig({ aiModel: model });
+    const { aiProvider } = useSettingsStore.getState();
+    useSettingsStore.getState().setProviderModel(aiProvider, model);
   },
 
   reset() {

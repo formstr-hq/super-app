@@ -36,10 +36,9 @@ vi.mock("../ai", async () => {
   return {
     ...actual,
     Agent: FakeAgent,
-    createLLMProvider: vi.fn(async () => ({
+    createProvider: vi.fn(() => ({
       getAvailableModels: async () => ["fake-model"],
       isAvailable: async () => true,
-      generate: async () => ({ content: "" }),
       generateStream: async () => {},
     })),
   };

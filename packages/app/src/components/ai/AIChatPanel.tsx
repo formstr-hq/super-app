@@ -52,7 +52,8 @@ export function AIChatPanel() {
     setModel,
     resolveConfirm,
   } = useAIStore();
-  const { aiPanelOpen, setAIPanelOpen, aiModel } = useSettingsStore();
+  const { aiPanelOpen, setAIPanelOpen, aiProvider, aiModels } = useSettingsStore();
+  const aiModel = aiModels[aiProvider] ?? null;
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
