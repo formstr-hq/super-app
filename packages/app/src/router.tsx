@@ -12,6 +12,9 @@ const CalendarPage = lazy(() =>
 const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })));
 const DrivePage = lazy(() => import("./pages/DrivePage").then((m) => ({ default: m.DrivePage })));
 const PollsPage = lazy(() => import("./pages/PollsPage").then((m) => ({ default: m.PollsPage })));
+const SettingsPage = lazy(() =>
+  import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
 
 function RouteFallback() {
   return (
@@ -92,6 +95,14 @@ export const router = createBrowserRouter([
         element: (
           <LazyRoute>
             <PollsPage />
+          </LazyRoute>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <LazyRoute>
+            <SettingsPage />
           </LazyRoute>
         ),
       },

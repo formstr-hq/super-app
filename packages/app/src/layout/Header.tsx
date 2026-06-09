@@ -13,7 +13,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { LogOut, Menu as MenuIcon, Moon, Search, Settings, Sparkles, Sun } from "lucide-react";
 import { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuthStore, useSettingsStore } from "../stores";
 
@@ -43,6 +43,7 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
   const { pubkey, isLoggedIn, method, logout } = useAuthStore();
   const { toggleSidebar, aiPanelOpen, setAIPanelOpen, themeMode, toggleTheme } = useSettingsStore();
   const location = useLocation();
+  const navigate = useNavigate();
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -220,7 +221,14 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
                 </Typography>
               </Box>
               <Divider />
-              <MenuItem dense sx={{ gap: 1.5, fontSize: 13 }}>
+              <MenuItem
+                dense
+                onClick={() => {
+                  navigate("/settings");
+                  setAnchorEl(null);
+                }}
+                sx={{ gap: 1.5, fontSize: 13 }}
+              >
                 <Settings size={14} />
                 Settings
               </MenuItem>
