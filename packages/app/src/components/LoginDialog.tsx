@@ -1,17 +1,7 @@
-import { SignerUnavailableError } from "@formstr/core";
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogContent,
-  Divider,
-  IconButton,
-  InputAdornment,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Box, Button, Dialog, DialogContent, Divider, TextField, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { Eye, EyeOff, Key, Puzzle, Radio, UserRound } from "lucide-react";
+import { Key, Puzzle, Radio, ScanLine, UserPlus } from "lucide-react";
+import QRCode from "qrcode";
 import { useState } from "react";
 
 import { useAuthStore } from "../stores";
@@ -21,72 +11,90 @@ interface LoginDialogProps {
   onClose: () => void;
 }
 
+type Mode = null | "create" | "import" | "bunker" | "qr";
+
+const NOSTRCONNECT_RELAY = "wss://relay.nsec.app";
+
 export function LoginDialog({ open, onClose }: LoginDialogProps) {
-  const { loginWithNsec, loginWithNip07, loginAsGuest } = useAuthStore();
-  const [nsecExpanded, setNsecExpanded] = useState(false);
-  const [nsec, setNsec] = useState("");
-  const [showNsec, setShowNsec] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<string | null>(null);
+  const {
+    loginWithExtension,
+    createAccount,
+    importKey,
+    loginWithBunkerUri,
+    loginWithNostrConnect,
+  } = useAuthStore();
   const theme = useTheme();
 
-  const wrap = async (key: string, fn: () => Promise<void>) => {
-    setLoading(key);
+  const [mode, setMode] = useState<Mode>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [passphrase, setPassphrase] = useState("");
+  const [keyInput, setKeyInput] = useState("");
+  const [bunkerUri, setBunkerUri] = useState("");
+  const [createdNcryptsec, setCreatedNcryptsec] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  const reset = () => {
+    setMode(null);
+    setBusy(false);
+    setError(null);
+    setPassphrase("");
+    setKeyInput("");
+    setBunkerUri("");
+    setCreatedNcryptsec(null);
+    setQrDataUrl(null);
+  };
+
+  const close = () => {
+    reset();
+    onClose();
+  };
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
     setError(null);
     try {
       await fn();
-      setNsec("");
-      onClose();
     } catch (e) {
-      if (e instanceof SignerUnavailableError && e.code === "no-signer") {
-        setError("Browser extension not detected — install Alby, nos2x, or use a private key.");
-      } else {
-        setError(e instanceof Error ? e.message : "Something went wrong");
-      }
+      setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
-      setLoading(null);
+      setBusy(false);
     }
   };
 
   return (
     <Dialog
       open={open}
-      onClose={onClose}
-      PaperProps={{ sx: { width: "100%", maxWidth: 380, borderRadius: 2, overflow: "hidden" } }}
+      onClose={close}
+      PaperProps={{ sx: { width: "100%", maxWidth: 400, borderRadius: 2, overflow: "hidden" } }}
     >
-      {/* Header */}
       <Box
         sx={{
           bgcolor: "background.paper",
           borderBottom: `1px solid ${theme.palette.divider}`,
           px: 3,
           py: 2.5,
+          display: "flex",
+          alignItems: "center",
+          gap: 1.5,
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.5 }}>
-          <Box
-            sx={{
-              width: 32,
-              height: 32,
-              bgcolor: "text.primary",
-              borderRadius: "8px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <Radio size={16} style={{ color: theme.palette.background.default }} />
-          </Box>
-          <Typography variant="body1" fontWeight={600}>
-            Welcome to Formstr
-          </Typography>
-        </Box>
-        <Typography
-          variant="caption"
-          sx={{ color: "text.secondary", ml: "44px", display: "block" }}
+        <Box
+          sx={{
+            width: 32,
+            height: 32,
+            bgcolor: "text.primary",
+            borderRadius: "8px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
-          A decentralised workspace powered by Nostr
+          <Radio size={16} style={{ color: theme.palette.background.default }} />
+        </Box>
+        <Typography variant="body1" fontWeight={600}>
+          Sign in to Formstr
         </Typography>
       </Box>
 
@@ -100,152 +108,275 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
               px: 2,
               py: 1,
               fontSize: 13,
-              opacity: 0.9,
             }}
           >
             {error}
           </Box>
         )}
 
-        {/* NIP-07 Extension — primary */}
-        <Box
-          onClick={() => wrap("nip07", loginWithNip07)}
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1.5,
-            border: `2px solid ${theme.palette.text.primary}`,
-            borderRadius: 1.5,
-            px: 2,
-            py: 1.5,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.6 : 1,
-            bgcolor: "background.paper",
-            transition: "background 150ms",
-            "&:hover": { bgcolor: "action.hover" },
-          }}
-        >
-          <Puzzle size={20} style={{ color: theme.palette.text.primary, flexShrink: 0 }} />
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="body2" fontWeight={500}>
-              {loading === "nip07" ? "Connecting…" : "Browser Extension"}
+        {createdNcryptsec ? (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            <Typography variant="body2" fontWeight={600}>
+              Save your encrypted key
             </Typography>
             <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              NIP-07 (Alby, nos2x, …)
+              This <strong>ncryptsec</strong> + your passphrase are the only way back into this
+              account on another device. Store it somewhere safe.
             </Typography>
+            <TextField
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+              value={createdNcryptsec}
+              InputProps={{ readOnly: true, sx: { fontFamily: "monospace", fontSize: 12 } }}
+            />
+            <Button variant="contained" size="small" onClick={close}>
+              Done
+            </Button>
           </Box>
-          {loading === "nip07" && (
-            <Box
-              sx={{
-                width: 16,
-                height: 16,
-                borderRadius: "50%",
-                border: "2px solid",
-                borderColor: "text.primary",
-                borderTopColor: "transparent",
-                animation: "spin 0.6s linear infinite",
-                "@keyframes spin": { to: { transform: "rotate(360deg)" } },
+        ) : mode === null ? (
+          <>
+            <RowButton
+              icon={<Puzzle size={20} />}
+              title={busy ? "Connecting…" : "Browser Extension"}
+              subtitle="NIP-07 (Alby, nos2x, …)"
+              primary
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await loginWithExtension();
+                  close();
+                })
+              }
+            />
+            <Divider />
+            <RowButton
+              icon={<UserPlus size={20} />}
+              title="Create new account"
+              subtitle="Encrypted with a passphrase (NIP-49)"
+              disabled={busy}
+              onClick={() => {
+                setMode("create");
+                setError(null);
               }}
             />
-          )}
-        </Box>
-
-        <Divider />
-
-        {/* nsec — expandable */}
-        <Box>
-          <Box
-            onClick={() => setNsecExpanded((v) => !v)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 1.5,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: nsecExpanded ? "6px 6px 0 0" : 1.5,
-              px: 2,
-              py: 1.5,
-              cursor: "pointer",
-              bgcolor: "background.default",
-              transition: "background 150ms",
-              "&:hover": { bgcolor: "action.hover" },
-            }}
-          >
-            <Key size={20} style={{ color: theme.palette.text.secondary, flexShrink: 0 }} />
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="body2" fontWeight={500}>
-                Private Key
-              </Typography>
-              <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                nsec… or hex key
-              </Typography>
-            </Box>
-          </Box>
-
-          {nsecExpanded && (
-            <Box
-              sx={{
-                border: `1px solid ${theme.palette.divider}`,
-                borderTop: 0,
-                borderRadius: "0 0 6px 6px",
-                px: 2,
-                pb: 2,
-                pt: 1.5,
-                bgcolor: "background.paper",
-                display: "flex",
-                flexDirection: "column",
-                gap: 1.5,
+            <RowButton
+              icon={<Key size={20} />}
+              title="Import private key"
+              subtitle="nsec / hex / ncryptsec + passphrase"
+              disabled={busy}
+              onClick={() => {
+                setMode("import");
+                setError(null);
               }}
+            />
+            <RowButton
+              icon={<Radio size={20} />}
+              title="Remote signer (bunker)"
+              subtitle="NIP-46 bunker:// URI"
+              disabled={busy}
+              onClick={() => {
+                setMode("bunker");
+                setError(null);
+              }}
+            />
+            <RowButton
+              icon={<ScanLine size={20} />}
+              title="Remote signer (QR)"
+              subtitle="nostrconnect:// pairing"
+              disabled={busy}
+              onClick={() => {
+                setMode("qr");
+                setError(null);
+              }}
+            />
+          </>
+        ) : mode === "create" ? (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            <TextField
+              size="small"
+              fullWidth
+              type="password"
+              label="Passphrase"
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              autoFocus
+            />
+            <Button
+              variant="contained"
+              size="small"
+              disabled={!passphrase || busy}
+              onClick={() =>
+                run(async () => {
+                  const { ncryptsec } = await createAccount(passphrase);
+                  setCreatedNcryptsec(ncryptsec);
+                })
+              }
             >
-              <TextField
-                size="small"
-                fullWidth
-                type={showNsec ? "text" : "password"}
-                placeholder="nsec1…"
-                value={nsec}
-                onChange={(e) => setNsec(e.target.value)}
-                autoComplete="off"
-                inputProps={{ style: { fontFamily: "monospace", fontSize: 13 } }}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        size="small"
-                        edge="end"
-                        onClick={() => setShowNsec((v) => !v)}
-                        aria-label={showNsec ? "Hide key" : "Show key"}
-                      >
-                        {showNsec ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
+              {busy ? "Creating…" : "Create account"}
+            </Button>
+            <BackLink onClick={reset} />
+          </Box>
+        ) : mode === "import" ? (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            <TextField
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+              label="nsec / hex / ncryptsec"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              inputProps={{ style: { fontFamily: "monospace", fontSize: 12 } }}
+              autoFocus
+            />
+            <TextField
+              size="small"
+              fullWidth
+              type="password"
+              label="Passphrase"
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              helperText="Encrypts the key at rest (and decrypts an ncryptsec)."
+            />
+            <Button
+              variant="contained"
+              size="small"
+              disabled={!keyInput.trim() || !passphrase || busy}
+              onClick={() =>
+                run(async () => {
+                  await importKey(keyInput, passphrase);
+                  close();
+                })
+              }
+            >
+              {busy ? "Importing…" : "Import"}
+            </Button>
+            <BackLink onClick={reset} />
+          </Box>
+        ) : mode === "bunker" ? (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            <TextField
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+              label="bunker:// URI"
+              value={bunkerUri}
+              onChange={(e) => setBunkerUri(e.target.value)}
+              inputProps={{ style: { fontFamily: "monospace", fontSize: 12 } }}
+              autoFocus
+            />
+            <Button
+              variant="contained"
+              size="small"
+              disabled={!bunkerUri.trim() || busy}
+              onClick={() =>
+                run(async () => {
+                  await loginWithBunkerUri(bunkerUri);
+                  close();
+                })
+              }
+            >
+              {busy ? "Connecting…" : "Connect"}
+            </Button>
+            <BackLink onClick={reset} />
+          </Box>
+        ) : (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, alignItems: "center" }}>
+            {qrDataUrl ? (
+              <>
+                <Box
+                  component="img"
+                  src={qrDataUrl}
+                  alt="nostrconnect QR"
+                  sx={{ width: 220, height: 220 }}
+                />
+                <Typography variant="caption" sx={{ color: "text.secondary", textAlign: "center" }}>
+                  Scan with your remote signer (Amber, …). Waiting for pairing…
+                </Typography>
+              </>
+            ) : (
               <Button
                 variant="contained"
                 size="small"
                 fullWidth
-                disabled={!nsec.trim() || !!loading}
-                onClick={() => wrap("nsec", () => loginWithNsec(nsec))}
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await loginWithNostrConnect({
+                      relays: [NOSTRCONNECT_RELAY],
+                      onUri: async (uri) => setQrDataUrl(await QRCode.toDataURL(uri)),
+                    });
+                    close();
+                  })
+                }
               >
-                {loading === "nsec" ? "Signing in…" : "Sign in"}
+                {busy ? "Generating…" : "Generate pairing QR"}
               </Button>
-            </Box>
-          )}
-        </Box>
-
-        {/* Guest */}
-        <Button
-          variant="outlined"
-          size="small"
-          fullWidth
-          startIcon={<UserRound size={16} />}
-          onClick={() => wrap("guest", loginAsGuest)}
-          disabled={!!loading}
-          sx={{ borderStyle: "dashed", borderColor: "divider", color: "text.secondary" }}
-        >
-          {loading === "guest" ? "Creating account…" : "Continue as Guest"}
-        </Button>
+            )}
+            <BackLink onClick={reset} />
+          </Box>
+        )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RowButton(props: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  primary?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Box
+      onClick={props.disabled ? undefined : props.onClick}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+        border: `${props.primary ? 2 : 1}px solid ${
+          props.primary ? theme.palette.text.primary : theme.palette.divider
+        }`,
+        borderRadius: 1.5,
+        px: 2,
+        py: 1.5,
+        cursor: props.disabled ? "not-allowed" : "pointer",
+        opacity: props.disabled ? 0.6 : 1,
+        "&:hover": { bgcolor: "action.hover" },
+      }}
+    >
+      <Box sx={{ color: "text.primary", flexShrink: 0, display: "flex" }}>{props.icon}</Box>
+      <Box sx={{ flex: 1 }}>
+        <Typography variant="body2" fontWeight={500}>
+          {props.title}
+        </Typography>
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+          {props.subtitle}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
+function BackLink({ onClick }: { onClick: () => void }) {
+  return (
+    <Typography
+      variant="caption"
+      onClick={onClick}
+      sx={{
+        color: "text.secondary",
+        cursor: "pointer",
+        textAlign: "center",
+        "&:hover": { color: "text.primary" },
+      }}
+    >
+      ← Back
+    </Typography>
   );
 }
