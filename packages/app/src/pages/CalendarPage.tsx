@@ -3,6 +3,7 @@ import { CALENDAR_KINDS } from "@formstr/agent/services/calendar";
 import { Box, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 
+import { AvailabilityView } from "../components/calendar/AvailabilityView";
 import { BookingsView } from "../components/calendar/BookingsView";
 import { CalendarHeader } from "../components/calendar/CalendarHeader";
 import { CalendarListView } from "../components/calendar/CalendarListView";
@@ -42,7 +43,9 @@ export function CalendarPage() {
   );
   const fetchBookings = useBookingStore((s) => s.fetchAll);
 
-  const [view, setView] = useState<"calendar" | "invitations" | "bookings">("calendar");
+  const [view, setView] = useState<"calendar" | "invitations" | "bookings" | "availability">(
+    "calendar",
+  );
   const [viewMode, setViewMode] = useState<"month" | "list">("month");
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
@@ -130,6 +133,7 @@ export function CalendarPage() {
         schedulingPages={schedulingPages}
         pendingBookings={pendingBookings}
         onOpenBookings={() => setView("bookings")}
+        onOpenAvailability={() => setView("availability")}
       />
 
       <Box
@@ -146,6 +150,8 @@ export function CalendarPage() {
           <InvitationsView onBack={() => setView("calendar")} />
         ) : view === "bookings" ? (
           <BookingsView onBack={() => setView("calendar")} />
+        ) : view === "availability" ? (
+          <AvailabilityView onBack={() => setView("calendar")} />
         ) : (
           <>
             <CalendarHeader

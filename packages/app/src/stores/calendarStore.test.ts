@@ -282,4 +282,37 @@ describe("public busy list (kind 31926) wiring", () => {
     await flush();
     expect(removeBusyRange).toHaveBeenCalledWith({ start: 1000, end: 2000 });
   });
+
+  it("createEvent publishes nothing when the user opted out of busy publishing", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ publishBusyTimes: false });
+    try {
+      (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
+        evt({ id: "d9", begin: 1000, end: 2000 }),
+      );
+      await useCalendarStore.getState().createEvent({
+        title: "X",
+        description: "",
+        begin: new Date(1000),
+        end: new Date(2000),
+      } as any);
+      await flush();
+      expect(addBusyRange).not.toHaveBeenCalled();
+    } finally {
+      useSettingsStore.setState({ publishBusyTimes: true });
+    }
+  });
+
+  it("deleteEvent still retracts the busy range when opted out (cleanup of past publishes)", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ publishBusyTimes: false });
+    try {
+      useCalendarStore.setState({ events: [evt({ id: "d1", begin: 1000, end: 2000 })] });
+      await useCalendarStore.getState().deleteEvent("d1", "31923:pub:d1");
+      await flush();
+      expect(removeBusyRange).toHaveBeenCalledWith({ start: 1000, end: 2000 });
+    } finally {
+      useSettingsStore.setState({ publishBusyTimes: true });
+    }
+  });
 });

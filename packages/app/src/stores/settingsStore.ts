@@ -83,6 +83,11 @@ export function readAISettings(): AISettingsState {
   };
 }
 
+/** Busy-time publishing is on unless the user explicitly opted out. */
+export function readPublishBusyTimes(): boolean {
+  return localStorage.getItem("formstr:publish-busy-times") !== "false";
+}
+
 function isAIProvider(v: string): v is AIProviderType {
   return ["anthropic", "openai", "gemini", "ollama", "openai-compat"].includes(v);
 }
@@ -107,6 +112,8 @@ interface SettingsStore {
   sidebarOpen: boolean;
   sidebarCollapsed: boolean; // desktop: collapsed to icon-only
   formsView: FormsView; // forms list layout: card grid vs dense list
+  /** Auto-publish kind-31926 busy ranges from calendar events (device-local). */
+  publishBusyTimes: boolean;
 
   // AI settings
   aiProvider: AIProviderType;
@@ -123,6 +130,7 @@ interface SettingsStore {
   setSidebarOpen(open: boolean): void;
   toggleSidebarCollapsed(): void;
   setFormsView(view: FormsView): void;
+  setPublishBusyTimes(enabled: boolean): void;
   setActiveProvider(provider: AIProviderType): void;
   setApiKey(provider: CloudProvider, key: string | null): void;
   setProviderModel(provider: AIProviderType, model: string | null): void;
@@ -144,6 +152,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   sidebarOpen: true,
   sidebarCollapsed: false,
   formsView: (localStorage.getItem("formstr:forms-view") as FormsView) ?? "grid",
+  publishBusyTimes: readPublishBusyTimes(),
 
   aiProvider: _ai.aiProvider,
   apiKeys: _ai.apiKeys,
@@ -178,6 +187,11 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   setFormsView(view: FormsView) {
     localStorage.setItem("formstr:forms-view", view);
     set({ formsView: view });
+  },
+
+  setPublishBusyTimes(enabled: boolean) {
+    localStorage.setItem("formstr:publish-busy-times", String(enabled));
+    set({ publishBusyTimes: enabled });
   },
 
   setActiveProvider(provider) {

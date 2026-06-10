@@ -108,6 +108,29 @@ describe("saved prompts", () => {
   });
 });
 
+describe("busy-time publishing opt-out", () => {
+  it("defaults to enabled, and the setter persists both directions", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ publishBusyTimes: true });
+
+    useSettingsStore.getState().setPublishBusyTimes(false);
+    expect(useSettingsStore.getState().publishBusyTimes).toBe(false);
+    expect(localStorage.getItem("formstr:publish-busy-times")).toBe("false");
+
+    useSettingsStore.getState().setPublishBusyTimes(true);
+    expect(useSettingsStore.getState().publishBusyTimes).toBe(true);
+    expect(localStorage.getItem("formstr:publish-busy-times")).toBe("true");
+  });
+
+  it("readPublishBusyTimes treats anything but the stored opt-out as enabled", async () => {
+    const { readPublishBusyTimes } = await import("./settingsStore");
+    localStorage.removeItem("formstr:publish-busy-times");
+    expect(readPublishBusyTimes()).toBe(true);
+    localStorage.setItem("formstr:publish-busy-times", "false");
+    expect(readPublishBusyTimes()).toBe(false);
+  });
+});
+
 describe("settings setters", () => {
   beforeEach(() => localStorage.clear());
 

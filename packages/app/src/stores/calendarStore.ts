@@ -7,14 +7,19 @@ import { addBusyRange, removeBusyRange } from "@formstr/agent/services/calendar/
 import * as calendarService from "@formstr/agent/services/calendar/service";
 import { create } from "zustand";
 
+import { useSettingsStore } from "./settingsStore";
+
 /**
  * Best-effort kind-31926 busy-list upkeep. The hosted booking page
  * (calendar.formstr.app/schedule/…) computes slot availability from these, so
  * without them every super-app slot looks free to bookers. Recurring events
  * are skipped — public busy lists store only raw [start,end] ranges (upstream
- * behavior). Never blocks the event flow on relay roundtrips.
+ * behavior). Never blocks the event flow on relay roundtrips. Publishing is
+ * gated on the device-local opt-out; retraction is NOT (deleting an event must
+ * still clean up ranges published before the user opted out).
  */
 function publishBusyRangeFor(event: CalendarEvent): void {
+  if (!useSettingsStore.getState().publishBusyTimes) return;
   if (event.repeat.rrule) return;
   void addBusyRange({ start: event.begin, end: event.end }).catch(() => {});
 }
