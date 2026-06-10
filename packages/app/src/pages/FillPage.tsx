@@ -8,6 +8,7 @@ import type { AddressPointer } from "nostr-tools/nip19";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
+import { validateAllAnswers } from "../components/forms/FieldInput";
 import { FormFieldsRenderer } from "../components/forms/FormFieldsRenderer";
 import { ResponderIdentityBar, type IdentityMode } from "../components/forms/ResponderIdentityBar";
 import { useAuthStore } from "../stores";
@@ -24,38 +25,45 @@ export function FillPage() {
   const [identityMode, setIdentityMode] = useState<IdentityMode>("anonymous");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!naddr) return;
 
     let pubkey: string;
     let identifier: string;
+    let relayHints: string[] | undefined;
     try {
       const decoded = nip19.decode(naddr);
       if (decoded.type !== "naddr") throw new Error("not naddr");
       const ptr = decoded.data as AddressPointer;
       pubkey = ptr.pubkey;
       identifier = ptr.identifier;
+      relayHints = ptr.relays?.length ? ptr.relays : undefined;
     } catch {
       setError("Invalid form link");
       setLoading(false);
       return;
     }
 
-    // Decode optional view key from URL fragment: #<encodeNKeys output>
+    // View key, upstream priority order: `#nkeys…` fragment, then `?viewKey=` param
+    // (formstr.app emits both link shapes).
     let viewKey: string | undefined;
     const hash = window.location.hash.slice(1); // strip leading "#"
-    if (hash) {
+    if (hash.startsWith("nkeys")) {
       try {
-        const keys = decodeNKeys(hash);
-        viewKey = keys.viewKey;
+        viewKey = decodeNKeys(hash).viewKey;
       } catch {
         /* malformed fragment — ignore */
       }
     }
+    if (!viewKey) {
+      viewKey = new URLSearchParams(window.location.search).get("viewKey") ?? undefined;
+    }
 
     formsService
-      .fetchForm(pubkey, identifier, viewKey)
+      .fetchForm(pubkey, identifier, viewKey, relayHints)
       .then((f) => {
         setForm(f);
         setLoading(false);
@@ -76,7 +84,14 @@ export function FillPage() {
 
   const handleSubmit = async () => {
     if (!form) return;
+    const issues = validateAllAnswers(form.fields, values, checkAnswers);
+    if (issues.length > 0) {
+      setFieldErrors(Object.fromEntries(issues.map((i) => [i.fieldId, i.message])));
+      return;
+    }
+    setFieldErrors({});
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const responses: FormResponse[] = form.fields
         .filter((f) => f.type !== AnswerType.label && f.type !== AnswerType.section)
@@ -118,6 +133,8 @@ export function FillPage() {
         );
       }
       setSubmitted(true);
+    } catch {
+      setSubmitError("Could not submit your response. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -179,7 +196,13 @@ export function FillPage() {
         requiresLogin={requiresLogin}
       />
 
-      {requiresLogin && !isLoggedIn ? (
+      {form.isEncrypted && form.fields.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          This form is encrypted and the link is missing its view key, so the questions can&apos;t
+          be displayed. Ask the form owner for a complete share link
+          {!isLoggedIn ? ", or log in if you were granted access" : ""}.
+        </Typography>
+      ) : requiresLogin && !isLoggedIn ? (
         <Typography variant="body2" color="text.secondary">
           This form requires you to log in before filling it out.
         </Typography>
@@ -189,9 +212,15 @@ export function FillPage() {
             fields={form.fields}
             values={values}
             checkAnswers={checkAnswers}
+            errors={fieldErrors}
             onChange={(fieldId, value) => setValues((prev) => ({ ...prev, [fieldId]: value }))}
             onToggleCheck={toggleCheck}
           />
+          {submitError && (
+            <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+              {submitError}
+            </Typography>
+          )}
           <Box sx={{ mt: 3 }}>
             <Button variant="contained" onClick={handleSubmit} disabled={submitting} fullWidth>
               {submitting ? "Submitting…" : "Submit"}

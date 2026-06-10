@@ -12,6 +12,7 @@ import {
   DialogTitle,
   IconButton,
   Skeleton,
+  Snackbar,
   Tab,
   Table,
   TableBody,
@@ -22,8 +23,10 @@ import {
   Typography,
 } from "@mui/material";
 import { Copy, Download } from "lucide-react";
+import { nip19 } from "nostr-tools";
 import { useState } from "react";
 
+import { copyText } from "../../lib/clipboard";
 import {
   downloadTextFile,
   renderAnswer,
@@ -44,6 +47,18 @@ interface Props {
 
 export function ResponsesDialog({ open, form, responses, isLoading, onClose }: Props) {
   const [tab, setTab] = useState(0);
+  const [copyFeedback, setCopyFeedback] = useState("");
+
+  const handleCopyNpub = async (pubkeyHex: string) => {
+    let npub = pubkeyHex;
+    try {
+      npub = nip19.npubEncode(pubkeyHex);
+    } catch {
+      /* malformed pubkey — copy the raw value */
+    }
+    const ok = await copyText(npub);
+    setCopyFeedback(ok ? "npub copied" : "Copy failed");
+  };
 
   const handleExportCsv = () => {
     if (!form) return;
@@ -140,8 +155,8 @@ export function ResponsesDialog({ open, form, responses, isLoading, onClose }: P
                           </Typography>
                           <IconButton
                             size="small"
-                            onClick={() => navigator.clipboard?.writeText(r.pubkey).catch(() => {})}
-                            aria-label="Copy responder pubkey"
+                            onClick={() => void handleCopyNpub(r.pubkey)}
+                            aria-label="Copy responder npub"
                           >
                             <Copy size={11} />
                           </IconButton>
@@ -187,6 +202,13 @@ export function ResponsesDialog({ open, form, responses, isLoading, onClose }: P
         <Box sx={{ flex: 1 }} />
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
+
+      <Snackbar
+        open={!!copyFeedback}
+        autoHideDuration={2000}
+        onClose={() => setCopyFeedback("")}
+        message={copyFeedback}
+      />
     </Dialog>
   );
 }

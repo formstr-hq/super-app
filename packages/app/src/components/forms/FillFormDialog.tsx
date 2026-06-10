@@ -18,7 +18,7 @@ import {
 import { Check, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { FieldInput } from "./FieldInput";
+import { FieldInput, validateAllAnswers } from "./FieldInput";
 
 interface Props {
   open: boolean;
@@ -33,6 +33,7 @@ export function FillFormDialog({ open, form, isLoading, onClose }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (form) {
@@ -40,6 +41,7 @@ export function FillFormDialog({ open, form, isLoading, onClose }: Props) {
       setCheckAnswers({});
       setSubmitted(false);
       setSubmitError(null);
+      setFieldErrors({});
     }
     // Reset only when a different form is loaded (by id), not on every `form` identity change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,20 +61,18 @@ export function FillFormDialog({ open, form, isLoading, onClose }: Props) {
 
   const handleSubmit = async () => {
     if (!form) return;
-    const missing = form.fields.filter((f) => {
-      if (!f.required) return false;
-      if (f.type === AnswerType.checkboxes) return !checkAnswers[f.id]?.size;
-      return !answers[f.id]?.trim();
-    });
-    if (missing.length > 0) {
-      setSubmitError(`Please fill required fields: ${missing.map((f) => f.label).join(", ")}`);
+    const issues = validateAllAnswers(form.fields, answers, checkAnswers);
+    if (issues.length > 0) {
+      setFieldErrors(Object.fromEntries(issues.map((i) => [i.fieldId, i.message])));
+      setSubmitError("Please fix the highlighted fields.");
       return;
     }
+    setFieldErrors({});
     setSubmitting(true);
     setSubmitError(null);
     try {
       const responses: FormResponse[] = form.fields
-        .filter((f) => f.type !== AnswerType.label)
+        .filter((f) => f.type !== AnswerType.label && f.type !== AnswerType.section)
         .map((f) => {
           let answer = answers[f.id] ?? "";
           if (f.type === AnswerType.checkboxes) {
@@ -167,6 +167,7 @@ export function FillFormDialog({ open, form, isLoading, onClose }: Props) {
                 field={field}
                 value={answers[field.id] ?? ""}
                 checkedValues={checkAnswers[field.id]}
+                error={fieldErrors[field.id]}
                 onChange={(v) => setAnswer(field.id, v)}
                 onToggleCheck={(optId) => toggleCheck(field.id, optId)}
               />

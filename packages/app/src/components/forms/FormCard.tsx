@@ -1,16 +1,17 @@
 import type { FormSummary } from "@formstr/agent/services/forms/types";
 import { Box, Card, Divider, IconButton, Tooltip, Typography } from "@mui/material";
-import { BarChart3, Link, Lock, Pencil, Trash2 } from "lucide-react";
+import { BarChart3, Link, Lock, Pencil, TextCursorInput, Trash2 } from "lucide-react";
 
 interface Props {
   form: FormSummary;
   onFill: (form: FormSummary) => void;
+  onEdit?: (form: FormSummary) => void;
   onViewResponses: (form: FormSummary) => void;
   onDelete: (form: FormSummary) => void;
   onCopyLink: (form: FormSummary) => void;
 }
 
-export function FormCard({ form, onFill, onViewResponses, onDelete, onCopyLink }: Props) {
+export function FormCard({ form, onFill, onEdit, onViewResponses, onDelete, onCopyLink }: Props) {
   const meta: string[] = [];
   if (form.responseCount !== undefined) {
     meta.push(`${form.responseCount} ${form.responseCount === 1 ? "response" : "responses"}`);
@@ -73,9 +74,21 @@ export function FormCard({ form, onFill, onViewResponses, onDelete, onCopyLink }
             onClick={() => onFill(form)}
             sx={{ color: "inherit", "&:hover": { color: "text.primary" } }}
           >
-            <Pencil size={15} />
+            <TextCursorInput size={15} />
           </IconButton>
         </Tooltip>
+        {onEdit && (
+          <Tooltip title="Edit form">
+            <IconButton
+              size="small"
+              aria-label="Edit form"
+              onClick={() => onEdit(form)}
+              sx={{ color: "inherit", "&:hover": { color: "text.primary" } }}
+            >
+              <Pencil size={15} />
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title="View responses">
           <IconButton
             size="small"

@@ -5,6 +5,7 @@ vi.mock("@formstr/agent/services/forms/service", () => ({
   fetchForm: vi.fn(),
   subscribeToResponses: vi.fn(),
   createForm: vi.fn(),
+  updateForm: vi.fn(),
   deleteForm: vi.fn(),
   saveToMyForms: vi.fn(),
 }));
@@ -186,6 +187,36 @@ describe("createForm", () => {
     );
 
     expect(useFormsStore.getState().error).toContain("offline");
+  });
+});
+
+describe("updateForm", () => {
+  it("calls the service and updates the cached summary name", async () => {
+    useFormsStore.setState({
+      myForms: [{ id: "f1", name: "Old name", pubkey: "pub", createdAt: 0, isEncrypted: false }],
+    });
+    (formsService.updateForm as any).mockResolvedValue(undefined);
+
+    await useFormsStore.getState().updateForm({
+      formId: "f1",
+      pubkey: "pub",
+      name: "New name",
+      fields: [],
+    });
+
+    expect(formsService.updateForm).toHaveBeenCalledWith(
+      expect.objectContaining({ formId: "f1", pubkey: "pub", name: "New name" }),
+    );
+    expect(useFormsStore.getState().myForms[0].name).toBe("New name");
+  });
+
+  it("sets error and rethrows when the service fails", async () => {
+    (formsService.updateForm as any).mockRejectedValue(new Error("relay offline"));
+
+    await expect(
+      useFormsStore.getState().updateForm({ formId: "f1", pubkey: "pub", name: "X" }),
+    ).rejects.toThrow("relay offline");
+    expect(useFormsStore.getState().error).toBe("relay offline");
   });
 });
 

@@ -137,9 +137,20 @@ export class NostrRuntime {
     });
   }
 
-  /** Publish event to relays */
-  async publish(relays: string[], event: Event): Promise<void> {
-    await Promise.allSettled(this.pool.publish(relays, event));
+  /**
+   * Publish event to relays. Bounded by `timeoutMs`: a relay that never acks must
+   * not hang the caller (e.g. a form submit) forever — best-effort fan-out.
+   */
+  async publish(relays: string[], event: Event, timeoutMs = 10000): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, timeoutMs);
+    });
+    try {
+      await Promise.race([Promise.allSettled(this.pool.publish(relays, event)), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
     this.eventStore.store(event);
   }
 

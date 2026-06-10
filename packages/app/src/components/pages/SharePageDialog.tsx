@@ -17,6 +17,8 @@ import {
 import { Check, Copy, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { copyText } from "../../lib/clipboard";
+
 interface SharePageDialogProps {
   open: boolean;
   onClose: () => void;
@@ -50,7 +52,7 @@ export function SharePageDialog({ open, onClose, onShare }: SharePageDialogProps
 
   const copy = async () => {
     if (!result) return;
-    await navigator.clipboard.writeText(result.url);
+    await copyText(result.url);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   };

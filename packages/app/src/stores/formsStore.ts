@@ -16,6 +16,7 @@ interface FormsStore {
   loadForm(pubkey: string, formId: string): Promise<void>;
   loadResponses(pubkey: string, formId: string): Promise<void>;
   createForm(params: formsService.CreateFormParams): Promise<formsService.CreateFormResult>;
+  updateForm(params: formsService.UpdateFormParams): Promise<void>;
   deleteForm(formId: string, formPubkey: string): Promise<void>;
   clearCurrent(): void;
 }
@@ -94,6 +95,24 @@ export const useFormsStore = create<FormsStore>((set, get) => ({
       return result;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to create form" });
+      throw e;
+    }
+  },
+
+  async updateForm(params) {
+    set({ error: null });
+    try {
+      await formsService.updateForm(params);
+      set((state) => ({
+        myForms: state.myForms.map((f) =>
+          f.id === params.formId && f.pubkey === params.pubkey
+            ? { ...f, name: params.name ?? f.name }
+            : f,
+        ),
+        currentForm: null,
+      }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to update form" });
       throw e;
     }
   },

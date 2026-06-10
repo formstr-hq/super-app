@@ -5,6 +5,8 @@ import { useTheme } from "@mui/material/styles";
 import { CalendarClock, Copy, ExternalLink, Inbox, Plus, Settings2 } from "lucide-react";
 import { useSnackbar } from "notistack";
 
+import { copyText } from "../../lib/clipboard";
+
 interface CalendarSidebarProps {
   calendars: CalendarList[];
   visibleCalendarIds: Set<string>;
@@ -49,9 +51,10 @@ export function CalendarSidebar({
   const bookingsActive = view === "bookings";
 
   const copyLink = (page: SchedulingPage) => {
-    navigator.clipboard?.writeText(bookingLinkUrl(page)).then(
-      () => enqueueSnackbar("Booking link copied", { variant: "success" }),
-      () => enqueueSnackbar("Could not copy link", { variant: "error" }),
+    void copyText(bookingLinkUrl(page)).then((ok) =>
+      ok
+        ? enqueueSnackbar("Booking link copied", { variant: "success" })
+        : enqueueSnackbar("Could not copy link", { variant: "error" }),
     );
   };
 

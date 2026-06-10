@@ -150,8 +150,9 @@ export async function fetchForm(
   pubkey: string,
   formId: string,
   viewKey?: string,
+  relayHints?: string[],
 ): Promise<FormTemplate | null> {
-  const relays = relayManager.getRelaysForModule("forms");
+  const relays = relaysForForm(relayHints);
   const event = await nostrRuntime.fetchOne(relays, {
     kinds: [FORM_KINDS.template],
     authors: [pubkey],
@@ -612,7 +613,12 @@ export interface UpdateFormParams {
  */
 export async function updateForm(params: UpdateFormParams): Promise<void> {
   const relays = relayManager.getRelaysForModule("forms");
-  const existing = await fetchForm(params.pubkey, params.formId);
+  const summary = (await fetchMyForms()).find(
+    (f) => f.id === params.formId && f.pubkey === params.pubkey,
+  );
+  // Pass the cached viewKey so an encrypted form's current name/settings/fields
+  // decrypt — otherwise the merge below would silently drop them.
+  const existing = await fetchForm(params.pubkey, params.formId, summary?.viewKey);
   if (!existing) throw new Error(`Form not found: ${params.formId}`);
 
   const name = params.name ?? existing.name;
@@ -620,9 +626,6 @@ export async function updateForm(params: UpdateFormParams): Promise<void> {
   const fields = params.fields ?? existing.fields;
 
   const specRows = buildSpecRows(params.formId, name, fields, settings);
-  const summary = (await fetchMyForms()).find(
-    (f) => f.id === params.formId && f.pubkey === params.pubkey,
-  );
 
   if (existing.isEncrypted) {
     if (!summary?.signingKey || !summary?.viewKey) {

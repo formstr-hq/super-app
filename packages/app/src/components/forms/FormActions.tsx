@@ -1,20 +1,22 @@
 import type { FormSummary } from "@formstr/agent/services/forms/types";
 import { IconButton, Tooltip } from "@mui/material";
-import { BarChart3, Link, Pencil, Trash2 } from "lucide-react";
+import { BarChart3, Link, Pencil, TextCursorInput, Trash2 } from "lucide-react";
 
 interface Props {
   form: FormSummary;
   onFill: (form: FormSummary) => void;
+  onEdit?: (form: FormSummary) => void;
   onViewResponses: (form: FormSummary) => void;
   onDelete: (form: FormSummary) => void;
   onCopyLink: (form: FormSummary) => void;
   iconSize?: number;
 }
 
-/** Row of fill / responses / copy-link / delete actions, shared by FormCard and the list row. */
+/** Row of fill / edit / responses / copy-link / delete actions, shared by FormCard and the list row. */
 export function FormActions({
   form,
   onFill,
+  onEdit,
   onViewResponses,
   onDelete,
   onCopyLink,
@@ -24,9 +26,16 @@ export function FormActions({
     <>
       <Tooltip title="Fill form">
         <IconButton size="small" onClick={() => onFill(form)}>
-          <Pencil size={iconSize} />
+          <TextCursorInput size={iconSize} />
         </IconButton>
       </Tooltip>
+      {onEdit && (
+        <Tooltip title="Edit form">
+          <IconButton size="small" onClick={() => onEdit(form)}>
+            <Pencil size={iconSize} />
+          </IconButton>
+        </Tooltip>
+      )}
       <Tooltip title="View responses">
         <IconButton size="small" onClick={() => onViewResponses(form)}>
           <BarChart3 size={iconSize} />

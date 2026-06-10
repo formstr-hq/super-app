@@ -12,6 +12,7 @@ interface Props {
   isLoading: boolean;
   view?: FormsView;
   onFill: (form: FormSummary) => void;
+  onEdit?: (form: FormSummary) => void;
   onViewResponses: (form: FormSummary) => void;
   onDelete: (form: FormSummary) => void;
   onCopyLink: (form: FormSummary) => void;
@@ -23,6 +24,7 @@ export function FormListView({
   isLoading,
   view = "grid",
   onFill,
+  onEdit,
   onViewResponses,
   onDelete,
   onCopyLink,
@@ -96,6 +98,7 @@ export function FormListView({
               <FormActions
                 form={form}
                 onFill={onFill}
+                onEdit={onEdit}
                 onViewResponses={onViewResponses}
                 onDelete={onDelete}
                 onCopyLink={onCopyLink}
@@ -114,6 +117,7 @@ export function FormListView({
           <FormCard
             form={form}
             onFill={onFill}
+            onEdit={onEdit}
             onViewResponses={onViewResponses}
             onDelete={onDelete}
             onCopyLink={onCopyLink}

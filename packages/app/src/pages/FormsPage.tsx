@@ -13,10 +13,11 @@ import { FormBuilderSurface } from "../components/forms/FormBuilderSurface";
 import { FormListView } from "../components/forms/FormListView";
 import { FormsSidebar, type FormsCategory } from "../components/forms/FormsSidebar";
 import { ResponsesDialog } from "../components/forms/ResponsesDialog";
+import { copyText } from "../lib/clipboard";
 import { useFormsStore, useSettingsStore } from "../stores";
 import type { FormsView } from "../stores/settingsStore";
 
-type ActiveDialog = "none" | "create" | "fill" | "responses";
+type ActiveDialog = "none" | "create" | "edit" | "fill" | "responses";
 
 const CATEGORY_TITLES: Record<FormsCategory, string> = {
   my: "My Forms",
@@ -64,6 +65,14 @@ export function FormsPage() {
     [loadForm],
   );
 
+  const handleEdit = useCallback(
+    (form: FormSummary) => {
+      void loadForm(form.pubkey, form.id);
+      setActiveDialog("edit");
+    },
+    [loadForm],
+  );
+
   const handleViewResponses = useCallback(
     (form: FormSummary) => {
       void loadForm(form.pubkey, form.id);
@@ -90,8 +99,7 @@ export function FormsPage() {
     const base = `${window.location.origin}/forms/fill/${naddr}`;
     // viewKey goes in the URL fragment (never sent to servers, not in Referer headers)
     const url = form.viewKey ? `${base}#${encodeNKeys({ viewKey: form.viewKey })}` : base;
-    navigator.clipboard.writeText(url).catch(() => {});
-    setSnackbar("Link copied");
+    void copyText(url).then((ok) => setSnackbar(ok ? "Link copied" : "Copy failed"));
   }, []);
 
   const handleClose = useCallback(() => {
@@ -101,6 +109,16 @@ export function FormsPage() {
 
   if (activeDialog === "create") {
     return <FormBuilderSurface onClose={handleClose} />;
+  }
+
+  if (activeDialog === "edit") {
+    return (
+      <FormBuilderSurface
+        onClose={handleClose}
+        editTemplate={currentForm}
+        editLoading={isLoading}
+      />
+    );
   }
 
   return (
@@ -158,6 +176,7 @@ export function FormsPage() {
               isLoading={isLoading}
               view={formsView}
               onFill={handleFill}
+              onEdit={handleEdit}
               onViewResponses={handleViewResponses}
               onDelete={handleDelete}
               onCopyLink={handleCopyLink}

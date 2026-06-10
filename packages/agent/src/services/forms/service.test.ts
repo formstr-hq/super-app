@@ -264,6 +264,29 @@ describe("fetchForm — plain form", () => {
     expect(form!.fields[0].type).toBe("date");
     expect(form!.fields[0].required).toBe(true);
   });
+
+  it("queries module relays ∪ naddr relay hints when hints are supplied", async () => {
+    (nostrRuntime.fetchOne as any).mockResolvedValue({
+      id: "eid",
+      pubkey: "formpub",
+      kind: 30168,
+      created_at: 1000,
+      sig: "sig",
+      content: "",
+      tags: [
+        ["d", "form1"],
+        ["name", "My Form"],
+      ],
+    } satisfies Event);
+
+    await fetchForm("formpub", "form1", undefined, ["wss://hint.relay", "wss://relay.test"]);
+
+    const relaysArg = (nostrRuntime.fetchOne as any).mock.calls[0][0] as string[];
+    expect(relaysArg).toContain("wss://relay.test"); // module default
+    expect(relaysArg).toContain("wss://hint.relay"); // naddr hint
+    // deduplicated
+    expect(relaysArg.filter((r) => r === "wss://relay.test")).toHaveLength(1);
+  });
 });
 
 describe("fetchForm — encrypted, correct viewKey", () => {

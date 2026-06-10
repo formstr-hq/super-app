@@ -11,6 +11,7 @@ import {
   MenuItem,
   Radio,
   RadioGroup,
+  Rating,
   Select,
   Table,
   TableBody,
@@ -20,7 +21,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { Upload, X, Eraser, Loader2 } from "lucide-react";
+import { Upload, X, Eraser, Loader2, Star } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 // ── Validation ────────────────────────────────────────────
@@ -29,6 +30,8 @@ export interface ValidationIssue {
   fieldId: string;
   message: string;
 }
+
+const TEXT_TYPES = new Set([AnswerType.shortText, AnswerType.paragraph]);
 
 export function validateFieldAnswer(
   field: FormField,
@@ -43,7 +46,51 @@ export function validateFieldAnswer(
       return { fieldId: field.id, message: `"${field.label}" is required` };
     }
   }
+
+  const rules = field.validation;
+  if (!rules || !value) return null;
+
+  if (field.type === AnswerType.number) {
+    const n = Number(value);
+    if (rules.min !== undefined && n < rules.min) {
+      return { fieldId: field.id, message: `Must be at least ${rules.min}` };
+    }
+    if (rules.max !== undefined && n > rules.max) {
+      return { fieldId: field.id, message: `Must be at most ${rules.max}` };
+    }
+  } else if (TEXT_TYPES.has(field.type)) {
+    if (rules.min !== undefined && value.length < rules.min) {
+      return { fieldId: field.id, message: `Must be at least ${rules.min} characters` };
+    }
+    if (rules.max !== undefined && value.length > rules.max) {
+      return { fieldId: field.id, message: `Must be at most ${rules.max} characters` };
+    }
+    if (rules.regex) {
+      try {
+        if (!new RegExp(rules.regex).test(value)) {
+          return { fieldId: field.id, message: rules.regexError || "Invalid format" };
+        }
+      } catch {
+        /* invalid pattern authored in the builder — don't block the responder */
+      }
+    }
+  }
   return null;
+}
+
+/** Validate every field; returns one issue per failing field (empty = all good). */
+export function validateAllAnswers(
+  fields: FormField[],
+  values: Record<string, string>,
+  checkAnswers?: Record<string, Set<string>>,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  for (const field of fields) {
+    if (field.type === AnswerType.label || field.type === AnswerType.section) continue;
+    const issue = validateFieldAnswer(field, values[field.id] ?? "", checkAnswers?.[field.id]);
+    if (issue) issues.push(issue);
+  }
+  return issues;
 }
 
 // ── FieldInput ────────────────────────────────────────────
@@ -56,6 +103,8 @@ interface FieldInputProps {
   onChange: (value: string) => void;
   onToggleCheck?: (optionId: string) => void;
   disabled?: boolean;
+  /** Validation message to display under the input. */
+  error?: string;
 }
 
 export function FieldInput({
@@ -65,6 +114,7 @@ export function FieldInput({
   onChange,
   onToggleCheck,
   disabled,
+  error,
 }: FieldInputProps) {
   const label = (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.75 }}>
@@ -79,223 +129,255 @@ export function FieldInput({
     </Box>
   );
 
-  switch (field.type) {
-    case AnswerType.section:
-      return null;
+  const errorText = error ? (
+    <Typography variant="caption" color="error" display="block" sx={{ mt: 0.5 }}>
+      {error}
+    </Typography>
+  ) : null;
 
-    case AnswerType.label:
-      return (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 0.5, fontStyle: "italic" }}>
-          {field.label}
-        </Typography>
-      );
+  const content = renderContent();
+  if (!content) return null;
+  return (
+    <Box>
+      {content}
+      {errorText}
+    </Box>
+  );
 
-    case AnswerType.shortText:
-      return (
-        <Box>
-          {label}
-          <TextField
-            size="small"
-            fullWidth
-            placeholder={field.placeholder || "Your answer"}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-          />
-        </Box>
-      );
+  function renderContent() {
+    switch (field.type) {
+      case AnswerType.section:
+        return null;
 
-    case AnswerType.paragraph:
-      return (
-        <Box>
-          {label}
-          <TextField
-            size="small"
-            fullWidth
-            multiline
-            rows={3}
-            placeholder={field.placeholder || "Your answer"}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-          />
-        </Box>
-      );
+      case AnswerType.label:
+        return (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 0.5, fontStyle: "italic" }}>
+            {field.label}
+          </Typography>
+        );
 
-    case AnswerType.number:
-      return (
-        <Box>
-          {label}
-          <TextField
-            size="small"
-            fullWidth
-            type="number"
-            placeholder={field.placeholder || "0"}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-          />
-        </Box>
-      );
-
-    case AnswerType.date:
-      return (
-        <Box>
-          {label}
-          <TextField
-            size="small"
-            fullWidth
-            type="date"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            InputLabelProps={{ shrink: true }}
-          />
-        </Box>
-      );
-
-    case AnswerType.time:
-      return (
-        <Box>
-          {label}
-          <TextField
-            size="small"
-            fullWidth
-            type="time"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            InputLabelProps={{ shrink: true }}
-          />
-        </Box>
-      );
-
-    case AnswerType.datetime:
-      return (
-        <Box>
-          {label}
-          <TextField
-            size="small"
-            fullWidth
-            type="datetime-local"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            InputLabelProps={{ shrink: true }}
-          />
-        </Box>
-      );
-
-    case AnswerType.radioButton:
-      return (
-        <Box>
-          {label}
-          <RadioGroup value={value} onChange={(e) => onChange(e.target.value)}>
-            {(field.options ?? []).map((opt) => (
-              <FormControlLabel
-                key={opt.id}
-                value={opt.id}
-                disabled={disabled}
-                control={<Radio size="small" />}
-                label={<Typography variant="body2">{opt.label}</Typography>}
-              />
-            ))}
-          </RadioGroup>
-        </Box>
-      );
-
-    case AnswerType.checkboxes:
-      return (
-        <Box>
-          {label}
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-            {(field.options ?? []).map((opt) => (
-              <FormControlLabel
-                key={opt.id}
-                disabled={disabled}
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={checkedValues?.has(opt.id) ?? false}
-                    onChange={() => onToggleCheck?.(opt.id)}
-                  />
-                }
-                label={<Typography variant="body2">{opt.label}</Typography>}
-              />
-            ))}
+      case AnswerType.shortText:
+        return (
+          <Box>
+            {label}
+            <TextField
+              size="small"
+              fullWidth
+              placeholder={field.placeholder || "Your answer"}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={disabled}
+            />
           </Box>
-        </Box>
-      );
+        );
 
-    case AnswerType.dropdown:
-      return (
-        <Box>
-          {label}
-          <FormControl size="small" fullWidth disabled={disabled}>
-            <Select value={value} onChange={(e) => onChange(e.target.value)} displayEmpty>
-              <MenuItem value="">
-                <em>Select an option</em>
-              </MenuItem>
+      case AnswerType.paragraph:
+        return (
+          <Box>
+            {label}
+            <TextField
+              size="small"
+              fullWidth
+              multiline
+              rows={3}
+              placeholder={field.placeholder || "Your answer"}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={disabled}
+            />
+          </Box>
+        );
+
+      case AnswerType.number:
+        return (
+          <Box>
+            {label}
+            <TextField
+              size="small"
+              fullWidth
+              type="number"
+              placeholder={field.placeholder || "0"}
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={disabled}
+            />
+          </Box>
+        );
+
+      case AnswerType.date:
+        return (
+          <Box>
+            {label}
+            <TextField
+              size="small"
+              fullWidth
+              type="date"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={disabled}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Box>
+        );
+
+      case AnswerType.time:
+        return (
+          <Box>
+            {label}
+            <TextField
+              size="small"
+              fullWidth
+              type="time"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={disabled}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Box>
+        );
+
+      case AnswerType.datetime:
+        return (
+          <Box>
+            {label}
+            <TextField
+              size="small"
+              fullWidth
+              type="datetime-local"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={disabled}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Box>
+        );
+
+      case AnswerType.radioButton:
+        return (
+          <Box>
+            {label}
+            <RadioGroup value={value} onChange={(e) => onChange(e.target.value)}>
               {(field.options ?? []).map((opt) => (
-                <MenuItem key={opt.id} value={opt.id}>
-                  {opt.label}
-                </MenuItem>
+                <FormControlLabel
+                  key={opt.id}
+                  value={opt.id}
+                  disabled={disabled}
+                  control={<Radio size="small" />}
+                  label={<Typography variant="body2">{opt.label}</Typography>}
+                />
               ))}
-            </Select>
-          </FormControl>
-        </Box>
-      );
+            </RadioGroup>
+          </Box>
+        );
 
-    case AnswerType.signature:
-      return (
-        <SignatureCanvas
-          label={field.label}
-          required={field.required}
-          value={value}
-          onChange={onChange}
-          disabled={disabled}
-        />
-      );
+      case AnswerType.checkboxes:
+        return (
+          <Box>
+            {label}
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+              {(field.options ?? []).map((opt) => (
+                <FormControlLabel
+                  key={opt.id}
+                  disabled={disabled}
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={checkedValues?.has(opt.id) ?? false}
+                      onChange={() => onToggleCheck?.(opt.id)}
+                    />
+                  }
+                  label={<Typography variant="body2">{opt.label}</Typography>}
+                />
+              ))}
+            </Box>
+          </Box>
+        );
 
-    case AnswerType.fileUpload:
-      return (
-        <BlossomFileUpload
-          label={field.label}
-          required={field.required}
-          value={value}
-          onChange={onChange}
-          disabled={disabled}
-        />
-      );
+      case AnswerType.dropdown:
+        return (
+          <Box>
+            {label}
+            <FormControl size="small" fullWidth disabled={disabled}>
+              <Select value={value} onChange={(e) => onChange(e.target.value)} displayEmpty>
+                <MenuItem value="">
+                  <em>Select an option</em>
+                </MenuItem>
+                {(field.options ?? []).map((opt) => (
+                  <MenuItem key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        );
 
-    case AnswerType.multipleChoiceGrid:
-    case AnswerType.checkboxGrid:
-      return (
-        <Box>
-          {label}
-          <GridInput
-            field={field}
+      case AnswerType.signature:
+        return (
+          <SignatureCanvas
+            label={field.label}
+            required={field.required}
             value={value}
             onChange={onChange}
-            isCheckbox={field.type === AnswerType.checkboxGrid}
             disabled={disabled}
           />
-        </Box>
-      );
+        );
 
-    default:
-      return (
-        <Box>
-          {label}
-          <TextField
-            size="small"
-            fullWidth
+      case AnswerType.fileUpload:
+        return (
+          <BlossomFileUpload
+            label={field.label}
+            required={field.required}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={onChange}
             disabled={disabled}
           />
-        </Box>
-      );
+        );
+
+      case AnswerType.multipleChoiceGrid:
+      case AnswerType.checkboxGrid:
+        return (
+          <Box>
+            {label}
+            <GridInput
+              field={field}
+              value={value}
+              onChange={onChange}
+              isCheckbox={field.type === AnswerType.checkboxGrid}
+              disabled={disabled}
+            />
+          </Box>
+        );
+
+      case AnswerType.rating:
+        return (
+          <Box>
+            {label}
+            <Rating
+              max={field.maxStars ?? 5}
+              value={Number(value) || 0}
+              onChange={(_, v) => onChange(v ? String(v) : "")}
+              disabled={disabled}
+              icon={<Star size={22} fill="currentColor" strokeWidth={0} style={{ margin: 1 }} />}
+              emptyIcon={<Star size={22} style={{ margin: 1, opacity: 0.4 }} />}
+            />
+          </Box>
+        );
+
+      default:
+        return (
+          <Box>
+            {label}
+            <TextField
+              size="small"
+              fullWidth
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={disabled}
+            />
+          </Box>
+        );
+    }
   }
 }
 

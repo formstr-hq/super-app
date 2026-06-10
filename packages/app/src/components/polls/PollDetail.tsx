@@ -18,6 +18,8 @@ import {
 import { BarChart3, Check, Link2, MoreVertical, Trash2, Users, Vote } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { copyText } from "../../lib/clipboard";
+
 import { VotersModal } from "./VotersModal";
 
 interface PollDetailProps {
@@ -105,7 +107,7 @@ export function PollDetail({
     setMenuAnchor(null);
     try {
       const naddr = createRef("polls", POLLS_KINDS.poll, poll.pubkey, poll.id);
-      await navigator.clipboard.writeText(naddr);
+      await copyText(naddr);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
