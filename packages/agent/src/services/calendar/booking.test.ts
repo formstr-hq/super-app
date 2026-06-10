@@ -23,6 +23,8 @@ vi.mock("./service", () => ({
 
 vi.mock("./viewKey", () => ({ decryptWithViewKey: vi.fn() }));
 
+vi.mock("./busyList", () => ({ addBusyRange: vi.fn() }));
+
 import {
   approveBookingRequest,
   bookingLinkUrl,
@@ -31,6 +33,7 @@ import {
   fetchSchedulingPages,
   type BookingRequest,
 } from "./booking";
+import { addBusyRange } from "./busyList";
 import { publishPrivateCalendarEvent, addEventToCalendarList } from "./service";
 import type { CalendarList } from "./types";
 import { decryptWithViewKey } from "./viewKey";
@@ -190,6 +193,39 @@ describe("approveBookingRequest", () => {
     // The approval response gift wrap is published.
     expect(wrapEvent).toHaveBeenCalled();
     expect(nostrRuntime.publish).toHaveBeenCalled();
+    expect(result.event.id).toBe("appt1");
+  });
+
+  it("publishes a public busy entry so future bookers see the slot taken", async () => {
+    (publishPrivateCalendarEvent as any).mockResolvedValue({
+      id: "appt1",
+      eventId: "ev",
+      kind: 32678,
+      user: "host",
+      viewKey: "nsec1view",
+      begin: 100000,
+      end: 200000,
+    });
+    (addEventToCalendarList as any).mockResolvedValue(calendar);
+    (wrapEvent as any).mockResolvedValue({ id: "wrap" });
+
+    await approveBookingRequest(request, calendar);
+    expect(addBusyRange).toHaveBeenCalledWith({ start: 100000, end: 200000 });
+  });
+
+  it("does not fail the approval when the busy-entry publish fails", async () => {
+    (publishPrivateCalendarEvent as any).mockResolvedValue({
+      id: "appt1",
+      eventId: "ev",
+      kind: 32678,
+      user: "host",
+      viewKey: "nsec1view",
+    });
+    (addEventToCalendarList as any).mockResolvedValue(calendar);
+    (wrapEvent as any).mockResolvedValue({ id: "wrap" });
+    (addBusyRange as any).mockRejectedValue(new Error("relay down"));
+
+    const result = await approveBookingRequest(request, calendar);
     expect(result.event.id).toBe("appt1");
   });
 });

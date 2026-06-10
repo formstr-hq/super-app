@@ -13,6 +13,8 @@ export const CALENDAR_KINDS = {
   rsvpGiftWrap: 1055,
   rsvpRumor: 55,
   participantRemoval: 84,
+  /** Public free/busy list, one per (user, YYYY-MM month). */
+  publicBusyList: 31926,
   // Appointment scheduling (Calendly-style booking links).
   schedulingPage: 31927,
   schedulingPagesList: 32680,

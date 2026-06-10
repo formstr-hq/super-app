@@ -3,8 +3,26 @@ import type {
   CalendarList,
   CalendarEventDraft,
 } from "@formstr/agent/services/calendar";
+import { addBusyRange, removeBusyRange } from "@formstr/agent/services/calendar/busyList";
 import * as calendarService from "@formstr/agent/services/calendar/service";
 import { create } from "zustand";
+
+/**
+ * Best-effort kind-31926 busy-list upkeep. The hosted booking page
+ * (calendar.formstr.app/schedule/…) computes slot availability from these, so
+ * without them every super-app slot looks free to bookers. Recurring events
+ * are skipped — public busy lists store only raw [start,end] ranges (upstream
+ * behavior). Never blocks the event flow on relay roundtrips.
+ */
+function publishBusyRangeFor(event: CalendarEvent): void {
+  if (event.repeat.rrule) return;
+  void addBusyRange({ start: event.begin, end: event.end }).catch(() => {});
+}
+
+function retractBusyRangeFor(event: CalendarEvent): void {
+  if (event.repeat.rrule) return;
+  void removeBusyRange({ start: event.begin, end: event.end }).catch(() => {});
+}
 
 interface CalendarStore {
   events: CalendarEvent[];
@@ -75,9 +93,15 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   async updateEvent(draft) {
     set({ error: null });
     try {
+      const previous = get().events.find((e) => e.id === draft.existingId);
       const event = draft.isPrivate
         ? await calendarService.publishPrivateCalendarEvent(draft, draft.calendarId ?? "default")
         : await calendarService.publishPublicCalendarEvent(draft);
+      // Swap the public busy entry only when the times actually moved.
+      if (previous && (previous.begin !== event.begin || previous.end !== event.end)) {
+        retractBusyRangeFor(previous);
+        publishBusyRangeFor(event);
+      }
       set((state) => ({
         events: state.events.map((e) => (e.id === event.id ? event : e)),
       }));
@@ -111,6 +135,8 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
             targetCalendarId ?? "default",
           )
         : await calendarService.publishPublicCalendarEvent(draft);
+
+      publishBusyRangeFor(event);
 
       // Add event ref to the resolved calendar list.
       // The ref is the bare coordinate (the codec re-adds the "a" tag prefix);
@@ -179,7 +205,9 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
 
   async deleteEvent(id, coordinate) {
     try {
+      const deleted = get().events.find((e) => e.id === id);
       await calendarService.deleteCalendarEvent(id, coordinate);
+      if (deleted) retractBusyRangeFor(deleted);
       // Remove the event ref from whichever calendar list holds it, then
       // republish that list. Without this the ref survives on the relay and
       // the event re-appears on the next refresh.
