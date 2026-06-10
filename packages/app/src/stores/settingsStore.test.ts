@@ -62,6 +62,13 @@ describe("AI settings migration", () => {
     expect(s.compatBaseUrl).toBe("http://localhost:1234/v1");
     expect(s.compatKey).toBeNull();
   });
+
+  it("falls back to ollama when the stored provider is not a known AIProviderType", () => {
+    // A stale value from an older build must not leak through the cast — an
+    // unknown provider has no PROVIDER_DEFAULT_MODEL entry and crashes the AI panel.
+    localStorage.setItem("formstr:ai-provider", "lmstudio");
+    expect(readAISettings().aiProvider).toBe("ollama");
+  });
 });
 
 describe("saved prompts", () => {

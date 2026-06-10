@@ -70,8 +70,9 @@ export function migrateAISettings(): void {
 
 /** Read the (already-migrated) AI settings out of localStorage. */
 export function readAISettings(): AISettingsState {
+  const storedProvider = localStorage.getItem("formstr:ai-provider");
   return {
-    aiProvider: (localStorage.getItem("formstr:ai-provider") as AIProviderType) ?? "ollama",
+    aiProvider: storedProvider && isAIProvider(storedProvider) ? storedProvider : "ollama",
     apiKeys: parseJson<ApiKeys>(localStorage.getItem("formstr:ai-keys"), {}),
     aiModels: parseJson<Partial<Record<AIProviderType, string>>>(
       localStorage.getItem("formstr:ai-models"),
