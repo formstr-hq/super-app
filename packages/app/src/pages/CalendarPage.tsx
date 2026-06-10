@@ -1,6 +1,7 @@
 import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
 import { CALENDAR_KINDS } from "@formstr/agent/services/calendar";
-import { Box, Typography } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
+import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AvailabilityView } from "../components/calendar/AvailabilityView";
@@ -14,6 +15,7 @@ import { EventDetailsDialog } from "../components/calendar/EventDetailsDialog";
 import { EventDialog } from "../components/calendar/EventDialog";
 import { InvitationsView } from "../components/calendar/InvitationsView";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
+import { PageHeader } from "../components/PageHeader";
 import { filterEventsByCalendarVisibility } from "../lib/calendarMembership";
 import { useAuthStore, useBookingStore, useCalendarStore } from "../stores";
 import { useInvitationsStore } from "../stores/invitationsStore";
@@ -23,6 +25,7 @@ export function CalendarPage() {
     events,
     calendars,
     error,
+    isLoadingEvents,
     selectedDate,
     setSelectedDate,
     fetchEvents,
@@ -175,6 +178,20 @@ export function CalendarPage() {
           <AvailabilityView onBack={() => setView("calendar")} />
         ) : (
           <>
+            <PageHeader
+              title="Calendar"
+              description="Private events, invitations, and booking pages — busy times publish automatically for booking links."
+              action={
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<Plus size={14} />}
+                  onClick={openCreate}
+                >
+                  New event
+                </Button>
+              }
+            />
             <CalendarHeader
               monthLabel={monthLabel}
               viewMode={viewMode}
@@ -207,6 +224,7 @@ export function CalendarPage() {
                 events={filteredEvents}
                 year={year}
                 month={month}
+                isLoading={isLoadingEvents}
                 calendars={calendars}
                 onEventClick={setDetailEvent}
               />

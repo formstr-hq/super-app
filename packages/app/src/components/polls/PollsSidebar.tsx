@@ -1,5 +1,5 @@
 import type { Poll } from "@formstr/agent/services/polls";
-import { Box, Button, Chip, Divider, Typography } from "@mui/material";
+import { Box, Button, Chip, Divider, Skeleton, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { BarChart3, Plus } from "lucide-react";
 import type { ReactNode } from "react";
@@ -10,6 +10,7 @@ interface PollsSidebarProps {
   selectedId?: string;
   allTopics: string[];
   activeTopic: string | null;
+  isLoading?: boolean;
   onSelect: (poll: Poll) => void;
   onNew: () => void;
   onToggleTopic: (topic: string | null) => void;
@@ -94,6 +95,7 @@ export function PollsSidebar({
   selectedId,
   allTopics,
   activeTopic,
+  isLoading = false,
   onSelect,
   onNew,
   onToggleTopic,
@@ -138,7 +140,17 @@ export function PollsSidebar({
         }}
       >
         <SectionLabel>My Polls</SectionLabel>
-        {myPolls.length === 0 ? (
+        {isLoading ? (
+          [1, 2, 3, 4, 5].map((i) => (
+            <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 1, px: 0.85, py: 0.85 }}>
+              <Skeleton variant="rounded" width={14} height={14} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Skeleton variant="text" width="70%" height={16} />
+                <Skeleton variant="text" width="45%" height={13} />
+              </Box>
+            </Box>
+          ))
+        ) : myPolls.length === 0 ? (
           <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
             No polls yet
           </Typography>

@@ -8,6 +8,7 @@ import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
 import { LoginDialog } from "../components/LoginDialog";
 import { MigrationDialog } from "../components/MigrationDialog";
+import { ShortcutsDialog } from "../components/ShortcutsDialog";
 import { UnlockDialog } from "../components/UnlockDialog";
 import { useAuthStore, useSettingsStore, useInvitationsStore } from "../stores";
 
@@ -22,9 +23,22 @@ export function AppShell() {
   const openAuthModal = useAuthStore((s) => s.openAuthModal);
   const closeAuthModal = useAuthStore((s) => s.closeAuthModal);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
   useCommandPaletteHotkey(paletteOpen, setPaletteOpen);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      setShortcutsOpen(true);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const theme = useTheme();
   const pubkey = useAuthStore((s) => s.pubkey);
@@ -139,10 +153,12 @@ export function AppShell() {
       <LoginDialog open={authModalOpen && authModalMode === "login"} onClose={closeAuthModal} />
       <UnlockDialog open={authModalOpen && authModalMode === "unlock"} onClose={closeAuthModal} />
       <MigrationDialog />
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         onLoginClick={() => openAuthModal("login")}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
       />
     </Box>
   );

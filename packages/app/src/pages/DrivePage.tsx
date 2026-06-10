@@ -9,6 +9,7 @@ import { FileList } from "../components/drive/FileList";
 import { MoveFileDialog } from "../components/drive/MoveFileDialog";
 import { RenameFileDialog } from "../components/drive/RenameFileDialog";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
+import { PageHeader } from "../components/PageHeader";
 import { useDriveStore } from "../stores";
 
 function depth(path: string): number {
@@ -120,6 +121,10 @@ export function DrivePage() {
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
       >
+        <PageHeader
+          title="Drive"
+          description="End-to-end-encrypted files on Blossom servers, indexed on relays."
+        />
         <DriveToolbar
           currentFolder={currentFolder}
           servers={servers}

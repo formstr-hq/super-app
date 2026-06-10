@@ -1,9 +1,11 @@
 import type { Poll } from "@formstr/agent/services/polls";
-import { Alert, Box } from "@mui/material";
+import { Alert, Box, Button } from "@mui/material";
+import { Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
+import { PageHeader } from "../components/PageHeader";
 import { CreatePollDialog } from "../components/polls/CreatePollDialog";
 import { PollDetail } from "../components/polls/PollDetail";
 import { PollsSidebar } from "../components/polls/PollsSidebar";
@@ -15,6 +17,8 @@ export function PollsPage() {
     recentPolls,
     currentPoll,
     currentResults,
+    isLoadingMine,
+    isLoadingRecent,
     isLoadingDetail,
     error,
     fetchMyPolls,
@@ -80,6 +84,7 @@ export function PollsPage() {
       selectedId={selectedId ?? undefined}
       allTopics={allTopics}
       activeTopic={activeTopic}
+      isLoading={isLoadingMine || isLoadingRecent}
       onSelect={(p) => {
         handleSelect(p);
         onNavigate();
@@ -99,6 +104,20 @@ export function PollsPage() {
 
       <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <AIPendingRow module="polls" />
+        <PageHeader
+          title="Polls"
+          description="Public Nostr polls with live tallies and optional proof-of-work gates."
+          action={
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<Plus size={14} />}
+              onClick={() => setCreateOpen(true)}
+            >
+              New poll
+            </Button>
+          }
+        />
         {error && (
           <Alert severity="error" sx={{ m: 2, mb: 0, py: 0.5 }}>
             {error}

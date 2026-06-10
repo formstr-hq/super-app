@@ -1,12 +1,13 @@
 import type { PageDocument, PageSummary } from "@formstr/agent/services/pages";
-import { Alert, Box, Snackbar } from "@mui/material";
-import { FileEdit } from "lucide-react";
+import { Alert, Box, Button, Snackbar } from "@mui/material";
+import { FileEdit, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
 import { EmptyState } from "../components/EmptyState";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
+import { PageHeader } from "../components/PageHeader";
 import { PageEditorSurface } from "../components/pages/PageEditorSurface";
 import { PagesSidebar } from "../components/pages/PagesSidebar";
 import { PageTagsPopover } from "../components/pages/PageTagsPopover";
@@ -20,6 +21,7 @@ export function PagesPage() {
     currentPage,
     tagsByAddress,
     activeTag,
+    isLoading,
     error,
     fetchMyPages,
     fetchSharedPages,
@@ -120,6 +122,7 @@ export function PagesPage() {
       selectedAddress={currentPage?.address}
       allTags={allTags}
       activeTag={activeTag}
+      isLoading={isLoading}
       onSelect={(p) => {
         openPage(p);
         onNavigate();
@@ -139,6 +142,20 @@ export function PagesPage() {
 
       <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <AIPendingRow module="pages" />
+        <PageHeader
+          title="Pages"
+          description="Encrypted Markdown docs with shareable view/edit links and inline comments."
+          action={
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<Plus size={14} />}
+              onClick={handleNew}
+            >
+              New page
+            </Button>
+          }
+        />
         {error && (
           <Alert severity="error" sx={{ m: 2, mb: 0, py: 0.5 }}>
             {error}

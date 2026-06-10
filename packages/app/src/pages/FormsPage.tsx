@@ -1,8 +1,7 @@
 import type { FormSummary } from "@formstr/agent/services/forms/types";
 import { encodeNKeys } from "@formstr/core";
-import { Box, Snackbar, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
-import { LayoutGrid, LayoutTemplate, List, SquarePen, Users } from "lucide-react";
+import { Box, Button, Snackbar, ToggleButton, ToggleButtonGroup, Tooltip } from "@mui/material";
+import { LayoutGrid, LayoutTemplate, List, Plus, SquarePen, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import { useCallback, useEffect, useState } from "react";
@@ -15,6 +14,7 @@ import { FormListView } from "../components/forms/FormListView";
 import { FormsSidebar, type FormsCategory } from "../components/forms/FormsSidebar";
 import { ResponsesDialog } from "../components/forms/ResponsesDialog";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
+import { PageHeader } from "../components/PageHeader";
 import { copyText } from "../lib/clipboard";
 import { useFormsStore, useSettingsStore } from "../stores";
 import type { FormsView } from "../stores/settingsStore";
@@ -49,7 +49,6 @@ export function FormsPage() {
 
   const formsView = useSettingsStore((s) => s.formsView);
   const setFormsView = useSettingsStore((s) => s.setFormsView);
-  const theme = useTheme();
 
   const [category, setCategory] = useState<FormsCategory>("my");
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>("none");
@@ -146,40 +145,41 @@ export function FormsPage() {
       <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <AIPendingRow module="forms" />
 
-        {/* Toolbar */}
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            px: 2,
-            py: 1.25,
-            borderBottom: `1px solid ${theme.palette.divider}`,
-          }}
-        >
-          <Typography variant="subtitle1" fontWeight={600} sx={{ flex: 1 }}>
-            {CATEGORY_TITLES[category]}
-          </Typography>
-          {category === "my" && (
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={formsView}
-              onChange={(_, v: FormsView | null) => v && setFormsView(v)}
-            >
-              <ToggleButton value="grid" aria-label="Grid view">
-                <Tooltip title="Grid view">
-                  <LayoutGrid size={16} />
-                </Tooltip>
-              </ToggleButton>
-              <ToggleButton value="list" aria-label="List view">
-                <Tooltip title="List view">
-                  <List size={16} />
-                </Tooltip>
-              </ToggleButton>
-            </ToggleButtonGroup>
-          )}
-        </Box>
+        <PageHeader
+          title={CATEGORY_TITLES[category]}
+          description="Encrypted surveys on Nostr — share a link, collect answers only you can read."
+          action={
+            <>
+              {category === "my" && (
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={formsView}
+                  onChange={(_, v: FormsView | null) => v && setFormsView(v)}
+                >
+                  <ToggleButton value="grid" aria-label="Grid view">
+                    <Tooltip title="Grid view">
+                      <LayoutGrid size={16} />
+                    </Tooltip>
+                  </ToggleButton>
+                  <ToggleButton value="list" aria-label="List view">
+                    <Tooltip title="List view">
+                      <List size={16} />
+                    </Tooltip>
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              )}
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<Plus size={14} />}
+                onClick={() => setActiveDialog("create")}
+              >
+                New form
+              </Button>
+            </>
+          }
+        />
 
         {/* Content */}
         <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 2 }}>

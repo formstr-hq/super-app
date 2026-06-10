@@ -32,11 +32,38 @@ export function FormListView({
   onCreateNew,
 }: Props) {
   if (isLoading) {
+    if (view === "list") {
+      return (
+        <Paper variant="outlined" sx={{ borderRadius: 1.5, overflow: "hidden" }}>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Box
+              key={i}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                px: 2,
+                py: 1.25,
+                borderTop: i === 1 ? "none" : "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              <Skeleton variant="text" sx={{ flex: 1, maxWidth: 280 }} />
+              <Skeleton variant="text" width={70} />
+            </Box>
+          ))}
+        </Paper>
+      );
+    }
     return (
       <MuiGrid container spacing={1.5}>
-        {[1, 2, 3].map((i) => (
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <MuiGrid key={i} size={{ xs: 12, sm: 6, lg: 4 }}>
-            <Skeleton variant="rounded" height={80} />
+            <Paper variant="outlined" sx={{ p: 1.5 }}>
+              <Skeleton variant="text" width="65%" height={20} />
+              <Skeleton variant="text" width="40%" height={16} />
+              <Skeleton variant="rounded" height={28} sx={{ mt: 1.25 }} />
+            </Paper>
           </MuiGrid>
         ))}
       </MuiGrid>
