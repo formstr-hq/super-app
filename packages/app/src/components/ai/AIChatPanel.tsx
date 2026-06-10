@@ -1,7 +1,7 @@
-import { Box, Divider, IconButton, TextField, Typography } from "@mui/material";
+import { Box, Divider, IconButton, Paper, TextField, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { AlertCircle, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { AlertCircle, BookMarked, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { useAIStore, useSettingsStore } from "../../stores";
 
@@ -52,9 +52,32 @@ export function AIChatPanel() {
     resolveConfirm,
   } = useAIStore();
   const { aiPanelOpen, setAIPanelOpen } = useSettingsStore();
+  const savedPrompts = useSettingsStore((s) => s.savedPrompts);
   const [input, setInput] = useState("");
+  const [promptIndex, setPromptIndex] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
+
+  // "/keyword" autosuggest: active while the input is a single slash-token.
+  const slashQuery = useMemo(() => {
+    const m = /^\/(\S*)$/.exec(input);
+    return m ? m[1].toLowerCase() : null;
+  }, [input]);
+  const promptMatches = useMemo(
+    () =>
+      slashQuery === null
+        ? []
+        : savedPrompts.filter((p) => p.keyword.startsWith(slashQuery)).slice(0, 6),
+    [slashQuery, savedPrompts],
+  );
+
+  useEffect(() => {
+    setPromptIndex(0);
+  }, [slashQuery]);
+
+  const acceptPrompt = useCallback((prompt: string) => {
+    setInput(prompt);
+  }, []);
 
   useEffect(() => {
     if (aiPanelOpen && providerStatus === "disconnected") initProvider();
@@ -73,12 +96,34 @@ export function AIChatPanel() {
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
+      if (promptMatches.length > 0) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setPromptIndex((i) => (i + 1) % promptMatches.length);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setPromptIndex((i) => (i - 1 + promptMatches.length) % promptMatches.length);
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          acceptPrompt(promptMatches[Math.min(promptIndex, promptMatches.length - 1)].prompt);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setInput("");
+          return;
+        }
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     },
-    [handleSend],
+    [handleSend, promptMatches, promptIndex, acceptPrompt],
   );
 
   if (!aiPanelOpen) return null;
@@ -280,7 +325,65 @@ export function AIChatPanel() {
       <Divider />
 
       {/* Input */}
-      <Box sx={{ p: 1.5 }}>
+      <Box sx={{ p: 1.5, position: "relative" }}>
+        {promptMatches.length > 0 && (
+          <Paper
+            elevation={4}
+            sx={{
+              position: "absolute",
+              bottom: "100%",
+              left: 12,
+              right: 12,
+              mb: 0.5,
+              borderRadius: 1.5,
+              overflow: "hidden",
+              zIndex: 10,
+            }}
+          >
+            {promptMatches.map((p, i) => (
+              <Box
+                key={p.id}
+                component="button"
+                onMouseDown={(e: React.MouseEvent) => {
+                  e.preventDefault();
+                  acceptPrompt(p.prompt);
+                }}
+                onMouseEnter={() => setPromptIndex(i)}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  width: "100%",
+                  textAlign: "left",
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  px: 1.25,
+                  py: 0.75,
+                  bgcolor: i === promptIndex ? "action.selected" : "background.paper",
+                }}
+              >
+                <BookMarked size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
+                <Typography variant="caption" sx={{ fontFamily: "monospace", fontWeight: 600 }}>
+                  /{p.keyword}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  noWrap
+                  sx={{ flex: 1, minWidth: 0 }}
+                >
+                  {p.prompt}
+                </Typography>
+              </Box>
+            ))}
+            <Box sx={{ px: 1.25, py: 0.5, bgcolor: "action.hover" }}>
+              <Typography variant="caption" color="text.secondary">
+                ↑↓ to navigate · Enter to insert · Esc to dismiss
+              </Typography>
+            </Box>
+          </Paper>
+        )}
         <Box
           sx={{
             display: "flex",
@@ -298,7 +401,7 @@ export function AIChatPanel() {
             maxRows={4}
             variant="standard"
             fullWidth
-            placeholder="Ask something..."
+            placeholder="Ask something… ( / for saved prompts)"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}

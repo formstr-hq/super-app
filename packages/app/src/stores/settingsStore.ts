@@ -6,6 +6,24 @@ export type CloudProvider = "anthropic" | "openai" | "gemini";
 export type ApiKeys = { anthropic?: string; openai?: string; gemini?: string };
 export type FormsView = "grid" | "list";
 
+/** A reusable AI-panel prompt, inserted by typing `/keyword` in the chat input. */
+export interface SavedPrompt {
+  id: string;
+  /** Lowercase, no spaces, no leading slash — what the user types after "/". */
+  keyword: string;
+  prompt: string;
+}
+
+/** Normalize user input into a slash keyword: strip "/", lowercase, spaces → dashes. */
+export function normalizePromptKeyword(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^\/+/, "")
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9_-]/g, "");
+}
+
 const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 const DEFAULT_COMPAT_URL = "http://localhost:1234/v1";
 
@@ -98,6 +116,7 @@ interface SettingsStore {
   compatBaseUrl: string;
   compatKey: string | null;
   aiPanelOpen: boolean;
+  savedPrompts: SavedPrompt[];
 
   toggleTheme(): void;
   toggleSidebar(): void;
@@ -110,6 +129,14 @@ interface SettingsStore {
   setOllamaUrl(url: string): void;
   setCompatConfig(config: { baseUrl?: string; key?: string | null }): void;
   setAIPanelOpen(open: boolean): void;
+  /** Returns false (and does nothing) when the normalized keyword is empty or taken. */
+  addSavedPrompt(keyword: string, prompt: string): boolean;
+  updateSavedPrompt(id: string, patch: Partial<Pick<SavedPrompt, "keyword" | "prompt">>): void;
+  removeSavedPrompt(id: string): void;
+}
+
+function persistSavedPrompts(prompts: SavedPrompt[]) {
+  localStorage.setItem("formstr:saved-prompts", JSON.stringify(prompts));
 }
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
@@ -125,6 +152,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   compatBaseUrl: _ai.compatBaseUrl,
   compatKey: _ai.compatKey,
   aiPanelOpen: false,
+  savedPrompts: parseJson<SavedPrompt[]>(localStorage.getItem("formstr:saved-prompts"), []),
 
   toggleTheme() {
     set((state) => {
@@ -200,5 +228,47 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
 
   setAIPanelOpen(open: boolean) {
     set({ aiPanelOpen: open });
+  },
+
+  addSavedPrompt(keyword, prompt) {
+    const normalized = normalizePromptKeyword(keyword);
+    if (!normalized) return false;
+    let added = false;
+    set((state) => {
+      if (state.savedPrompts.some((p) => p.keyword === normalized)) return state;
+      added = true;
+      const savedPrompts = [
+        ...state.savedPrompts,
+        { id: crypto.randomUUID(), keyword: normalized, prompt },
+      ];
+      persistSavedPrompts(savedPrompts);
+      return { savedPrompts };
+    });
+    return added;
+  },
+
+  updateSavedPrompt(id, patch) {
+    set((state) => {
+      const savedPrompts = state.savedPrompts.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              ...patch,
+              keyword:
+                patch.keyword !== undefined ? normalizePromptKeyword(patch.keyword) : p.keyword,
+            }
+          : p,
+      );
+      persistSavedPrompts(savedPrompts);
+      return { savedPrompts };
+    });
+  },
+
+  removeSavedPrompt(id) {
+    set((state) => {
+      const savedPrompts = state.savedPrompts.filter((p) => p.id !== id);
+      persistSavedPrompts(savedPrompts);
+      return { savedPrompts };
+    });
   },
 }));

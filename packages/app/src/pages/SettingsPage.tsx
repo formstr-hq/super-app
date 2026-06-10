@@ -1,22 +1,26 @@
 import { Box, List, ListItemButton, ListItemText, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { Info, Settings2, Sparkles } from "lucide-react";
+import { BookMarked, Info, Settings2, Sparkles, UserRound } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { AboutSection } from "../components/settings/AboutSection";
 import { AISettingsSection } from "../components/settings/AISettingsSection";
 import { GeneralSettings } from "../components/settings/GeneralSettings";
+import { ProfileSection } from "../components/settings/ProfileSection";
+import { PromptsSection } from "../components/settings/PromptsSection";
 
-type Section = "general" | "ai" | "about";
+type Section = "profile" | "general" | "ai" | "prompts" | "about";
 
 const NAV: { id: Section; label: string; icon: ReactNode }[] = [
+  { id: "profile", label: "Profile", icon: <UserRound size={16} /> },
   { id: "general", label: "General", icon: <Settings2 size={16} /> },
   { id: "ai", label: "AI & Models", icon: <Sparkles size={16} /> },
+  { id: "prompts", label: "Saved Prompts", icon: <BookMarked size={16} /> },
   { id: "about", label: "About", icon: <Info size={16} /> },
 ];
 
 export function SettingsPage() {
-  const [section, setSection] = useState<Section>("ai");
+  const [section, setSection] = useState<Section>("profile");
   const theme = useTheme();
 
   return (
@@ -60,8 +64,10 @@ export function SettingsPage() {
             pl: { xs: 0, sm: 4 },
           }}
         >
+          {section === "profile" && <ProfileSection />}
           {section === "general" && <GeneralSettings />}
           {section === "ai" && <AISettingsSection />}
+          {section === "prompts" && <PromptsSection />}
           {section === "about" && <AboutSection />}
         </Box>
       </Box>

@@ -64,6 +64,50 @@ describe("AI settings migration", () => {
   });
 });
 
+describe("saved prompts", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("adds a prompt with a normalized keyword and persists it", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ savedPrompts: [] });
+
+    useSettingsStore.getState().addSavedPrompt("/Weekly Report", "Write my weekly report: ");
+
+    const prompts = useSettingsStore.getState().savedPrompts;
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].keyword).toBe("weekly-report"); // leading slash stripped, lowercased, spaces → dashes
+    expect(prompts[0].prompt).toBe("Write my weekly report: ");
+    expect(prompts[0].id).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem("formstr:saved-prompts")!)[0].keyword).toBe(
+      "weekly-report",
+    );
+  });
+
+  it("rejects duplicate keywords", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ savedPrompts: [] });
+
+    expect(useSettingsStore.getState().addSavedPrompt("standup", "A")).toBe(true);
+    expect(useSettingsStore.getState().addSavedPrompt("Standup", "B")).toBe(false);
+    expect(useSettingsStore.getState().savedPrompts).toHaveLength(1);
+  });
+
+  it("updates and removes prompts, persisting each change", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ savedPrompts: [] });
+
+    useSettingsStore.getState().addSavedPrompt("poll", "Create a poll about ");
+    const id = useSettingsStore.getState().savedPrompts[0].id;
+
+    useSettingsStore.getState().updateSavedPrompt(id, { prompt: "Create a fun poll about " });
+    expect(useSettingsStore.getState().savedPrompts[0].prompt).toBe("Create a fun poll about ");
+
+    useSettingsStore.getState().removeSavedPrompt(id);
+    expect(useSettingsStore.getState().savedPrompts).toHaveLength(0);
+    expect(JSON.parse(localStorage.getItem("formstr:saved-prompts")!)).toEqual([]);
+  });
+});
+
 describe("settings setters", () => {
   beforeEach(() => localStorage.clear());
 

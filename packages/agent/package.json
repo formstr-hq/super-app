@@ -11,6 +11,7 @@
     "./services/pages": "./src/services/pages/index.ts",
     "./services/drive": "./src/services/drive/index.ts",
     "./services/polls": "./src/services/polls/index.ts",
+    "./services/profile": "./src/services/profile/index.ts",
     "./services/*": "./src/services/*.ts",
     "./tools": "./src/tools/index.ts"
   },
