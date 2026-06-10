@@ -25,21 +25,25 @@ export const MODULE_ROUTES: Record<ModuleType, string> = {
   polls: "/polls",
 } as const;
 
-/** Map event kinds to modules */
+/**
+ * Map event kinds to modules.
+ * Lists only the kinds each module actually reads/writes (see the module
+ * services) so deep links resolve to a page that can open them.
+ */
 const KIND_MODULE_MAP: Record<number, ModuleType> = {
   // Forms
   30168: "forms", // Form template
   // Calendar
-  31922: "calendar", // Date-based calendar event
-  31923: "calendar", // Time-based calendar event
-  31924: "calendar", // Calendar list
+  31923: "calendar", // Public time-based event (NIP-52)
+  32678: "calendar", // Private event
+  32679: "calendar", // Private event (legacy recurring variant, read-only)
+  32123: "calendar", // Calendar list
   // Pages
-  30023: "pages", // Long-form content (NIP-23)
-  30024: "pages", // Draft article
+  33457: "pages", // Encrypted markdown doc (nostr-docs)
   // Drive
-  30563: "drive", // Drive file tree
+  34578: "drive", // File metadata (formstr-drive)
   // Polls
-  1068: "polls", // Poll event
+  1068: "polls", // Poll event (NIP-88)
 };
 
 /**

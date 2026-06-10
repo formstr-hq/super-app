@@ -19,12 +19,20 @@ export class EventStore {
   private eventsByAuthor = new Map<string, Map<string, Event>>();
   private eventsByDTag = new Map<string, Event>(); // "kind:pubkey:dtag" → event
   private deletedIds = new Set<string>();
+  // NIP-09 coordinate tombstones: "kind:pubkey:dtag" → newest deletion created_at.
+  // An addressable event is only rejected when its created_at ≤ that time, so a
+  // legitimate re-publish after a delete survives.
+  private deletedCoordinates = new Map<string, number>();
+  // Kind-84 participant-removal tombstones.
+  private ignoredEventIds = new Set<string>();
+  private ignoredCoordinates = new Set<string>();
   private subscriptions: ReactiveSubscription[] = [];
 
   /** Store event. Returns false if duplicate or older replaceable. */
   store(event: Event): boolean {
-    // Skip deleted events
+    // Skip deleted / participant-removed events
     if (this.deletedIds.has(event.id)) return false;
+    if (this.ignoredEventIds.has(event.id)) return false;
 
     // Skip if we already have this exact event
     if (this.eventsById.has(event.id)) return false;
@@ -33,6 +41,13 @@ export class EventStore {
     // Handle parameterized replaceable events (kinds 30000-39999)
     if (this.isReplaceable(event.kind) || this.isParameterizedReplaceable(event.kind)) {
       const addr = this.getAddress(event);
+
+      // NIP-09 tombstone by coordinate — deletions stick even when they arrive
+      // before their target; a newer re-publish supersedes the deletion.
+      const deletedAt = this.deletedCoordinates.get(addr);
+      if (deletedAt !== undefined && event.created_at <= deletedAt) return false;
+      if (this.ignoredCoordinates.has(addr)) return false;
+
       const existing = this.eventsByDTag.get(addr);
       if (existing && existing.created_at >= event.created_at) {
         return false; // We have a newer version
@@ -49,6 +64,11 @@ export class EventStore {
     // Handle deletion events (kind 5, NIP-09)
     if (event.kind === 5) {
       this.handleDeletion(event);
+    }
+
+    // Handle participant removals (kind 84)
+    if (event.kind === 84) {
+      this.handleParticipantRemoval(event);
     }
 
     // Index by ID
@@ -138,16 +158,55 @@ export class EventStore {
       if (tag[0] === "e" && tag[1]) {
         const targetId = tag[1];
         const target = this.eventsById.get(targetId);
-        // Only honor deletions from the same author
-        if (target && target.pubkey === deletionEvent.pubkey) {
-          this.remove(targetId);
-        }
+        // Same-author rule: a cached target by a different author means the
+        // deletion is forged — skip entirely (no removal, no tombstone).
+        // Unknown targets are tombstoned; they can't be validated yet.
+        if (target && target.pubkey !== deletionEvent.pubkey) continue;
         this.deletedIds.add(targetId);
+        if (target) this.remove(targetId);
       }
       if (tag[0] === "a" && tag[1]) {
-        // Delete by address (kind:pubkey:dtag)
+        // Delete by address ("kind:pubkey:dtag") — only honored when the
+        // deleter authored the coordinate.
+        const coordAuthor = tag[1].split(":")[1];
+        if (coordAuthor && coordAuthor !== deletionEvent.pubkey) continue;
+
+        const prev = this.deletedCoordinates.get(tag[1]) ?? 0;
+        if (deletionEvent.created_at > prev) {
+          this.deletedCoordinates.set(tag[1], deletionEvent.created_at);
+        }
         const existing = this.eventsByDTag.get(tag[1]);
-        if (existing && existing.pubkey === deletionEvent.pubkey) {
+        if (existing && existing.created_at <= deletionEvent.created_at) {
+          this.remove(existing.id);
+          this.eventsByDTag.delete(tag[1]);
+        }
+      }
+    }
+  }
+
+  /**
+   * Process a kind-84 participant removal (a participant opting out of an
+   * event). Unlike NIP-09 there is no same-author rule — any participant
+   * (`p` tag on the target) may remove it for themselves; targets that aren't
+   * cached yet are tombstoned unconditionally, matching the standalone
+   * calendar's EventStore.
+   */
+  handleParticipantRemoval(removalEvent: Event): void {
+    const isParticipant = (target: Event) =>
+      target.tags.some((t) => t[0] === "p" && t[1] === removalEvent.pubkey);
+
+    for (const tag of removalEvent.tags) {
+      if (tag[0] === "e" && tag[1]) {
+        const existing = this.eventsById.get(tag[1]);
+        if (existing) {
+          if (!isParticipant(existing)) continue;
+          this.remove(tag[1]);
+        }
+        this.ignoredEventIds.add(tag[1]);
+      } else if (tag[0] === "a" && tag[1]) {
+        this.ignoredCoordinates.add(tag[1]);
+        const existing = this.eventsByDTag.get(tag[1]);
+        if (existing && isParticipant(existing)) {
           this.remove(existing.id);
           this.eventsByDTag.delete(tag[1]);
         }
@@ -172,6 +231,9 @@ export class EventStore {
     this.eventsByAuthor.clear();
     this.eventsByDTag.clear();
     this.deletedIds.clear();
+    this.deletedCoordinates.clear();
+    this.ignoredEventIds.clear();
+    this.ignoredCoordinates.clear();
     this.subscriptions = [];
   }
 

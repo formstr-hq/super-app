@@ -23,6 +23,42 @@ describe("linking parseRef", () => {
     expect(ref?.params.identifier).toBe("my-form");
   });
 
+  it("maps each module's real event kinds (pages 33457, drive 34578, calendar 32678/32123)", () => {
+    const cases: Array<[number, string]> = [
+      [33457, "pages"], // encrypted markdown doc (nostr-docs)
+      [34578, "drive"], // file metadata (formstr-drive)
+      [31923, "calendar"], // public time-based event
+      [32678, "calendar"], // private event
+      [32123, "calendar"], // calendar list
+    ];
+    for (const [kind, module] of cases) {
+      const naddr = nip19.naddrEncode({
+        kind,
+        pubkey: "00".repeat(32),
+        identifier: "x",
+        relays: [],
+      });
+      expect(parseRef(naddr)?.module, `kind ${kind}`).toBe(module);
+    }
+  });
+
+  it("maps a polls nevent (kind 1068)", () => {
+    const nevent = nip19.neventEncode({ id: "00".repeat(32), kind: 1068, relays: [] });
+    expect(parseRef(nevent)?.module).toBe("polls");
+  });
+
+  it("no longer claims kinds the modules don't read (30023/30024 NIP-23, 30563)", () => {
+    for (const kind of [30023, 30024, 30563]) {
+      const naddr = nip19.naddrEncode({
+        kind,
+        pubkey: "00".repeat(32),
+        identifier: "x",
+        relays: [],
+      });
+      expect(parseRef(naddr), `kind ${kind}`).toBeNull();
+    }
+  });
+
   it("returns null for naddr with unknown kind", () => {
     const naddr = nip19.naddrEncode({
       kind: 30617, // Nostr Git repo — not a module

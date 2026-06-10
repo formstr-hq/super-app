@@ -9,7 +9,7 @@ export const MODULE_DEFAULT_RELAYS = {
     "wss://relay.primal.net",
     "wss://nos.lol",
     "wss://relay.nostr.wirednet.jp",
-    "wss://relay.yakinonne.com",
+    "wss://nostr-01.yakihonne.com",
     "wss://relay.snort.social",
     "wss://relay.nostr.band",
     "wss://nostr21.com",

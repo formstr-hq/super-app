@@ -25,7 +25,7 @@ describe("RelayManager", () => {
   });
 
   it("getRelaysForModule returns the module-specific subset", () => {
-    expect(mgr.getRelaysForModule("forms")).toContain("wss://relay.yakinonne.com");
+    expect(mgr.getRelaysForModule("forms")).toContain("wss://nostr-01.yakihonne.com");
     expect(mgr.getRelaysForModule("calendar")).toContain("wss://nostr.mom");
     expect(mgr.getRelaysForModule("polls")).toContain("wss://nostr-01.yakihonne.com");
   });
