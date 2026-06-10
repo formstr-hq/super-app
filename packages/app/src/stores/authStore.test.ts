@@ -82,6 +82,17 @@ vi.mock("../auth/appSigner", () => ({
 // ── Mock the core signerManager (capture injections) ─────────────────────────
 vi.mock("@formstr/core", () => ({ signerManager: mgr }));
 
+vi.mock("@formstr/agent/services/profile", () => ({
+  fetchProfile: vi.fn(async (pubkey: string) => ({
+    pubkey,
+    displayName: "Naman",
+    picture: "https://example.com/p.jpg",
+    createdAt: 1,
+  })),
+}));
+
+import * as profileService from "@formstr/agent/services/profile";
+
 import { useAuthStore } from "./authStore";
 
 beforeEach(() => {
@@ -101,6 +112,7 @@ beforeEach(() => {
     legacyMigration: null,
     authModalOpen: false,
     authModalMode: "login",
+    profile: null,
   });
 });
 
@@ -164,5 +176,33 @@ describe("authStore bridge", () => {
     localStorage.setItem("formstr:client-secret", "deadbeef");
     await useAuthStore.getState().init();
     expect(useAuthStore.getState().legacyMigration).toMatchObject({ method: "guest" });
+  });
+});
+
+describe("kind-0 profile in authStore", () => {
+  it("loads the active account's profile after login and clears it on logout", async () => {
+    await useAuthStore.getState().init();
+    await useAuthStore.getState().loginWithExtension();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(profileService.fetchProfile).toHaveBeenCalledWith("extPk");
+    expect(useAuthStore.getState().profile?.displayName).toBe("Naman");
+
+    signerState.accounts = [];
+    signerState.active = null;
+    signerState.unlocked = false;
+    emit({ type: "logout" });
+    expect(useAuthStore.getState().profile).toBeNull();
+  });
+
+  it("does not refetch the profile on a sync that keeps the same pubkey", async () => {
+    await useAuthStore.getState().init();
+    await useAuthStore.getState().loginWithExtension();
+    await new Promise((r) => setTimeout(r, 0));
+    (profileService.fetchProfile as any).mockClear();
+
+    emit({ type: "unlock" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(profileService.fetchProfile).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,4 @@
+import { fetchProfile, type NostrProfile } from "@formstr/agent/services/profile";
 import type { NostrSigner, SignerMethod } from "@formstr/core";
 import { signerManager } from "@formstr/core";
 import { encryptSecretKey, hexToBytes, type StoredAccount } from "@formstr/signer";
@@ -31,6 +32,8 @@ interface AuthStore {
   legacyMigration: LegacySession | null;
   authModalOpen: boolean;
   authModalMode: "login" | "unlock";
+  /** Kind-0 profile of the active account (best-effort; null when logged out). */
+  profile: NostrProfile | null;
 
   init(): Promise<void>;
   loginWithExtension(): Promise<void>;
@@ -51,6 +54,8 @@ interface AuthStore {
 let pendingResolvers: Array<(signer: NostrSigner) => void> = [];
 
 export const useAuthStore = create<AuthStore>((set, get) => {
+  let profileLoadedFor: string | null = null;
+
   /** Push appSigner's current account/signer state into the store + signerManager. */
   function sync(): void {
     const active = appSigner.getActiveAccount();
@@ -82,9 +87,25 @@ export const useAuthStore = create<AuthStore>((set, get) => {
         locked: activeSigner === null,
         authModalOpen: activeSigner === null ? get().authModalOpen : false,
       });
+      if (active.pubkey !== profileLoadedFor) {
+        profileLoadedFor = active.pubkey;
+        void fetchProfile(active.pubkey)
+          .then((profile) => {
+            if (get().pubkey === active.pubkey) set({ profile });
+          })
+          .catch(() => {});
+      }
     } else {
       signerManager.logout();
-      set({ accounts, pubkey: null, method: null, isLoggedIn: false, locked: false });
+      profileLoadedFor = null;
+      set({
+        accounts,
+        pubkey: null,
+        method: null,
+        isLoggedIn: false,
+        locked: false,
+        profile: null,
+      });
     }
   }
 
@@ -98,6 +119,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     legacyMigration: null,
     authModalOpen: false,
     authModalMode: "login",
+    profile: null,
 
     async init() {
       appSigner.onChange(() => sync());
