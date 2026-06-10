@@ -20,6 +20,7 @@ vi.mock("@formstr/agent/services/drive/service", () => ({
   uploadFile: vi.fn(),
   deleteFile: vi.fn(() => Promise.resolve()),
   downloadFile: vi.fn(),
+  downloadPreview: vi.fn(),
   renameFile: vi.fn(() => Promise.resolve()),
   moveFile: vi.fn(() => Promise.resolve()),
   extractFolders: vi.fn(() => ["/"]),
@@ -112,6 +113,50 @@ describe("driveStore — servers", () => {
     await useDriveStore.getState().loadServers();
     expect(driveService.fetchBlossomServers).toHaveBeenCalledWith(["https://my.server"]);
     expect(useDriveStore.getState().servers).toHaveLength(1);
+  });
+});
+
+describe("driveStore — preview thumbnails", () => {
+  beforeEach(() => {
+    useDriveStore.setState({ previewUrls: {} });
+    if (typeof URL.createObjectURL !== "function") {
+      URL.createObjectURL = vi.fn();
+    }
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:mock-url");
+  });
+
+  it("loadPreview downloads, decrypts, and caches an object URL by file hash", async () => {
+    (driveService.downloadPreview as any).mockResolvedValue(new Uint8Array([1, 2, 3]));
+    const file = meta({ hash: "h1", previewHash: "p1" });
+
+    await useDriveStore.getState().loadPreview(file);
+
+    expect(driveService.downloadPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ previewHash: "p1" }),
+    );
+    expect(useDriveStore.getState().previewUrls.h1).toBe("blob:mock-url");
+  });
+
+  it("loadPreview is a no-op without a previewHash and never refetches a cached hash", async () => {
+    await useDriveStore.getState().loadPreview(meta({ hash: "h1" }));
+    expect(driveService.downloadPreview).not.toHaveBeenCalled();
+
+    (driveService.downloadPreview as any).mockResolvedValue(new Uint8Array([1]));
+    const file = meta({ hash: "h2", previewHash: "p2" });
+    await useDriveStore.getState().loadPreview(file);
+    await useDriveStore.getState().loadPreview(file);
+    expect(driveService.downloadPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it("loadPreview records a failed attempt so it is not retried", async () => {
+    (driveService.downloadPreview as any).mockRejectedValue(new Error("offline"));
+    const file = meta({ hash: "h3", previewHash: "p3" });
+
+    await useDriveStore.getState().loadPreview(file);
+    await useDriveStore.getState().loadPreview(file);
+
+    expect(driveService.downloadPreview).toHaveBeenCalledTimes(1);
+    expect(useDriveStore.getState().previewUrls.h3).toBeNull();
   });
 });
 

@@ -1,9 +1,12 @@
 import type {
+  PageComment,
+  PageCommentDraft,
   PageDocument,
   PageSummary,
   SharedPageEntry,
   ShareResult,
 } from "@formstr/agent/services/pages";
+import * as pagesComments from "@formstr/agent/services/pages/comments";
 import * as pagesService from "@formstr/agent/services/pages/service";
 import type { SavePageParams } from "@formstr/agent/services/pages/service";
 import { decodeNKeys } from "@formstr/core";
@@ -40,6 +43,9 @@ interface PagesStore {
   pages: PageSummary[];
   sharedPages: PageSummary[];
   currentPage: PageDocument | null;
+  /** Kind-1494 comments on the current page (oldest first; viewKey docs only). */
+  comments: PageComment[];
+  isLoadingComments: boolean;
   tagsByAddress: Record<string, string[]>;
   activeTag: string | null;
   isLoading: boolean;
@@ -56,12 +62,18 @@ interface PagesStore {
   setTags(address: string, tags: string[]): Promise<void>;
   setActiveTag(tag: string | null): void;
   clearCurrent(): void;
+  /** Refresh the current page's comments; clears them when the doc has no viewKey. */
+  loadComments(): Promise<void>;
+  /** Publish a comment on the current page; false when it has no viewKey/event yet. */
+  addComment(draft: PageCommentDraft): Promise<boolean>;
 }
 
 export const usePagesStore = create<PagesStore>((set, get) => ({
   pages: [],
   sharedPages: [],
   currentPage: null,
+  comments: [],
+  isLoadingComments: false,
   tagsByAddress: {},
   activeTag: null,
   isLoading: false,
@@ -219,6 +231,46 @@ export const usePagesStore = create<PagesStore>((set, get) => ({
   },
 
   clearCurrent() {
-    set({ currentPage: null });
+    set({ currentPage: null, comments: [] });
+  },
+
+  async loadComments() {
+    const page = get().currentPage;
+    const viewKey = page?.viewKey ?? (page ? getViewKey(page.address) : undefined);
+    if (!page || !viewKey) {
+      set({ comments: [] });
+      return;
+    }
+    set({ isLoadingComments: true });
+    try {
+      const comments = await pagesComments.fetchPageComments(page.address, viewKey);
+      set({ comments, isLoadingComments: false });
+    } catch (e) {
+      set({
+        error: e instanceof Error ? e.message : "Failed to load comments",
+        isLoadingComments: false,
+      });
+    }
+  },
+
+  async addComment(draft) {
+    const page = get().currentPage;
+    const viewKey = page?.viewKey ?? (page ? getViewKey(page.address) : undefined);
+    const eventId = page?.event?.id;
+    if (!page || !viewKey || !eventId) return false;
+    try {
+      const event = await pagesComments.publishPageComment(draft, viewKey, page.address, eventId);
+      const comment: PageComment = {
+        ...draft,
+        id: event.id,
+        author: event.pubkey,
+        createdAt: event.created_at,
+      };
+      set((state) => ({ comments: [...state.comments, comment] }));
+      return true;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to publish comment" });
+      return false;
+    }
   },
 }));

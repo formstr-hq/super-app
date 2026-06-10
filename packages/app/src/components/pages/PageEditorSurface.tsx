@@ -1,8 +1,9 @@
 import type { PageDocument } from "@formstr/agent/services/pages";
 import { Box, Button, Chip, TextField, Typography } from "@mui/material";
-import { Lock, Share2, Tag, Trash2 } from "lucide-react";
+import { Lock, MessageSquare, Share2, Tag, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { PageCommentsPanel } from "./PageCommentsPanel";
 import { RichEditor } from "./RichEditor";
 
 interface PageEditorSurfaceProps {
@@ -49,7 +50,12 @@ export function PageEditorSurface({
 }: PageEditorSurfaceProps) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const tagsBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setCommentsOpen(false);
+  }, [page?.address]);
 
   useEffect(() => {
     const md = page?.content ?? "";
@@ -135,6 +141,17 @@ export function PageEditorSurface({
         >
           Share
         </Button>
+        <Button
+          variant={commentsOpen ? "contained" : "outlined"}
+          size="small"
+          color="inherit"
+          startIcon={<MessageSquare size={15} />}
+          disabled={!page}
+          onClick={() => setCommentsOpen((o) => !o)}
+          sx={commentsOpen ? undefined : { color: "text.primary", borderColor: "divider" }}
+        >
+          Comments
+        </Button>
         {!readOnly && (
           <Button
             variant="outlined"
@@ -160,23 +177,28 @@ export function PageEditorSurface({
         )}
       </Box>
 
-      {/* Body */}
-      <Box
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          px: 3,
-          py: 2.5,
-          "& .ProseMirror": { minHeight: "100%", outline: "none" },
-        }}
-      >
-        <RichEditor
-          key={page?.address ?? "new-page"}
-          initialMarkdown={bodyMarkdown}
-          onChangeMarkdown={setContent}
-          editable={!readOnly}
-        />
+      {/* Body (+ optional comments panel) */}
+      <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+            overflowY: "auto",
+            px: 3,
+            py: 2.5,
+            display: { xs: commentsOpen ? "none" : "block", sm: "block" },
+            "& .ProseMirror": { minHeight: "100%", outline: "none" },
+          }}
+        >
+          <RichEditor
+            key={page?.address ?? "new-page"}
+            initialMarkdown={bodyMarkdown}
+            onChangeMarkdown={setContent}
+            editable={!readOnly}
+          />
+        </Box>
+        {commentsOpen && page && <PageCommentsPanel onClose={() => setCommentsOpen(false)} />}
       </Box>
 
       {/* Hint */}

@@ -23,7 +23,9 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { useDriveStore } from "../../stores/driveStore";
 
 interface FileListProps {
   childFolders: string[];
@@ -35,6 +37,36 @@ interface FileListProps {
   onRename: (file: FileMetadata) => void;
   onMove: (file: FileMetadata) => void;
   onDelete: (file: FileMetadata) => void;
+}
+
+/** Decrypted webp thumbnail (kind-34578 previewHash) with the file icon as fallback. */
+function FileThumb({ file }: { file: FileMetadata }) {
+  const theme = useTheme();
+  const previewUrl = useDriveStore((s) => s.previewUrls[file.hash]);
+  const loadPreview = useDriveStore((s) => s.loadPreview);
+
+  useEffect(() => {
+    if (file.previewHash) void loadPreview(file);
+  }, [file, loadPreview]);
+
+  if (previewUrl) {
+    return (
+      <Box
+        component="img"
+        src={previewUrl}
+        alt=""
+        sx={{
+          width: 28,
+          height: 28,
+          objectFit: "cover",
+          borderRadius: 0.75,
+          flexShrink: 0,
+          border: `1px solid ${theme.palette.divider}`,
+        }}
+      />
+    );
+  }
+  return <FileIcon size={16} color={theme.palette.text.secondary} style={{ flexShrink: 0 }} />;
 }
 
 function formatBytes(bytes: number): string {
@@ -213,7 +245,7 @@ export function FileList({
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, minWidth: 0 }}>
-            <FileIcon size={16} color={theme.palette.text.secondary} style={{ flexShrink: 0 }} />
+            <FileThumb file={file} />
             <Typography variant="body2" noWrap>
               {file.name}
             </Typography>
