@@ -46,6 +46,7 @@
   "devDependencies": {
     "@formstr/agent": "workspace:*",
     "@formstr/core": "workspace:*",
+    "@formstr/signer": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "^25.6.0",
     "@types/qrcode": "^1.5.5",
