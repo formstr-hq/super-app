@@ -1,6 +1,7 @@
 import type { FileMetadata } from "@formstr/agent/services/drive";
 import {
   Box,
+  Button,
   Chip,
   CircularProgress,
   IconButton,
@@ -8,7 +9,6 @@ import {
   Menu,
   MenuItem,
   Skeleton,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -77,7 +77,7 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-const GRID = "1fr 90px 120px 110px 40px";
+const GRID = "1fr 90px 120px 110px auto";
 
 export function FileList({
   childFolders,
@@ -241,7 +241,6 @@ export function FileList({
             py: 1.15,
             borderBottom: `1px solid ${theme.palette.divider}`,
             "&:hover": { bgcolor: "action.hover" },
-            "&:hover .file-actions": { opacity: 1 },
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, minWidth: 0 }}>
@@ -269,31 +268,24 @@ export function FileList({
               day: "numeric",
             })}
           </Typography>
-          <Box
-            className="file-actions"
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              opacity: 0,
-              transition: "opacity 150ms",
-            }}
-          >
-            <Tooltip title="Download">
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={downloadingHash === file.hash}
-                  onClick={() => onDownload(file)}
-                >
-                  {downloadingHash === file.hash ? (
-                    <CircularProgress size={14} />
-                  ) : (
-                    <Download size={15} />
-                  )}
-                </IconButton>
-              </span>
-            </Tooltip>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 0.5 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="inherit"
+              disabled={downloadingHash === file.hash}
+              onClick={() => onDownload(file)}
+              startIcon={
+                downloadingHash === file.hash ? (
+                  <CircularProgress size={12} />
+                ) : (
+                  <Download size={13} />
+                )
+              }
+              sx={{ fontSize: 12, px: 1, py: 0.25, color: "text.primary", borderColor: "divider" }}
+            >
+              Download
+            </Button>
             <IconButton size="small" onClick={(e) => openMenu(e, file)}>
               <MoreVertical size={15} />
             </IconButton>
