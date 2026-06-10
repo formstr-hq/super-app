@@ -81,7 +81,7 @@ describe("buildServer", () => {
     expect(count(rw)).toBeGreaterThan(count(ro));
   });
 
-  it("registers all 51 tools with writes enabled", () => {
-    expect(count(buildServer({ allowWrites: true }))).toBe(51);
+  it("registers all 53 tools with writes enabled", () => {
+    expect(count(buildServer({ allowWrites: true }))).toBe(53);
   });
 });

@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import { ok } from "../result";
 import { requireConfirm } from "../safety";
-import { pages } from "../services";
+import { pages, pagesComments } from "../services";
+import type { PageComment } from "../services";
 
 import type { ToolEntry } from "./types";
 
@@ -62,7 +63,8 @@ function buildPagesTools(): ToolEntry[] {
   server.registerTool(
     "list_shared_pages",
     {
-      description: "List documents others have shared with you (kind-11234 inbox).",
+      description:
+        "List documents others have shared with you (kind-34579 doc-metadata entries carrying a viewKey).",
       inputSchema: {},
     },
     async () => {
@@ -86,6 +88,27 @@ function buildPagesTools(): ToolEntry[] {
     async ({ address }: { address: string }) => {
       const map = await pages.fetchDocTags([address]);
       return ok("Tags fetched.", { address, tags: map.get(address) ?? [] });
+    },
+  );
+
+  server.registerTool(
+    "list_page_comments",
+    {
+      description:
+        "List the inline comments/suggestions on a shared document (kind 1494; needs the doc's viewKey).",
+      inputSchema: { address: z.string(), viewKey: z.string() },
+    },
+    async ({ address, viewKey }: { address: string; viewKey: string }) => {
+      const comments = await pagesComments.fetchPageComments(address, viewKey);
+      return ok(`${comments.length} comment(s).`, {
+        comments: comments.map((c: PageComment) => ({
+          author: c.author,
+          createdAt: c.createdAt,
+          type: c.type,
+          content: c.content,
+          quote: c.quote,
+        })),
+      });
     },
   );
 
@@ -213,6 +236,54 @@ function buildPagesTools(): ToolEntry[] {
         viewKey: result.viewKey,
         editKey: result.editKey,
       });
+    },
+  );
+
+  server.registerTool(
+    "add_page_comment",
+    {
+      description:
+        "Add an inline comment or suggestion to a shared document (kind 1494). Requires confirm:true.",
+      inputSchema: {
+        address: z.string(),
+        eventId: z.string(),
+        viewKey: z.string(),
+        content: z.string(),
+        type: z.enum(["comment", "suggestion"]).optional(),
+        quote: z.string().optional(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async ({
+      address,
+      eventId,
+      viewKey,
+      content,
+      type,
+      quote,
+      confirm,
+    }: {
+      address: string;
+      eventId: string;
+      viewKey: string;
+      content: string;
+      type?: "comment" | "suggestion";
+      quote?: string;
+      confirm?: boolean;
+    }) => {
+      const blocked = requireConfirm(
+        "add_page_comment",
+        { confirm },
+        `publishes a comment on ${address}`,
+      );
+      if (blocked) return blocked;
+      const event = await pagesComments.publishPageComment(
+        { content, type: type ?? "comment", ...(quote !== undefined ? { quote } : {}) },
+        viewKey,
+        address,
+        eventId,
+      );
+      return ok("Comment published.", { id: event.id });
     },
   );
 

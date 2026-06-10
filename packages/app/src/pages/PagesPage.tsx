@@ -2,6 +2,7 @@ import type { PageDocument, PageSummary } from "@formstr/agent/services/pages";
 import { Alert, Box, Snackbar, Typography } from "@mui/material";
 import { FileEdit } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
 import { PageEditorSurface } from "../components/pages/PageEditorSurface";
@@ -27,8 +28,11 @@ export function PagesPage() {
     setTags,
     setActiveTag,
     clearCurrent,
+    openSharedLink,
   } = usePagesStore();
   const pubkey = useAuthStore((s) => s.pubkey);
+  const { "*": splat } = useParams();
+  const { hash } = useLocation();
 
   const [mode, setMode] = useState<"empty" | "new" | "open">("empty");
   const [saving, setSaving] = useState(false);
@@ -42,6 +46,15 @@ export function PagesPage() {
       fetchSharedPages();
     }
   }, [pubkey, fetchMyPages, fetchSharedPages]);
+
+  // Share link: /pages/<naddr>#<nkeys> (also accepts upstream's /doc/<naddr> splat).
+  useEffect(() => {
+    const naddr = splat?.split("/").find((s) => s.startsWith("naddr1"));
+    if (naddr) {
+      setMode("open");
+      void openSharedLink(naddr, hash);
+    }
+  }, [splat, hash, openSharedLink]);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();

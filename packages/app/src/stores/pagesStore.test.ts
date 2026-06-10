@@ -129,6 +129,42 @@ describe("sharePage", () => {
   });
 });
 
+describe("openSharedLink", () => {
+  it("decodes naddr + nkeys, loads the page, and records the share in doc metadata", async () => {
+    const { nip19 } = await import("nostr-tools");
+    const { encodeNKeys } = await import("@formstr/core");
+    const ownerPub = "a".repeat(64);
+    const naddr = nip19.naddrEncode({ kind: 33457, pubkey: ownerPub, identifier: "d7" });
+    const vk = "1".repeat(64);
+    const ek = "2".repeat(64);
+    const hash = `#${encodeNKeys({ viewKey: vk, editKey: ek })}`;
+    (pagesService.fetchPage as any).mockResolvedValue({
+      id: "d7",
+      address: `33457:${ownerPub}:d7`,
+      title: "Shared",
+      content: "# Shared",
+      pubkey: ownerPub,
+      createdAt: 1,
+      isEncrypted: false,
+      viewKey: vk,
+    });
+    (pagesService.fetchSharedPages as any).mockResolvedValue([]);
+
+    await usePagesStore.getState().openSharedLink(naddr, hash);
+
+    expect(pagesService.fetchPage).toHaveBeenCalledWith(ownerPub, "d7", vk);
+    expect(pagesService.addSharedPage).toHaveBeenCalledWith([`33457:${ownerPub}:d7`, vk, ek]);
+    expect(usePagesStore.getState().currentPage?.editKey).toBe(ek);
+    expect(localStorage.getItem(`formstr:page-viewkey:33457:${ownerPub}:d7`)).toBe(vk);
+  });
+
+  it("surfaces an error for non-naddr links", async () => {
+    await usePagesStore.getState().openSharedLink("nevent1qqsxyz", "");
+    expect(usePagesStore.getState().error).toBeTruthy();
+    expect(pagesService.fetchPage).not.toHaveBeenCalled();
+  });
+});
+
 describe("setTags", () => {
   it("forwards to the service and updates tagsByAddress", async () => {
     (pagesService.setDocTags as any).mockResolvedValue(undefined);

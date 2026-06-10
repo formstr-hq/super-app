@@ -1,6 +1,13 @@
-import type { PageDocument, PageSummary, ShareResult } from "@formstr/agent/services/pages";
+import type {
+  PageDocument,
+  PageSummary,
+  SharedPageEntry,
+  ShareResult,
+} from "@formstr/agent/services/pages";
 import * as pagesService from "@formstr/agent/services/pages/service";
 import type { SavePageParams } from "@formstr/agent/services/pages/service";
+import { decodeNKeys } from "@formstr/core";
+import { nip19 } from "nostr-tools";
 import { create } from "zustand";
 
 const VIEW_KEY_PREFIX = "formstr:page-viewkey:";
@@ -41,6 +48,8 @@ interface PagesStore {
   fetchMyPages(): Promise<void>;
   fetchSharedPages(): Promise<void>;
   loadPage(pubkey: string, docId: string, viewKey?: string): Promise<void>;
+  /** Open a `/pages/<naddr>#<nkeys>` share link: load + record it (upstream DocPage). */
+  openSharedLink(naddr: string, hashFragment: string): Promise<void>;
   savePage(params: SavePageParams): Promise<PageDocument>;
   deletePage(address: string): Promise<void>;
   sharePage(canEdit: boolean): Promise<ShareResult | null>;
@@ -93,6 +102,52 @@ export const usePagesStore = create<PagesStore>((set, get) => ({
       set({ currentPage: page, isLoading: false });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to load page", isLoading: false });
+    }
+  },
+
+  async openSharedLink(naddr, hashFragment) {
+    set({ isLoading: true, error: null });
+    try {
+      const decoded = nip19.decode(naddr);
+      if (decoded.type !== "naddr") throw new Error("Not a document link");
+      const { pubkey, identifier } = decoded.data;
+
+      let viewKey: string | undefined;
+      let editKey: string | undefined;
+      const fragment = hashFragment.replace(/^#/, "");
+      if (fragment) {
+        try {
+          const keys = decodeNKeys(fragment);
+          viewKey = keys.viewKey;
+          editKey = keys.editKey;
+        } catch {
+          /* plain naddr link without keys */
+        }
+      }
+
+      const address = `33457:${pubkey}:${identifier}`;
+      const page = await pagesService.fetchPage(pubkey, identifier, viewKey);
+      if (!page) throw new Error("Shared page not found");
+
+      if (viewKey) {
+        persistViewKey(address, viewKey, editKey);
+        // Record the grant in doc metadata so it roams across devices and to
+        // pages.formstr.app (upstream addSharedDoc).
+        const entry: SharedPageEntry = editKey ? [address, viewKey, editKey] : [address, viewKey];
+        try {
+          await pagesService.addSharedPage(entry);
+        } catch {
+          /* best-effort; the page still opens locally */
+        }
+      }
+
+      set({ currentPage: { ...page, editKey }, isLoading: false });
+      void get().fetchSharedPages();
+    } catch (e) {
+      set({
+        error: e instanceof Error ? e.message : "Failed to open shared link",
+        isLoading: false,
+      });
     }
   },
 
