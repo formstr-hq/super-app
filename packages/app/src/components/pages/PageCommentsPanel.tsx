@@ -13,6 +13,7 @@ import { nip19 } from "nostr-tools";
 import { useEffect, useState } from "react";
 
 import { usePagesStore } from "../../stores/pagesStore";
+import { EmptyState } from "../EmptyState";
 
 function shortAuthor(pubkey: string): string {
   try {
@@ -107,9 +108,12 @@ export function PageCommentsPanel({ onClose }: PageCommentsPanelProps) {
             discuss it here and on pages.formstr.app.
           </Typography>
         ) : comments.length === 0 && !isLoading ? (
-          <Typography variant="body2" color="text.secondary">
-            No comments yet.
-          </Typography>
+          <EmptyState
+            icon={MessageSquare}
+            title="No comments yet"
+            description="Anyone with the share link can comment."
+            compact
+          />
         ) : (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
             {comments.map((c) => (

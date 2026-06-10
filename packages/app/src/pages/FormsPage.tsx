@@ -8,6 +8,7 @@ import { nip19 } from "nostr-tools";
 import { useCallback, useEffect, useState } from "react";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
+import { EmptyState } from "../components/EmptyState";
 import { FillFormDialog } from "../components/forms/FillFormDialog";
 import { FormBuilderSurface } from "../components/forms/FormBuilderSurface";
 import { FormListView } from "../components/forms/FormListView";
@@ -225,35 +226,6 @@ export function FormsPage() {
 }
 
 function CategoryEmpty({ category }: { category: Exclude<FormsCategory, "my"> }) {
-  const theme = useTheme();
   const { Icon, text } = EMPTY_STATES[category];
-  return (
-    <Box
-      sx={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 1.5,
-        textAlign: "center",
-        color: "text.secondary",
-      }}
-    >
-      <Box
-        sx={{
-          width: 56,
-          height: 56,
-          borderRadius: 2,
-          bgcolor: "action.hover",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Icon size={26} color={theme.palette.text.secondary} />
-      </Box>
-      <Typography variant="body2">{text}</Typography>
-    </Box>
-  );
+  return <EmptyState icon={Icon} title={CATEGORY_TITLES[category]} description={text} />;
 }

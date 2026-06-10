@@ -26,6 +26,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { useDriveStore } from "../../stores/driveStore";
+import { EmptyState } from "../EmptyState";
 
 interface FileListProps {
   childFolders: string[];
@@ -123,38 +124,11 @@ export function FileList({
 
   if (childFolders.length === 0 && files.length === 0) {
     return (
-      <Box
-        sx={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          py: 10,
-          gap: 1.5,
-          textAlign: "center",
-        }}
-      >
-        <Box
-          sx={{
-            width: 56,
-            height: 56,
-            borderRadius: 2,
-            bgcolor: "action.hover",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <CloudUpload size={28} color={theme.palette.text.secondary} />
-        </Box>
-        <Typography variant="body2" fontWeight={500}>
-          Drop files here
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          or use the Upload button above
-        </Typography>
-      </Box>
+      <EmptyState
+        icon={CloudUpload}
+        title="Drop files here"
+        description="Files are encrypted end-to-end before upload — or use the Upload button above."
+      />
     );
   }
 

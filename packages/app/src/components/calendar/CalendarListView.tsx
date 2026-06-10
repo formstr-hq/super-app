@@ -1,8 +1,10 @@
 import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
 import { Box, Typography } from "@mui/material";
+import { CalendarDays } from "lucide-react";
 
 import { calendarForEvent } from "../../lib/calendarMembership";
 import { expandEvents } from "../../lib/rrule";
+import { EmptyState } from "../EmptyState";
 
 import { EventCard } from "./EventCard";
 
@@ -33,9 +35,12 @@ export function CalendarListView({
 
   if (inMonth.length === 0) {
     return (
-      <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-        No events this month.
-      </Typography>
+      <EmptyState
+        icon={CalendarDays}
+        title="No events this month"
+        description="Create an event or import invitations — private events stay encrypted."
+        compact
+      />
     );
   }
 

@@ -22,7 +22,7 @@ import {
   Tabs,
   Typography,
 } from "@mui/material";
-import { Copy, Download } from "lucide-react";
+import { BarChart3, Copy, Download } from "lucide-react";
 import { nip19 } from "nostr-tools";
 import { useState } from "react";
 
@@ -34,6 +34,7 @@ import {
   responsesToJson,
 } from "../../lib/exportResponses";
 import { formatNpub } from "../../lib/npub";
+import { EmptyState } from "../EmptyState";
 
 import { FormAnalytics } from "./FormAnalytics";
 
@@ -111,11 +112,12 @@ export function ResponsesDialog({ open, form, responses, isLoading, onClose }: P
           </Box>
         ) : tab === 0 ? (
           responses.length === 0 ? (
-            <Box sx={{ py: 6, textAlign: "center" }}>
-              <Typography variant="body2" color="text.secondary">
-                No responses yet.
-              </Typography>
-            </Box>
+            <EmptyState
+              icon={BarChart3}
+              title="No responses yet"
+              description="Share the fill link — submissions appear here live."
+              compact
+            />
           ) : (
             <Table size="small" sx={{ minWidth: 600 }}>
               <TableHead>

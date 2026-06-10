@@ -17,12 +17,20 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { ArrowLeft, ChevronLeft, ChevronRight, PlusCircle, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
+  PlusCircle,
+  Trash2,
+} from "lucide-react";
 import { useSnackbar } from "notistack";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuthStore } from "../../stores";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { EmptyState } from "../EmptyState";
 
 function formatRange(r: BusyRange) {
   const opts: Intl.DateTimeFormatOptions = {
@@ -190,9 +198,12 @@ export function AvailabilityView({ onBack }: AvailabilityViewProps) {
           {/* Ranges */}
           <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.5 }}>
             {!loading && ranges.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
-                No busy time published for this month.
-              </Typography>
+              <EmptyState
+                icon={CalendarRange}
+                title="No busy time published"
+                description="Calendar events publish busy slots automatically — or block extra time below."
+                compact
+              />
             ) : (
               <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75, maxWidth: 560 }}>
                 {ranges.map((r) => (

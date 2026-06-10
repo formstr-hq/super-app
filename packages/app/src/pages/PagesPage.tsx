@@ -1,10 +1,11 @@
 import type { PageDocument, PageSummary } from "@formstr/agent/services/pages";
-import { Alert, Box, Snackbar, Typography } from "@mui/material";
+import { Alert, Box, Snackbar } from "@mui/material";
 import { FileEdit } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
+import { EmptyState } from "../components/EmptyState";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { PageEditorSurface } from "../components/pages/PageEditorSurface";
 import { PagesSidebar } from "../components/pages/PagesSidebar";
@@ -156,22 +157,14 @@ export function PagesPage() {
             onOpenTags={setTagsAnchor}
           />
         ) : (
-          <Box
-            sx={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 1.5,
-              color: "text.secondary",
-            }}
-          >
-            <FileEdit size={40} strokeWidth={1.4} />
-            <Typography variant="body2" fontWeight={500}>
-              Select a page or create a new one
-            </Typography>
-          </Box>
+          <EmptyState
+            icon={FileEdit}
+            title="No page open"
+            description="Encrypted Markdown docs with shareable view or edit links and inline comments."
+            actionLabel="New page"
+            onAction={handleNew}
+            aiHint="or ask the AI to write one"
+          />
         )}
       </Box>
 

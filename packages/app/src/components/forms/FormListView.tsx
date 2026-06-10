@@ -1,8 +1,9 @@
 import type { FormSummary } from "@formstr/agent/services/forms/types";
-import { Box, Button, Grid2 as MuiGrid, Paper, Skeleton, Tooltip, Typography } from "@mui/material";
-import { Lock, Plus } from "lucide-react";
+import { Box, Grid2 as MuiGrid, Paper, Skeleton, Tooltip, Typography } from "@mui/material";
+import { ClipboardList, Lock } from "lucide-react";
 
 import type { FormsView } from "../../stores/settingsStore";
+import { EmptyState } from "../EmptyState";
 
 import { FormActions } from "./FormActions";
 import { FormCard } from "./FormCard";
@@ -44,14 +45,14 @@ export function FormListView({
 
   if (forms.length === 0) {
     return (
-      <Box sx={{ textAlign: "center", py: 8 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          No forms yet. Create your first form to get started.
-        </Typography>
-        <Button variant="contained" startIcon={<Plus size={16} />} onClick={onCreateNew}>
-          New Form
-        </Button>
-      </Box>
+      <EmptyState
+        icon={ClipboardList}
+        title="No forms yet"
+        description="Build an encrypted survey, share the link, and collect answers only you can read."
+        actionLabel="New form"
+        onAction={onCreateNew}
+        aiHint="or ask the AI to draft one"
+      />
     );
   }
 

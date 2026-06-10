@@ -19,6 +19,7 @@ import { BarChart3, Check, Link2, MoreVertical, Trash2, Users, Vote } from "luci
 import { useEffect, useState } from "react";
 
 import { copyText } from "../../lib/clipboard";
+import { EmptyState } from "../EmptyState";
 
 import { VotersModal } from "./VotersModal";
 
@@ -68,22 +69,12 @@ export function PollDetail({
 
   if (!poll) {
     return (
-      <Box
-        sx={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 1.5,
-          color: "text.secondary",
-        }}
-      >
-        <BarChart3 size={40} strokeWidth={1.4} />
-        <Typography variant="body2" fontWeight={500}>
-          Select a poll or create a new one
-        </Typography>
-      </Box>
+      <EmptyState
+        icon={BarChart3}
+        title="No poll selected"
+        description="Pick a poll from the list — or create one and share it on Nostr for live results."
+        aiHint="or ask the AI to draft one"
+      />
     );
   }
 

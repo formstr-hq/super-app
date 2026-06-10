@@ -9,12 +9,13 @@ import {
   Typography,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { ArrowLeft, Check, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, X } from "lucide-react";
 import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
 
 import { formatNpub } from "../../lib/npub";
 import { useBookingStore, useCalendarStore } from "../../stores";
+import { EmptyState } from "../EmptyState";
 
 function formatWhen(startMs: number, endMs: number) {
   const start = new Date(startMs);
@@ -79,9 +80,12 @@ export function BookingsView({ onBack }: BookingsViewProps) {
             Pending requests
           </Typography>
           {pending.length === 0 ? (
-            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-              No pending booking requests.
-            </Typography>
+            <EmptyState
+              icon={CalendarClock}
+              title="No pending booking requests"
+              description="Share a booking link and requests will land here for approval."
+              compact
+            />
           ) : (
             pending.map((req) => (
               <BookingRow
