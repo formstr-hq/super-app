@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@formstr/core": "workspace:*",
+    "@noble/hashes": "^1.8.0",
     "nostr-tools": "^2.23.3",
     "zod": "^3.24.0",
     "zod-to-json-schema": "^3.24.0"

@@ -6,12 +6,11 @@ import {
   nip44SelfEncrypt,
   nip44SelfDecrypt,
   LocalSigner,
-  wrapManyEvents,
-  createRef,
 } from "@formstr/core";
 import type { SubscriptionHandle, NostrSigner } from "@formstr/core";
-import type { EventTemplate, Event, Filter } from "nostr-tools";
-import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
+import { sha256 } from "@noble/hashes/sha256";
+import type { EventTemplate, Event, Filter, UnsignedEvent } from "nostr-tools";
+import { generateSecretKey, getPublicKey, finalizeEvent, getEventHash } from "nostr-tools";
 import { bytesToHex } from "nostr-tools/utils";
 
 import { buildFieldTag, parseFieldTag } from "./fieldCodec";
@@ -34,9 +33,7 @@ import {
 
 /** Module relays ∪ a form's own `["relay"]` hints — upstream submits/fetches on both. */
 function relaysForForm(formRelays?: string[]): string[] {
-  return Array.from(
-    new Set([...relayManager.getRelaysForModule("forms"), ...(formRelays ?? [])]),
-  );
+  return Array.from(new Set([...relayManager.getRelaysForModule("forms"), ...(formRelays ?? [])]));
 }
 
 /**
@@ -66,11 +63,7 @@ function buildEncryptedOuterTags(
   relays: string[],
   settings?: FormSettings,
 ): string[][] {
-  const tags: string[][] = [
-    ["d", formId],
-    ["name", name],
-    ...relays.map((r) => ["relay", r]),
-  ];
+  const tags: string[][] = [["d", formId], ["name", name], ...relays.map((r) => ["relay", r])];
   const allowed = settings?.allowedResponders ?? [];
   const pTags = new Set([...allowed, ...(settings?.collaborators ?? [])]);
   for (const pk of allowed) tags.push(["allowed", pk]);
@@ -95,18 +88,21 @@ export interface CreateFormResult {
 }
 
 export async function createForm(params: CreateFormParams): Promise<CreateFormResult> {
-  const signer = await signerManager.getSigner();
-  const userPubkey = await signer.getPublicKey();
+  await signerManager.getSigner(); // fail fast when logged out — the my-forms list write needs an identity
   const formId = crypto.randomUUID().slice(0, 8);
   const relays = relayManager.getRelaysForModule("forms");
 
   const specRows = buildSpecRows(formId, params.name, params.fields, params.settings);
 
-  if (params.encrypt) {
-    const signingKey = generateSecretKey();
-    const signingKeyHex = bytesToHex(signingKey);
-    const signingPubkey = getPublicKey(signingKey);
+  // Upstream signs EVERY form (public too) with an ephemeral signing key, so
+  // formstr.app can edit it later by republishing 30168:signingPub:formId with the
+  // key from the 14083 entry. Signing public forms with the user key would fork the
+  // address on cross-app edits.
+  const signingKey = generateSecretKey();
+  const signingKeyHex = bytesToHex(signingKey);
+  const signingPubkey = getPublicKey(signingKey);
 
+  if (params.encrypt) {
     const viewKey = generateSecretKey();
     const viewKeyHex = bytesToHex(viewKey);
     const viewPubkey = getPublicKey(viewKey);
@@ -130,8 +126,8 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
     return { formId, pubkey: signingPubkey, signingKey: signingKeyHex, viewKey: viewKeyHex };
   }
 
-  // Public form — user signs with their own key. Upstream tags EVERY plaintext
-  // form ["t","public"] (its public browse filter), not just publicForm ones.
+  // Plaintext form. Upstream tags EVERY plaintext form ["t","public"] (its public
+  // browse filter), not just publicForm ones.
   const tags: string[][] = [...specRows, ["t", "public"], ...relays.map((r) => ["relay", r])];
   const event: EventTemplate = {
     kind: FORM_KINDS.template,
@@ -139,13 +135,13 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
     tags,
     content: "",
   };
-  const signed = await signer.signEvent(event);
+  const signed = finalizeEvent(event, signingKey);
   await nostrRuntime.publish(relays, signed);
 
-  // Public form: store pubkey:formId in list (no key segment needed)
-  await appendToMyFormsList(userPubkey, formId, relays[0] ?? "", undefined, undefined);
+  // 4th segment carries the signing key only (no view key for public forms).
+  await appendToMyFormsList(signingPubkey, formId, relays[0] ?? "", signingKeyHex, undefined);
 
-  return { formId, pubkey: userPubkey };
+  return { formId, pubkey: signingPubkey, signingKey: signingKeyHex };
 }
 
 // ── Fetch Form ──────────────────────────────────────────
@@ -164,10 +160,18 @@ export async function fetchForm(
   } as Filter);
   if (!event) return null;
 
+  // No explicit view key for an encrypted form? Look for an inbound access grant
+  // (formstr.app's grantAccess wraps) before giving up.
+  let effectiveViewKey = viewKey;
+  if (!effectiveViewKey && event.content && !event.tags.some((t) => t[0] === "field")) {
+    const keys = await fetchFormKeys(pubkey, formId).catch(() => null);
+    effectiveViewKey = keys?.viewKey;
+  }
+
   let decryptedRows: string[][] | undefined;
-  if (event.content && viewKey) {
+  if (event.content && effectiveViewKey) {
     try {
-      const viewSigner = makeViewKeySigner(viewKey);
+      const viewSigner = makeViewKeySigner(effectiveViewKey);
       const decrypted = await viewSigner.nip44Decrypt(pubkey, event.content);
       const rows = JSON.parse(decrypted);
       if (Array.isArray(rows)) decryptedRows = rows as string[][];
@@ -177,6 +181,57 @@ export async function fetchForm(
   }
 
   return parseFormEvent(event, decryptedRows);
+}
+
+// ── Access grants (NIP-59-style, formstr.app protocol) ──
+
+/** sha256 alias used as the wrap's `p` tag — upstream `accessControl.ts createWrap`. */
+function accessGrantAlias(formAuthor: string, formId: string, recipient: string): string {
+  return bytesToHex(sha256(`${FORM_KINDS.template}:${formAuthor}:${formId}:${recipient}`));
+}
+
+export interface FormAccessKeys {
+  viewKey?: string;
+  signingKey?: string;
+}
+
+/**
+ * Discover access keys granted to the current user for a form (port of upstream
+ * `formUtils.fetchKeys`): query kind-1059 wraps `p`-tagged with the sha256 alias
+ * `30168:author:formId:userPub`, then unwrap wrap → seal → kind-18 rumor and read
+ * the `ViewAccess` / `EditAccess` tags.
+ *
+ * Returns null without throwing when no signer is available — this runs on read
+ * paths and must not trigger the login modal.
+ */
+export async function fetchFormKeys(
+  formAuthor: string,
+  formId: string,
+): Promise<FormAccessKeys | null> {
+  const signer = signerManager.getSignerIfAvailable();
+  if (!signer?.nip44Decrypt) return null;
+  const userPub = await signer.getPublicKey();
+
+  const relays = relayManager.getRelaysForModule("forms");
+  const wraps = await nostrRuntime.querySync(relays, {
+    kinds: [FORM_KINDS.giftWrap],
+    "#p": [accessGrantAlias(formAuthor, formId, userPub)],
+  } as Filter);
+
+  for (const wrap of wraps) {
+    try {
+      const seal = JSON.parse(await signer.nip44Decrypt(wrap.pubkey, wrap.content)) as Event;
+      const rumor = JSON.parse(await signer.nip44Decrypt(seal.pubkey, seal.content)) as {
+        tags?: string[][];
+      };
+      const viewKey = rumor.tags?.find((t) => t[0] === "ViewAccess")?.[1];
+      const signingKey = rumor.tags?.find((t) => t[0] === "EditAccess")?.[1];
+      if (viewKey || signingKey) return { viewKey, signingKey };
+    } catch {
+      // wrap not decryptable / malformed — try the next one
+    }
+  }
+  return null;
 }
 
 // ── Submit Response ─────────────────────────────────────
@@ -315,6 +370,43 @@ async function fetchLatestMyFormsEvent(
   );
 }
 
+/**
+ * Decrypt a kind-14083 payload to its entry tuples. NIP-44 self-encryption is the
+ * canonical format; legacy NIP-04 content (`?iv=`) is tolerated on read.
+ * Throws when the signer can't decrypt — callers decide whether that's fatal.
+ */
+async function decryptListEntries(
+  signer: NostrSigner,
+  userPubkey: string,
+  content: string,
+): Promise<string[][]> {
+  let decrypted = "";
+  if (content.includes("?iv=")) {
+    if (!signer.decrypt) throw new Error("Signer cannot decrypt");
+    decrypted = await signer.decrypt(userPubkey, content);
+  } else {
+    decrypted = await nip44SelfDecrypt(signer, content);
+  }
+  const parsed = JSON.parse(decrypted);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+/** Self-encrypt and publish the kind-14083 list (formstr.app reads NIP-44 only). */
+async function publishMyFormsList(
+  signer: NostrSigner,
+  relays: string[],
+  entries: string[][],
+): Promise<void> {
+  const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(entries));
+  const event: EventTemplate = {
+    kind: FORM_KINDS.myFormsList,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [],
+    content: encrypted,
+  };
+  await nostrRuntime.publish(relays, await signer.signEvent(event));
+}
+
 export async function fetchMyForms(): Promise<FormSummary[]> {
   const signer = await signerManager.getSigner();
   const userPubkey = await signer.getPublicKey();
@@ -325,15 +417,7 @@ export async function fetchMyForms(): Promise<FormSummary[]> {
   let entries: string[][] = [];
   if (listEvent?.content) {
     try {
-      let decrypted = "";
-      if (listEvent.content.includes("?iv=")) {
-        if (!signer.decrypt) throw new Error("Signer cannot decrypt");
-        decrypted = await signer.decrypt(userPubkey, listEvent.content);
-      } else {
-        decrypted = await nip44SelfDecrypt(signer, listEvent.content);
-      }
-      const parsed = JSON.parse(decrypted);
-      entries = Array.isArray(parsed) ? parsed : [];
+      entries = await decryptListEntries(signer, userPubkey, listEvent.content);
     } catch {
       // Fallback to author-query below
     }
@@ -359,7 +443,7 @@ export async function fetchMyForms(): Promise<FormSummary[]> {
   return entries
     .filter((e) => e[0] === "f" && e[1])
     .map((entry) => {
-      const [, coordKey, , keySegment] = entry;
+      const [, coordKey, relayHint, keySegment] = entry;
       const [formPubkey, formId] = coordKey.split(":");
       if (!formPubkey || !formId) return null;
 
@@ -378,6 +462,7 @@ export async function fetchMyForms(): Promise<FormSummary[]> {
         isEncrypted,
         signingKey: keys?.signingKey,
         viewKey: keys?.viewKey,
+        relay: relayHint || undefined,
       };
       return summary;
     })
@@ -407,15 +492,7 @@ async function appendToMyFormsList(
   let entries: string[][] = [];
   if (existing?.content) {
     try {
-      let decrypted = "";
-      if (existing.content.includes("?iv=")) {
-        if (!signer.decrypt) throw new Error("Signer cannot decrypt");
-        decrypted = await signer.decrypt(userPubkey, existing.content);
-      } else {
-        decrypted = await nip44SelfDecrypt(signer, existing.content);
-      }
-      const parsed = JSON.parse(decrypted);
-      entries = Array.isArray(parsed) ? parsed : [];
+      entries = await decryptListEntries(signer, userPubkey, existing.content);
     } catch {
       entries = [];
     }
@@ -430,22 +507,14 @@ async function appendToMyFormsList(
 
   const coordKey = `${formPubkey}:${formId}`;
   if (!entries.some((e) => e[1] === coordKey)) {
-    // 4th segment: "signingKey:viewKey" for encrypted forms, "" for public ones.
+    // 4th segment: "signingKey:viewKey" for encrypted forms, "signingKey" for public.
     const secrets = signingKeyHex ? encodeFormKeys(signingKeyHex, viewKeyHex) : "";
     entries.push(["f", coordKey, relay, secrets]);
   }
 
   // kind-14083 uses NIP-44 self-encryption — formstr.app decrypts the list with
   // signer.nip44Decrypt(userPub, content); NIP-04 here breaks its loader.
-  const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(entries));
-  const listEvent: EventTemplate = {
-    kind: FORM_KINDS.myFormsList,
-    created_at: Math.floor(Date.now() / 1000),
-    tags: [],
-    content: encrypted,
-  };
-  const signed = await signer.signEvent(listEvent);
-  await nostrRuntime.publish(relays, signed);
+  await publishMyFormsList(signer, relays, entries);
 }
 
 /** Public API: overwrite the user's kind-14083 list with the given summaries. */
@@ -454,23 +523,16 @@ export async function saveToMyForms(summaries: FormSummary[]): Promise<void> {
   const relays = relayManager.getRelaysForModule("forms");
 
   // Canonical 4-element entry: ["f", "pubkey:formId", relay, "signingKey:viewKey"|""].
+  // The relay hint is preserved — formstr.app's per-form retry path reads it.
   const entries: string[][] = summaries.map((s) => [
     "f",
     `${s.pubkey}:${s.id}`,
-    "",
+    s.relay ?? "",
     s.signingKey ? encodeFormKeys(s.signingKey, s.viewKey) : "",
   ]);
 
   // kind-14083 uses NIP-44 self-encryption — matches formstr.app's loader.
-  const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(entries));
-  const event: EventTemplate = {
-    kind: FORM_KINDS.myFormsList,
-    created_at: Math.floor(Date.now() / 1000),
-    tags: [],
-    content: encrypted,
-  };
-  const signed = await signer.signEvent(event);
-  await nostrRuntime.publish(relays, signed);
+  await publishMyFormsList(signer, relays, entries);
 }
 
 // ── Fallback: discover forms by author ──────────────────
@@ -499,6 +561,8 @@ async function fetchMyFormsByAuthor(pubkey: string, relays: string[]): Promise<F
 
 export async function deleteForm(formId: string, formPubkey: string): Promise<void> {
   const signer = await signerManager.getSigner();
+  const userPubkey = await signer.getPublicKey();
+  const relays = relayManager.getRelaysForModule("forms");
   const coordinate = `${FORM_KINDS.template}:${formPubkey}:${formId}`;
 
   const event: EventTemplate = {
@@ -510,10 +574,23 @@ export async function deleteForm(formId: string, formPubkey: string): Promise<vo
     ],
     content: "Deleted via Formstr",
   };
+  await nostrRuntime.publish(relays, await signer.signEvent(event));
 
-  const signed = await signer.signEvent(event);
-  const relays = relayManager.getRelaysForModule("forms");
-  await nostrRuntime.publish(relays, signed);
+  // Upstream "deletes" by rewriting the kind-14083 list — without this the entry
+  // resurrects on the next load (and in formstr.app, which ignores our kind-5).
+  // Operate on the raw entries so untouched rows keep relay + key segments verbatim.
+  const listEvent = await fetchLatestMyFormsEvent(relays, userPubkey);
+  if (!listEvent?.content) return;
+  let entries: string[][];
+  try {
+    entries = await decryptListEntries(signer, userPubkey, listEvent.content);
+  } catch {
+    return; // unreadable list — don't risk overwriting it
+  }
+  const coordKey = `${formPubkey}:${formId}`;
+  const trimmed = entries.filter((e) => e[1] !== coordKey);
+  if (trimmed.length === entries.length) return; // form wasn't in the list
+  await publishMyFormsList(signer, relays, trimmed);
 }
 
 // ── Update Form ─────────────────────────────────────────
@@ -543,11 +620,11 @@ export async function updateForm(params: UpdateFormParams): Promise<void> {
   const fields = params.fields ?? existing.fields;
 
   const specRows = buildSpecRows(params.formId, name, fields, settings);
+  const summary = (await fetchMyForms()).find(
+    (f) => f.id === params.formId && f.pubkey === params.pubkey,
+  );
 
   if (existing.isEncrypted) {
-    const summary = (await fetchMyForms()).find(
-      (f) => f.id === params.formId && f.pubkey === params.pubkey,
-    );
     if (!summary?.signingKey || !summary?.viewKey) {
       throw new Error("Not the form owner or signing key unavailable");
     }
@@ -566,8 +643,9 @@ export async function updateForm(params: UpdateFormParams): Promise<void> {
     return;
   }
 
-  // Public form — signed with the user's own key.
-  const signer = await signerManager.getSigner();
+  // Public form — sign with the form's signing key when we hold it (upstream model;
+  // keeps the address 30168:signingPub:formId stable across apps). Fall back to the
+  // user signer for legacy forms authored under the identity key.
   const tags: string[][] = [...specRows, ["t", "public"], ...relays.map((r) => ["relay", r])];
   const event: EventTemplate = {
     kind: FORM_KINDS.template,
@@ -575,16 +653,23 @@ export async function updateForm(params: UpdateFormParams): Promise<void> {
     tags,
     content: "",
   };
+  if (summary?.signingKey) {
+    await nostrRuntime.publish(relays, finalizeEvent(event, hexToBytes(summary.signingKey)));
+    return;
+  }
+  const signer = await signerManager.getSigner();
   await nostrRuntime.publish(relays, await signer.signEvent(event));
 }
 
-// ── Share Form (NIP-59 view-key gift-wrap) ──────────────
+// ── Share Form (upstream accessControl.ts grantAccess) ──
 
 export interface ShareFormParams {
   formId: string;
   formPubkey: string;
-  /** Hex pubkeys of collaborators who should be able to decrypt the form. */
+  /** Hex pubkeys granted view access (the view key). */
   recipients: string[];
+  /** Hex pubkeys additionally granted edit access (the signing key). */
+  editors?: string[];
 }
 
 export interface ShareFormResult {
@@ -594,39 +679,72 @@ export interface ShareFormResult {
 }
 
 /**
- * Distribute an encrypted form's **view key** to collaborators via NIP-59 gift-wrap.
- * Each recipient receives a kind-1059 wrap carrying a rumor with the form coordinate and
- * view key, so their client can decrypt the fields. Only the view key is shared — never
- * the signing key (collaborators can read, not edit/delete).
+ * Grant form access via formstr.app's wrap protocol: a kind-18 rumor authored by the
+ * form's signing key carrying `["ViewAccess", viewKeyHex]` (and `["EditAccess",
+ * signingKeyHex]` for editors), sealed (kind 13) by the signing key, wrapped (kind
+ * 1059) by a random key whose only `p` tag is the sha256 alias
+ * `30168:signingPub:formId:recipient` — recipients discover grants by that alias, so
+ * a recipient-pubkey `p` tag would be invisible to formstr.app.
+ *
+ * Timestamps are real (upstream's fetchKeys filter has no tolerance for the core
+ * wrapEvent's ±2-day randomization), which is why this builds the layers manually.
  */
 export async function shareForm(params: ShareFormParams): Promise<ShareFormResult> {
   const relays = relayManager.getRelaysForModule("forms");
   const summary = (await fetchMyForms()).find(
     (f) => f.id === params.formId && f.pubkey === params.formPubkey,
   );
-  if (!summary?.viewKey) {
-    throw new Error("Not the form owner or view key unavailable");
+  if (!summary?.signingKey) {
+    throw new Error("Not the form owner or form keys unavailable");
   }
+  const signingKeyBytes = hexToBytes(summary.signingKey);
+  const signingPubkey = getPublicKey(signingKeyBytes);
+  const formSigner = new LocalSigner(signingKeyBytes);
+  const now = () => Math.round(Date.now() / 1000);
 
-  const coordinate = `${FORM_KINDS.template}:${params.formPubkey}:${params.formId}`;
-  const naddr = createRef("forms", FORM_KINDS.template, params.formPubkey, params.formId);
-  const signer = await signerManager.getSigner();
-  const rumor = {
-    kind: 14,
-    created_at: Math.floor(Date.now() / 1000),
-    tags: [
-      ["a", coordinate],
-      ["viewKey", summary.viewKey],
-    ],
-    content: `Formstr form view key for ${naddr}`,
-  };
+  const editors = new Set(params.editors ?? []);
+  const targets = [...new Set([...params.recipients, ...editors])];
 
   const failed: string[] = [];
   let published = 0;
-  for (const recipient of params.recipients) {
+  for (const recipient of targets) {
     try {
-      const wraps = await wrapManyEvents(rumor, signer, [recipient]);
-      for (const wrap of wraps) await nostrRuntime.publish(relays, wrap);
+      // Rumor tag order matches upstream createTag: EditAccess before ViewAccess.
+      const accessTags: string[][] = [];
+      if (editors.has(recipient)) accessTags.push(["EditAccess", summary.signingKey]);
+      if (summary.viewKey) accessTags.push(["ViewAccess", summary.viewKey]);
+
+      const rumor: UnsignedEvent & { id?: string } = {
+        kind: 18,
+        pubkey: signingPubkey,
+        created_at: now(),
+        content: "",
+        tags: accessTags,
+      };
+      rumor.id = getEventHash(rumor);
+
+      const seal = finalizeEvent(
+        {
+          kind: 13,
+          content: await formSigner.nip44Encrypt(recipient, JSON.stringify(rumor)),
+          created_at: now(),
+          tags: [],
+        },
+        signingKeyBytes,
+      );
+
+      const randomKey = generateSecretKey();
+      const wrap = finalizeEvent(
+        {
+          kind: 1059,
+          content: await new LocalSigner(randomKey).nip44Encrypt(recipient, JSON.stringify(seal)),
+          created_at: now(),
+          tags: [["p", accessGrantAlias(signingPubkey, params.formId, recipient)]],
+        },
+        randomKey,
+      );
+
+      await nostrRuntime.publish(relays, wrap);
       published++;
     } catch {
       failed.push(recipient);
@@ -725,4 +843,3 @@ function parseResponseEvent(event: Event): FormResponseEvent {
     event,
   };
 }
-

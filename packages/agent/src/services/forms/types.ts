@@ -134,4 +134,6 @@ export interface FormSummary {
   signingKey?: string;
   /** Hex-encoded view key. Present only for encrypted forms you created. */
   viewKey?: string;
+  /** Relay hint from the kind-14083 entry (3rd slot) — formstr.app's retry path uses it. */
+  relay?: string;
 }

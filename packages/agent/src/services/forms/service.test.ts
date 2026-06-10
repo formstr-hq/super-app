@@ -4,13 +4,15 @@ import {
   nip44SelfEncrypt,
   nip44SelfDecrypt,
   LocalSigner,
-  wrapManyEvents,
 } from "@formstr/core";
+import { sha256 } from "@noble/hashes/sha256";
 import type { Event } from "nostr-tools";
+import { getPublicKey } from "nostr-tools";
+import { bytesToHex, hexToBytes } from "nostr-tools/utils";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@formstr/core", () => ({
-  signerManager: { getSigner: vi.fn() },
+  signerManager: { getSigner: vi.fn(), getSignerIfAvailable: vi.fn() },
   nostrRuntime: {
     publish: vi.fn(),
     fetchOne: vi.fn(),
@@ -21,7 +23,6 @@ vi.mock("@formstr/core", () => ({
   nip44Encrypt: vi.fn(),
   nip44SelfEncrypt: vi.fn(),
   nip44SelfDecrypt: vi.fn(),
-  wrapManyEvents: vi.fn(),
   createRef: vi.fn(() => "naddr1mockref"),
   LocalSigner: vi.fn().mockImplementation(() => ({
     nip44Encrypt: vi.fn(),
@@ -42,6 +43,7 @@ import {
   subscribeToResponses,
   updateForm,
   shareForm,
+  fetchFormKeys,
   fetchFormSummaryFromRef,
   importForm,
 } from "./service";
@@ -62,6 +64,7 @@ const mockSigner = {
 beforeEach(() => {
   vi.clearAllMocks();
   (signerManager.getSigner as any).mockResolvedValue(mockSigner);
+  (signerManager.getSignerIfAvailable as any).mockReturnValue(null);
   (nostrRuntime.publish as any).mockResolvedValue(undefined);
   (nostrRuntime.fetchOne as any).mockResolvedValue(null);
   (nostrRuntime.querySync as any).mockResolvedValue([]);
@@ -70,7 +73,7 @@ beforeEach(() => {
 // ── createForm ────────────────────────────────────────────────
 
 describe("createForm — plain form", () => {
-  it("publishes kind-30168 with field tags in content='' and appends to kind-14083", async () => {
+  it("signs with an ephemeral signing key (upstream model), not the user identity key", async () => {
     (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
 
     const result = await createForm({
@@ -78,7 +81,7 @@ describe("createForm — plain form", () => {
       fields: [{ id: "f1", type: "shortText" as any, label: "Name" }],
     });
 
-    // First publish: kind-30168
+    // First publish: kind-30168, finalizeEvent-signed by the signing key
     const calls = (nostrRuntime.publish as any).mock.calls;
     expect(calls.length).toBeGreaterThanOrEqual(2);
     const formEvent = calls[0][1];
@@ -86,7 +89,16 @@ describe("createForm — plain form", () => {
     expect(formEvent.content).toBe("");
     expect(formEvent.tags.some((t: string[]) => t[0] === "field")).toBe(true);
     expect(result.formId).toBeTruthy();
-    expect(result.pubkey).toBe("aabbccdd");
+    expect(result.pubkey).not.toBe("aabbccdd"); // ephemeral signing pubkey
+    expect(formEvent.pubkey).toBe(result.pubkey);
+    expect(result.signingKey).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.viewKey).toBeUndefined();
+
+    // 14083 entry 4th segment carries the signing key (formstr.app needs it to edit)
+    expect(nip44SelfEncrypt).toHaveBeenCalledWith(
+      mockSigner,
+      expect.stringContaining(result.signingKey!),
+    );
   });
 
   it("always tags plaintext forms public and writes per-relay relay tags (upstream parity)", async () => {
@@ -458,9 +470,7 @@ describe("response paths honor the form's relay hints", () => {
   it("subscribeToResponses subscribes on formRelays ∪ module relays", () => {
     (nostrRuntime.subscribe as any).mockReturnValue({ unsub: vi.fn() });
 
-    subscribeToResponses("formpub", "form1", vi.fn(), undefined, undefined, [
-      "wss://custom.relay",
-    ]);
+    subscribeToResponses("formpub", "form1", vi.fn(), undefined, undefined, ["wss://custom.relay"]);
 
     const [relays] = (nostrRuntime.subscribe as any).mock.calls[0];
     expect([...relays].sort()).toEqual(["wss://custom.relay", "wss://relay.test"]);
@@ -508,6 +518,8 @@ describe("fetchMyForms — parses tag-tuples and returns keys", () => {
     expect(forms[0].signingKey).toBe("sigKey");
     expect(forms[0].viewKey).toBe("viewKey");
     expect(forms[0].isEncrypted).toBe(true);
+    // relay hint from entry[2] survives (formstr.app's retry path uses it)
+    expect(forms[0].relay).toBe("wss://relay.test");
   });
 });
 
@@ -576,12 +588,51 @@ describe("deleteForm", () => {
     expect(event.tags).toContainEqual(["a", "30168:formpub:form1"]);
     expect(event.tags).toContainEqual(["k", "30168"]);
   });
+
+  it("republishes the trimmed kind-14083 so the delete sticks (other entries verbatim)", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "list",
+        pubkey: "aabbccdd",
+        kind: 14083,
+        created_at: 1000,
+        sig: "s",
+        content: "enc_list",
+        tags: [],
+      },
+    ]);
+    (nip44SelfDecrypt as any).mockResolvedValue(
+      JSON.stringify([
+        ["f", "formpub:form1", "wss://a.relay", "sk1:vk1"],
+        ["f", "otherpub:form9", "wss://b.relay", "sk9:vk9"],
+      ]),
+    );
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_trimmed");
+
+    await deleteForm("form1", "formpub");
+
+    const listPublishes = (nostrRuntime.publish as any).mock.calls.filter(
+      (c: any[]) => c[1]?.kind === 14083,
+    );
+    expect(listPublishes).toHaveLength(1);
+    const written = JSON.parse((nip44SelfEncrypt as any).mock.calls[0][1]);
+    // deleted entry gone; the survivor keeps its relay + key segments byte-for-byte
+    expect(written).toEqual([["f", "otherpub:form9", "wss://b.relay", "sk9:vk9"]]);
+  });
+
+  it("skips the list republish when no kind-14083 exists (nothing to trim)", async () => {
+    await deleteForm("form1", "formpub");
+    const listPublishes = (nostrRuntime.publish as any).mock.calls.filter(
+      (c: any[]) => c[1]?.kind === 14083,
+    );
+    expect(listPublishes).toHaveLength(0);
+  });
 });
 
 // ── saveToMyForms ─────────────────────────────────────────────
 
 describe("saveToMyForms", () => {
-  it("serialises FormSummary[] as tag-tuples and publishes kind-14083", async () => {
+  it("serialises FormSummary[] as tag-tuples, preserving relay hints", async () => {
     (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
 
     await saveToMyForms([
@@ -593,11 +644,16 @@ describe("saveToMyForms", () => {
         isEncrypted: true,
         signingKey: "sk",
         viewKey: "vk",
+        relay: "wss://hint.relay",
       },
       { id: "f2", name: "Public", pubkey: "pub2", createdAt: 0, isEncrypted: false },
     ]);
 
     expect(nip44SelfEncrypt).toHaveBeenCalledWith(mockSigner, expect.stringContaining("pub1:f1"));
+    const entries = JSON.parse((nip44SelfEncrypt as any).mock.calls[0][1]);
+    // relay slot is no longer blanked — formstr.app's retry path reads it
+    expect(entries[0]).toEqual(["f", "pub1:f1", "wss://hint.relay", "sk:vk"]);
+    expect(entries[1]).toEqual(["f", "pub2:f2", "", ""]);
     const [, event] = (nostrRuntime.publish as any).mock.calls[0];
     expect(event.kind).toBe(14083);
   });
@@ -701,6 +757,36 @@ describe("updateForm — public form", () => {
   });
 });
 
+describe("updateForm — public form with a stored signing key", () => {
+  it("republishes with finalizeEvent(signingKey) so the address stays 30168:signingPub:formId", async () => {
+    (nostrRuntime.fetchOne as any).mockResolvedValue({
+      id: "eid",
+      pubkey: SIGNING_PUB,
+      kind: 30168,
+      created_at: 1000,
+      sig: "sig",
+      content: "",
+      tags: [
+        ["d", "form1"],
+        ["name", "Old"],
+        ["field", "f1", "text", "Q", "[]", "{}"],
+        ["t", "public"],
+      ],
+    } satisfies Event);
+    // my-forms entry carries the signing key (4th segment, no viewKey — public form)
+    mockMyFormsList(SIGNING_HEX);
+
+    await updateForm({ formId: "form1", pubkey: SIGNING_PUB, name: "New" });
+
+    const [, event] = (nostrRuntime.publish as any).mock.calls.at(-1);
+    expect(event.kind).toBe(30168);
+    expect(event.pubkey).toBe(SIGNING_PUB); // NOT the user key — no address fork
+    expect(event.sig).toBeTruthy();
+    expect(event.tags).toContainEqual(["name", "New"]);
+    expect(mockSigner.signEvent).not.toHaveBeenCalled();
+  });
+});
+
 describe("updateForm — encrypted form", () => {
   it("re-encrypts the FULL spec and keeps outer tags free of settings/encryption", async () => {
     // fetchForm sees an upstream-shaped encrypted event
@@ -767,58 +853,170 @@ describe("updateForm — encrypted form", () => {
 
 // ── shareForm ─────────────────────────────────────────────────
 
-describe("shareForm — distributes the view key via NIP-59 gift-wrap", () => {
-  it("publishes one wrap per recipient and reports the count", async () => {
-    (nostrRuntime.querySync as any)
-      .mockResolvedValueOnce([
-        {
-          id: "list",
-          pubkey: "aabbccdd",
-          kind: 14083,
-          created_at: 1000,
-          sig: "s",
-          content: "enc_list",
-          tags: [],
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "fe",
-          pubkey: "formpub",
-          kind: 30168,
-          created_at: 1000,
-          sig: "s",
-          content: "enc",
-          tags: [
-            ["d", "form1"],
-            ["name", "Enc"],
-            ["encryption", "view-key"],
-          ],
-        },
-      ]);
-    (nip44SelfDecrypt as any).mockResolvedValue(
-      JSON.stringify([["f", "formpub:form1", "wss://relay.test", "sigKeyHex:viewKeyHex"]]),
-    );
-    (wrapManyEvents as any).mockResolvedValue([{ kind: 1059, id: "w1" }]);
+const SIGNING_HEX = "11".repeat(32);
+const VIEW_HEX = "22".repeat(32);
+const SIGNING_PUB = getPublicKey(hexToBytes(SIGNING_HEX));
+const RECIPIENT_PUB = getPublicKey(hexToBytes("33".repeat(32)));
+const EDITOR_PUB = getPublicKey(hexToBytes("44".repeat(32)));
+
+const formAlias = (author: string, formId: string, recipient: string) =>
+  bytesToHex(sha256(`30168:${author}:${formId}:${recipient}`));
+
+/** Mock the kind-14083 round-trip so fetchMyForms resolves the form's keys. */
+function mockMyFormsList(keySegment: string) {
+  (nostrRuntime.querySync as any)
+    .mockResolvedValueOnce([
+      {
+        id: "list",
+        pubkey: "aabbccdd",
+        kind: 14083,
+        created_at: 1000,
+        sig: "s",
+        content: "enc_list",
+        tags: [],
+      },
+    ])
+    .mockResolvedValueOnce([]);
+  (nip44SelfDecrypt as any).mockResolvedValue(
+    JSON.stringify([["f", `${SIGNING_PUB}:form1`, "wss://relay.test", keySegment]]),
+  );
+}
+
+describe("shareForm — upstream access-grant wraps (kind-18 rumor, alias-addressed 1059)", () => {
+  it("publishes one wrap per recipient, p-tagged with the sha256 alias, timestamps un-randomized", async () => {
+    mockMyFormsList(`${SIGNING_HEX}:${VIEW_HEX}`);
+    (LocalSigner as any).mockImplementation(() => ({
+      nip44Encrypt: vi.fn().mockResolvedValue("enc"),
+    }));
 
     const result = await shareForm({
       formId: "form1",
-      formPubkey: "formpub",
-      recipients: ["recipA", "recipB"],
+      formPubkey: SIGNING_PUB,
+      recipients: [RECIPIENT_PUB],
+      editors: [EDITOR_PUB],
     });
 
+    (LocalSigner as any).mockImplementation(() => ({
+      nip44Encrypt: vi.fn(),
+      nip44Decrypt: vi.fn(),
+      getPublicKey: vi.fn(),
+      signEvent: vi.fn(),
+    }));
+
     expect(result).toEqual({ published: 2, failed: [] });
-    expect(wrapManyEvents).toHaveBeenCalledTimes(2);
-    const wrapPublishes = (nostrRuntime.publish as any).mock.calls.filter(
+    const wraps = (nostrRuntime.publish as any).mock.calls.filter(
       (c: any[]) => c[1]?.kind === 1059,
     );
-    expect(wrapPublishes).toHaveLength(2);
+    expect(wraps).toHaveLength(2);
+
+    const now = Math.floor(Date.now() / 1000);
+    const pTags = wraps.map((c: any[]) => c[1].tags[0]);
+    expect(pTags).toContainEqual(["p", formAlias(SIGNING_PUB, "form1", RECIPIENT_PUB)]);
+    expect(pTags).toContainEqual(["p", formAlias(SIGNING_PUB, "form1", EDITOR_PUB)]);
+    for (const [relays, wrap] of wraps) {
+      // upstream's fetchKeys filter is alias-only; timestamps are NOT randomized
+      expect(Math.abs(wrap.created_at - now)).toBeLessThan(30);
+      // ephemeral wrap key — never the signing key, never the user key
+      expect(wrap.pubkey).not.toBe(SIGNING_PUB);
+      expect(wrap.pubkey).not.toBe("aabbccdd");
+      expect(relays).toEqual(["wss://relay.test"]);
+    }
   });
 
-  it("throws when the user does not hold the form view key", async () => {
+  it("throws when the user does not hold the form keys", async () => {
     await expect(shareForm({ formId: "nope", formPubkey: "x", recipients: ["a"] })).rejects.toThrow(
-      "view key",
+      "form keys",
     );
+  });
+});
+
+// ── fetchFormKeys (inbound access grants) ─────────────────────
+
+describe("fetchFormKeys — reads alias-addressed wraps back to view/signing keys", () => {
+  it("queries kind-1059 by sha256 alias and unwraps wrap→seal→rumor", async () => {
+    (signerManager.getSignerIfAvailable as any).mockReturnValue(mockSigner);
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "w1",
+        pubkey: "wrappub",
+        kind: 1059,
+        created_at: 0,
+        sig: "s",
+        content: "wrap_enc",
+        tags: [["p", "alias"]],
+      },
+    ]);
+    mockSigner.nip44Decrypt
+      .mockResolvedValueOnce(JSON.stringify({ pubkey: "sealpub", content: "seal_enc" }))
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          kind: 18,
+          pubkey: SIGNING_PUB,
+          tags: [
+            ["EditAccess", SIGNING_HEX],
+            ["ViewAccess", VIEW_HEX],
+          ],
+        }),
+      );
+
+    const keys = await fetchFormKeys(SIGNING_PUB, "form1");
+
+    expect(keys).toEqual({ viewKey: VIEW_HEX, signingKey: SIGNING_HEX });
+    const [, filter] = (nostrRuntime.querySync as any).mock.calls[0];
+    expect(filter.kinds).toEqual([1059]);
+    expect(filter["#p"]).toEqual([formAlias(SIGNING_PUB, "form1", "aabbccdd")]);
+    expect(mockSigner.nip44Decrypt).toHaveBeenNthCalledWith(1, "wrappub", "wrap_enc");
+    expect(mockSigner.nip44Decrypt).toHaveBeenNthCalledWith(2, "sealpub", "seal_enc");
+  });
+
+  it("returns null without a signer (read path must not pop the login modal)", async () => {
+    const keys = await fetchFormKeys(SIGNING_PUB, "form1");
+    expect(keys).toBeNull();
+    expect(nostrRuntime.querySync).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchForm — discovers the view key from inbound access grants", () => {
+  it("decrypts an encrypted form without an explicit viewKey when a grant exists", async () => {
+    (signerManager.getSignerIfAvailable as any).mockReturnValue(mockSigner);
+    (nostrRuntime.fetchOne as any).mockResolvedValue({
+      id: "eid",
+      pubkey: SIGNING_PUB,
+      kind: 30168,
+      created_at: 1000,
+      sig: "sig",
+      content: "enc_blob",
+      tags: [
+        ["d", "form1"],
+        ["name", "Shared Form"],
+      ],
+    } satisfies Event);
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "w1",
+        pubkey: "wrappub",
+        kind: 1059,
+        created_at: 0,
+        sig: "s",
+        content: "wrap_enc",
+        tags: [["p", "alias"]],
+      },
+    ]);
+    mockSigner.nip44Decrypt
+      .mockResolvedValueOnce(JSON.stringify({ pubkey: "sealpub", content: "seal_enc" }))
+      .mockResolvedValueOnce(JSON.stringify({ kind: 18, tags: [["ViewAccess", VIEW_HEX]] }));
+    const mockViewSigner = {
+      nip44Decrypt: vi
+        .fn()
+        .mockResolvedValue(JSON.stringify([["field", "f1", "text", "Granted Q", "[]", "{}"]])),
+    };
+    (LocalSigner as any).mockImplementationOnce(() => mockViewSigner);
+
+    const form = await fetchForm(SIGNING_PUB, "form1");
+
+    expect(form!.fields).toHaveLength(1);
+    expect(form!.fields[0].label).toBe("Granted Q");
+    expect(mockViewSigner.nip44Decrypt).toHaveBeenCalledWith(SIGNING_PUB, "enc_blob");
   });
 });
 
