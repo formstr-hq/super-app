@@ -8,6 +8,7 @@ import { DriveToolbar } from "../components/drive/DriveToolbar";
 import { FileList } from "../components/drive/FileList";
 import { MoveFileDialog } from "../components/drive/MoveFileDialog";
 import { RenameFileDialog } from "../components/drive/RenameFileDialog";
+import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { useDriveStore } from "../stores";
 
 function depth(path: string): number {
@@ -88,18 +89,27 @@ export function DrivePage() {
     }
   };
 
+  const renderRail = (onNavigate: () => void) => (
+    <DriveSidebar
+      folders={allFolders}
+      currentFolder={currentFolder}
+      files={allFiles}
+      onSelect={(folder) => {
+        setCurrentFolder(folder);
+        onNavigate();
+      }}
+      onNewFolder={(path) => {
+        addCustomFolder(path);
+        setCurrentFolder(path);
+        onNavigate();
+      }}
+    />
+  );
+
   return (
     <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <DriveSidebar
-        folders={allFolders}
-        currentFolder={currentFolder}
-        files={allFiles}
-        onSelect={setCurrentFolder}
-        onNewFolder={(path) => {
-          addCustomFolder(path);
-          setCurrentFolder(path);
-        }}
-      />
+      {renderRail(() => {})}
+      <MobileRailDrawer ariaLabel="Open folders">{renderRail}</MobileRailDrawer>
 
       <Box
         sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}

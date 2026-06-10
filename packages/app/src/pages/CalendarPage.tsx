@@ -13,6 +13,7 @@ import { CalendarSidebar } from "../components/calendar/CalendarSidebar";
 import { EventDetailsDialog } from "../components/calendar/EventDetailsDialog";
 import { EventDialog } from "../components/calendar/EventDialog";
 import { InvitationsView } from "../components/calendar/InvitationsView";
+import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { filterEventsByCalendarVisibility } from "../lib/calendarMembership";
 import { useAuthStore, useBookingStore, useCalendarStore } from "../stores";
 import { useInvitationsStore } from "../stores/invitationsStore";
@@ -117,24 +118,44 @@ export function CalendarPage() {
     setManageOpen(true);
   };
 
+  const renderRail = (onNavigate: () => void) => (
+    <CalendarSidebar
+      calendars={calendars}
+      visibleCalendarIds={visibleCalendarIds}
+      onToggleCalendar={toggleCalendar}
+      onNewCalendar={() => {
+        openNewCalendar();
+        onNavigate();
+      }}
+      onEditCalendar={(c) => {
+        openEditCalendar(c);
+        onNavigate();
+      }}
+      showAllPublic={showAllPublic}
+      onToggleShowAllPublic={setShowAllPublic}
+      pendingInvitations={pendingInvitations}
+      view={view}
+      onOpenInvitations={() => {
+        setView("invitations");
+        onNavigate();
+      }}
+      schedulingPages={schedulingPages}
+      pendingBookings={pendingBookings}
+      onOpenBookings={() => {
+        setView("bookings");
+        onNavigate();
+      }}
+      onOpenAvailability={() => {
+        setView("availability");
+        onNavigate();
+      }}
+    />
+  );
+
   return (
     <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <CalendarSidebar
-        calendars={calendars}
-        visibleCalendarIds={visibleCalendarIds}
-        onToggleCalendar={toggleCalendar}
-        onNewCalendar={openNewCalendar}
-        onEditCalendar={openEditCalendar}
-        showAllPublic={showAllPublic}
-        onToggleShowAllPublic={setShowAllPublic}
-        pendingInvitations={pendingInvitations}
-        view={view}
-        onOpenInvitations={() => setView("invitations")}
-        schedulingPages={schedulingPages}
-        pendingBookings={pendingBookings}
-        onOpenBookings={() => setView("bookings")}
-        onOpenAvailability={() => setView("availability")}
-      />
+      {renderRail(() => {})}
+      <MobileRailDrawer ariaLabel="Open calendar panel">{renderRail}</MobileRailDrawer>
 
       <Box
         sx={{

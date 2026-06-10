@@ -13,6 +13,7 @@ import { FormBuilderSurface } from "../components/forms/FormBuilderSurface";
 import { FormListView } from "../components/forms/FormListView";
 import { FormsSidebar, type FormsCategory } from "../components/forms/FormsSidebar";
 import { ResponsesDialog } from "../components/forms/ResponsesDialog";
+import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { copyText } from "../lib/clipboard";
 import { useFormsStore, useSettingsStore } from "../stores";
 import type { FormsView } from "../stores/settingsStore";
@@ -121,14 +122,25 @@ export function FormsPage() {
     );
   }
 
+  const renderRail = (onNavigate: () => void) => (
+    <FormsSidebar
+      active={category}
+      myCount={myForms.length}
+      onSelect={(c) => {
+        setCategory(c);
+        onNavigate();
+      }}
+      onNew={() => {
+        setActiveDialog("create");
+        onNavigate();
+      }}
+    />
+  );
+
   return (
     <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <FormsSidebar
-        active={category}
-        myCount={myForms.length}
-        onSelect={setCategory}
-        onNew={() => setActiveDialog("create")}
-      />
+      {renderRail(() => {})}
+      <MobileRailDrawer ariaLabel="Open forms panel">{renderRail}</MobileRailDrawer>
 
       <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <AIPendingRow module="forms" />

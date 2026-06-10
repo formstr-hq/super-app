@@ -3,6 +3,7 @@ import { Alert, Box } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
+import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { CreatePollDialog } from "../components/polls/CreatePollDialog";
 import { PollDetail } from "../components/polls/PollDetail";
 import { PollsSidebar } from "../components/polls/PollsSidebar";
@@ -72,18 +73,29 @@ export function PollsPage() {
     setSelectedId(null);
   };
 
+  const renderRail = (onNavigate: () => void) => (
+    <PollsSidebar
+      myPolls={byTopic(myPolls)}
+      recentPolls={byTopic(discover)}
+      selectedId={selectedId ?? undefined}
+      allTopics={allTopics}
+      activeTopic={activeTopic}
+      onSelect={(p) => {
+        handleSelect(p);
+        onNavigate();
+      }}
+      onNew={() => {
+        setCreateOpen(true);
+        onNavigate();
+      }}
+      onToggleTopic={setActiveTopic}
+    />
+  );
+
   return (
     <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <PollsSidebar
-        myPolls={byTopic(myPolls)}
-        recentPolls={byTopic(discover)}
-        selectedId={selectedId ?? undefined}
-        allTopics={allTopics}
-        activeTopic={activeTopic}
-        onSelect={handleSelect}
-        onNew={() => setCreateOpen(true)}
-        onToggleTopic={setActiveTopic}
-      />
+      {renderRail(() => {})}
+      <MobileRailDrawer ariaLabel="Open polls panel">{renderRail}</MobileRailDrawer>
 
       <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <AIPendingRow module="polls" />

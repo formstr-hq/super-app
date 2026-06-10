@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
+import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { PageEditorSurface } from "../components/pages/PageEditorSurface";
 import { PagesSidebar } from "../components/pages/PagesSidebar";
 import { PageTagsPopover } from "../components/pages/PageTagsPopover";
@@ -111,18 +112,29 @@ export function PagesPage() {
   // A shared doc opened with only a viewKey (someone else's, no editKey) is read-only.
   const readOnly = !!currentPage && currentPage.pubkey !== pubkey && !currentPage.editKey;
 
+  const renderRail = (onNavigate: () => void) => (
+    <PagesSidebar
+      pages={visiblePages}
+      sharedPages={sharedPages}
+      selectedAddress={currentPage?.address}
+      allTags={allTags}
+      activeTag={activeTag}
+      onSelect={(p) => {
+        openPage(p);
+        onNavigate();
+      }}
+      onNew={() => {
+        handleNew();
+        onNavigate();
+      }}
+      onToggleTag={setActiveTag}
+    />
+  );
+
   return (
     <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <PagesSidebar
-        pages={visiblePages}
-        sharedPages={sharedPages}
-        selectedAddress={currentPage?.address}
-        allTags={allTags}
-        activeTag={activeTag}
-        onSelect={openPage}
-        onNew={handleNew}
-        onToggleTag={setActiveTag}
-      />
+      {renderRail(() => {})}
+      <MobileRailDrawer ariaLabel="Open pages list">{renderRail}</MobileRailDrawer>
 
       <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <AIPendingRow module="pages" />
