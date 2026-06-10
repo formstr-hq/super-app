@@ -1,112 +1,131 @@
-import { NIP46Signer, type Nip46Connection, type NostrSigner } from "@formstr/core";
-import { generateSecretKey, getPublicKey } from "nostr-tools";
-import { BunkerSigner, createNostrConnectURI } from "nostr-tools/nip46";
-import {
-  SimplePool,
-  useWebSocketImplementation as setWebSocketImplementation,
-} from "nostr-tools/pool";
-import { bytesToHex, hexToBytes } from "nostr-tools/utils";
-import WebSocket from "ws";
+import { encryptSecretKey, hexToBytes, type Signer, type StoredAccount } from "@formstr/signer";
+import { nip19 } from "nostr-tools";
+import type { AbstractSimplePool } from "nostr-tools/abstract-pool";
 
-import { type Credential } from "./credential";
-import { createKeystore } from "./keystore";
-import { type Nip46Handshake, runLoginServer } from "./loginServer";
+/** Relays used to advertise a `nostrconnect://` pairing when `--relays` isn't given. */
+const DEFAULT_NOSTRCONNECT_RELAYS = ["wss://relay.nsec.app"];
 
-/** Relays used for the NIP-46 handshake when the operator hasn't configured their own. */
-const DEFAULT_NIP46_RELAYS = ["wss://relay.nsec.app"];
+/**
+ * Permissions requested from a NIP-46 remote signer. Without a perms list many
+ * bunker UIs (Amber, etc.) skip the approval prompt entirely. The MCP needs to
+ * sign events of any kind and use NIP-04/44 for the modules' encryption.
+ */
+const NIP46_PERMS = [
+  "sign_event",
+  "nip04_encrypt",
+  "nip04_decrypt",
+  "nip44_encrypt",
+  "nip44_decrypt",
+];
 
-let wsInstalled = false;
-function installWebSocket(): void {
-  if (wsInstalled) return;
-  setWebSocketImplementation(WebSocket);
-  wsInstalled = true;
-}
-
-/** Run the interactive login flow and persist the chosen credential to the keystore. */
-export async function doLogin(relays?: string[]): Promise<Credential> {
-  installWebSocket();
-  const keystore = createKeystore();
-  const cred = await runLoginServer({ nip46: makeNip46Handshake(relays) });
-  await keystore.set(cred, true);
-  return cred;
-}
-
-/** Remove a stored credential (the given pubkey, or the active default). */
-export async function doLogout(pubkey?: string): Promise<void> {
-  const keystore = createKeystore();
-  if (pubkey) {
-    await keystore.remove(pubkey);
-    return;
-  }
-  const current = await keystore.get();
-  if (current) await keystore.remove(current.pubkey);
-}
-
-/** The active identity, if any. */
-export async function whoami(): Promise<{ pubkey: string; method: Credential["method"] } | null> {
-  const cred = await createKeystore().get();
-  return cred ? { pubkey: cred.pubkey, method: cred.method } : null;
+export interface LoginDeps {
+  signer: Signer;
+  /** Read a line of input (the prompt is shown to the user). */
+  prompt: (question: string) => Promise<string>;
+  /** Read a line without echoing (passphrases). */
+  promptPassphrase: (question: string) => Promise<string>;
+  /** Render a NIP-46 URI (terminal QR + raw URI). */
+  printQr: (uri: string) => void;
+  /** A WebSocket-patched pool — required for every NIP-46 call in Node. */
+  pool: AbstractSimplePool;
+  /** Override relays for the nostrconnect flow (from `--relays`). */
+  relays?: string[];
+  /** Status/output sink (defaults to console.error). */
+  log?: (message: string) => void;
 }
 
 /**
- * Build a connected NIP-46 signer from a persisted session. Passed to
- * `signerManager.loginWithNip46` at bootstrap. The user's key never enters this process —
- * only the ephemeral client key is local.
+ * Run the terminal-interactive login over `@formstr/signer` and persist the result
+ * to the keystore (the signer's storage adapter does that). Returns the now-active
+ * account. Methods: create (new ncryptsec), import (nsec/hex/ncryptsec), bunker URI,
+ * and nostrconnect QR.
  */
-export async function buildNip46Signer(conn: Nip46Connection): Promise<NostrSigner> {
-  installWebSocket();
-  const pool = new SimplePool();
-  patchPoolWebSocket(pool);
-  const pointer = {
-    pubkey: conn.remoteSignerPubkey,
-    relays: conn.relays,
-    secret: conn.secret ?? null,
-  };
-  const bunker = BunkerSigner.fromBunker(hexToBytes(conn.clientSecretKey), pointer, { pool });
-  await bunker.connect();
-  return new NIP46Signer(bunker);
+export async function doLogin(deps: LoginDeps): Promise<StoredAccount> {
+  const log = deps.log ?? ((m: string) => console.error(m));
+  const choice = (
+    await deps.prompt("Sign-in method — [c]reate, [i]mport, [b]unker URI, [q]r (nostrconnect): ")
+  )
+    .trim()
+    .toLowerCase()
+    .charAt(0);
+
+  switch (choice) {
+    case "c":
+      await loginCreate(deps, log);
+      break;
+    case "i":
+      await loginImport(deps);
+      break;
+    case "b":
+      await loginBunker(deps);
+      break;
+    case "q":
+      await loginNostrConnect(deps, log);
+      break;
+    default:
+      throw new Error(`Unknown sign-in method: "${choice}". Choose create, import, bunker, or qr.`);
+  }
+
+  const account = deps.signer.getActiveAccount();
+  if (!account) throw new Error("Login did not produce an active account.");
+  return account;
 }
 
-/** Construct the handshake the login server drives (nostrconnect:// → connected credential). */
-function makeNip46Handshake(relays?: string[]): Nip46Handshake {
-  const connectRelays = relays?.length ? relays : DEFAULT_NIP46_RELAYS;
-  return {
-    async start() {
-      const clientSk = generateSecretKey();
-      const secret = bytesToHex(generateSecretKey()).slice(0, 32);
-      const uri = createNostrConnectURI({
-        clientPubkey: getPublicKey(clientSk),
-        relays: connectRelays,
-        secret,
-        name: "Formstr MCP",
-      });
-      const pool = new SimplePool();
-      patchPoolWebSocket(pool);
-
-      const connected = (async (): Promise<Credential> => {
-        const bunker = await BunkerSigner.fromURI(clientSk, uri, { pool });
-        const userPubkey = await bunker.getPublicKey();
-        // BunkerSigner stores the resolved bunker pointer on `.bp`.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const bp = (bunker as any).bp as { pubkey: string; relays?: string[]; secret?: string };
-        return {
-          method: "nip46",
-          pubkey: userPubkey,
-          clientSecretKey: bytesToHex(clientSk),
-          remoteSignerPubkey: bp.pubkey,
-          relays: bp.relays?.length ? bp.relays : connectRelays,
-          secret: bp.secret ?? secret,
-        };
-      })();
-
-      return { uri, connected };
-    },
-  };
+async function loginCreate(deps: LoginDeps, log: (m: string) => void): Promise<void> {
+  const passphrase = await deps.promptPassphrase("Choose a passphrase to encrypt the new key: ");
+  const { npub, ncryptsec } = await deps.signer.createAccount(passphrase);
+  log("");
+  log(`  Created ${npub}`);
+  log("  BACK UP THIS ncryptsec — it is the ONLY way to recover this key:");
+  log("");
+  log(`    ${ncryptsec}`);
+  log("");
 }
 
-/** Single-file bundles bind a different `_WebSocket` than `useWebSocketImplementation`
- *  writes to; patch the pool instance directly so Node relay connections work. */
-function patchPoolWebSocket(pool: SimplePool): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (pool as any)._WebSocket = WebSocket;
+async function loginImport(deps: LoginDeps): Promise<void> {
+  const input = (await deps.prompt("Paste nsec / hex / ncryptsec1…: ")).trim();
+  let ncryptsec: string;
+  let passphrase: string;
+  if (input.startsWith("ncryptsec1")) {
+    ncryptsec = input;
+    passphrase = await deps.promptPassphrase("Passphrase to unlock this ncryptsec: ");
+  } else {
+    const secret = input.startsWith("nsec1")
+      ? (nip19.decode(input).data as Uint8Array)
+      : hexToBytes(input);
+    passphrase = await deps.promptPassphrase("Choose a passphrase to encrypt this key: ");
+    ncryptsec = encryptSecretKey(secret, passphrase);
+  }
+  await deps.signer.loginWithNcryptsec(ncryptsec, passphrase);
+}
+
+async function loginBunker(deps: LoginDeps): Promise<void> {
+  const uri = (await deps.prompt("Paste the bunker:// URI: ")).trim();
+  await deps.signer.loginWithBunkerUri(uri, { pool: deps.pool, perms: NIP46_PERMS });
+}
+
+async function loginNostrConnect(deps: LoginDeps, log: (m: string) => void): Promise<void> {
+  const relays = deps.relays?.length ? deps.relays : DEFAULT_NOSTRCONNECT_RELAYS;
+  log("Scan this QR (or copy the URI) with your remote signer to pair:");
+  await deps.signer.loginWithNostrConnect({
+    relays,
+    onUri: deps.printQr,
+    pool: deps.pool,
+    perms: NIP46_PERMS,
+  });
+}
+
+/** Remove a stored account (the given pubkey, or the active one). */
+export async function doLogout(signer: Signer, pubkey?: string): Promise<void> {
+  await signer.logout(pubkey);
+}
+
+/** The active identity, if any. */
+export function whoami(signer: Signer): StoredAccount | null {
+  return signer.getActiveAccount();
+}
+
+/** Every persisted account. */
+export function listAccounts(signer: Signer): StoredAccount[] {
+  return signer.listAccounts();
 }

@@ -5,38 +5,44 @@ exposes the **Formstr** super-app (forms, calendar, pages, drive, polls) to any 
 Claude Code/Desktop, Cursor, and others. It builds on `@formstr/core` and the super-app's
 service layer and talks to Nostr relays directly. Transport: **stdio**.
 
-v2 adds a **secure login flow** (your key lives in the OS keychain or a remote NIP-46
-signer — never in your host config or the chat) and the **complete forms tool surface**.
+Identity is powered by [`@formstr/signer`](https://www.npmjs.com/package/@formstr/signer) —
+the same login engine the Formstr web app uses. Local keys are stored **NIP-49 encrypted
+(`ncryptsec`)** inside an OS-keychain (or encrypted-file) keystore; a raw nsec is never
+persisted. Remote keys stay in your NIP-46 signer.
 
 ## Quick start
 
 ```bash
-# 1. Sign in once (opens a browser; key is stored in your OS keychain)
+# 1. Sign in once (terminal-interactive; key is stored encrypted in your keystore)
 npx -y @formstr/mcp login
 
 # 2. Point your MCP host at the server (see "Host configuration")
-#    No key in the config — it's read from the keychain at startup.
+#    No key in the config — the account is unlocked from the keystore at startup.
 ```
 
-Subcommands: `formstr-mcp login` · `formstr-mcp whoami` · `formstr-mcp logout` ·
-`formstr-mcp` (run the stdio server, the default).
+Subcommands: `formstr-mcp login` · `formstr-mcp whoami` · `formstr-mcp accounts` ·
+`formstr-mcp logout` · `formstr-mcp` (run the stdio server, the default).
 
 ## Sign-in
 
-`formstr-mcp login` starts a one-shot localhost page (it also prints the URL for
-headless/SSH use) offering the same choices as the super-app:
+`formstr-mcp login` is fully terminal-interactive (no browser, no localhost server) and
+offers four methods:
 
-| Method                      | What happens                                                                                                                   |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Paste nsec**              | Validated locally; the key is stored in your OS keychain.                                                                      |
-| **Create guest**            | A fresh Nostr key is generated and stored in your keychain.                                                                    |
-| **Connect signer (NIP-46)** | Scan/paste a `nostrconnect://` URI in Amber / nsec.app / nsecbunker. Your key stays there; the MCP keeps only a session token. |
+| Method                          | What happens                                                                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Create** (new key)            | Generates a key, encrypts it with a passphrase you choose, and prints the `ncryptsec` once — **back it up**, it is the only recovery path. |
+| **Import** (nsec/hex/ncryptsec) | Paste an `nsec…`, hex secret, or existing `ncryptsec1…`. Non-encrypted input is encrypted with your passphrase before storage.             |
+| **Bunker URI** (NIP-46)         | Paste a `bunker://…` URI. Your key stays in the remote signer; only the session is stored.                                                 |
+| **QR** (NIP-46 nostrconnect)    | A `nostrconnect://` URI is rendered as a terminal QR; scan it in Amber / nsec.app / nsecbunker.                                            |
 
 **Where the key lives:** the OS keychain (macOS Keychain / Windows Credential Manager /
 Linux Secret Service via `@napi-rs/keyring`). On hosts without a keychain (e.g. headless
 Linux), set `FORMSTR_MCP_PASSPHRASE` to use an AES-256-GCM encrypted file at
-`~/.config/formstr-mcp/credentials.enc` (mode `0600`). Multiple identities are supported;
-select one with `--account <pubkey>`.
+`~/.config/formstr-mcp/keystore.enc` (mode `0600`). Multiple identities are supported
+(`formstr-mcp accounts` lists them); select one at boot with `--account <pubkey>`.
+
+**Defense in depth:** even on the encrypted-file fallback the stored key is _also_ NIP-49
+encrypted, so recovering it needs **both** the keystore **and** the unlock passphrase.
 
 **The agent never sees your key.** No tool returns key material, and login happens
 out-of-band, so secrets never enter the chat transcript.
@@ -59,20 +65,25 @@ After `login`, no key belongs in the config:
 Add `"--allow-writes"` to `args` to enable the gated (destructive/outward) tools, and
 `"--relays", "wss://a,wss://b"` to override relays.
 
-## Headless / CI
+## Headless / unattended
 
-For unattended use where no keychain or browser is available, provide a plaintext key.
-The server **prints a prominent security warning** when you do this — prefer `login`.
+Run `formstr-mcp login` once interactively to populate the keystore, then run the server
+unattended. At boot the active account is unlocked headlessly:
 
-| Variable                    | Meaning                                             |
-| --------------------------- | --------------------------------------------------- |
-| `FORMSTR_NSEC`              | signing key (plaintext)                             |
-| `FORMSTR_RELAYS`            | comma-separated relay override (optional)           |
-| `FORMSTR_ALLOW_WRITES=true` | enable gated tools (optional)                       |
-| `FORMSTR_MCP_PASSPHRASE`    | passphrase for the encrypted-file keystore fallback |
+- **ncryptsec accounts** decrypt using `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE` (the passphrase
+  you set during `login`). Required for the `run` command when the active account is local.
+- **NIP-46 accounts** reconnect from their stored session — no passphrase needed.
 
-CLI flags: `--nsec <nsec>`, `--relays <wss://a,wss://b>`, `--allow-writes`, `--account <pubkey>`.
-Precedence: plaintext flag/env/`config.json` → keychain → "run `formstr-mcp login`".
+| Variable                           | Meaning                                                           |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE` | unlock the active ncryptsec account at boot                       |
+| `FORMSTR_MCP_PASSPHRASE`           | encrypts the at-rest keystore **file** (keychain-less hosts only) |
+| `FORMSTR_MCP_KEYSTORE`             | force `file` or `keychain` backend (optional)                     |
+| `FORMSTR_MCP_CONFIG_DIR`           | keystore directory (default `~/.config/formstr-mcp`)              |
+| `FORMSTR_RELAYS`                   | comma-separated relay override (optional)                         |
+
+CLI flags: `--relays <wss://a,wss://b>`, `--allow-writes`, `--account <pubkey>`.
+There is no plaintext-nsec path — a raw key is never read from env, flags, or a config file.
 
 ## Forms tools
 
