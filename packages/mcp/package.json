@@ -1,6 +1,6 @@
 {
   "name": "@formstr/mcp",
-  "version": "2.0.0",
+  "version": "0.1.0",
   "description": "Model Context Protocol server for the Formstr super-app — drive Nostr forms (and more) from any MCP host, with secure keychain/NIP-46 login.",
   "keywords": [
     "mcp",
@@ -41,22 +41,22 @@
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@napi-rs/keyring": "^1.1.6",
-    "nostr-tools": "^2.23.3",
-    "qrcode": "^1.5.4",
-    "ws": "^8.18.0",
-    "zod": "^3.24.0"
+    "@napi-rs/keyring": "^1.1.6"
   },
   "devDependencies": {
     "@formstr/agent": "workspace:*",
     "@formstr/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "^25.6.0",
     "@types/qrcode": "^1.5.5",
     "@types/ws": "^8.5.0",
+    "nostr-tools": "^2.23.3",
+    "qrcode": "^1.5.4",
     "tsup": "^8.5.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
   }
 }

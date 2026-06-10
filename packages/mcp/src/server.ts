@@ -18,7 +18,7 @@ function adapt(r: ToolResult): CallToolResult {
 }
 
 export function buildServer(ctx: ToolCtx): McpServer {
-  const server = new McpServer({ name: "formstr", version: "0.0.1" });
+  const server = new McpServer({ name: "formstr", version: "0.1.0" });
   for (const t of toolRegistry) {
     if (t.write && !ctx.allowWrites) continue;
     server.registerTool(

@@ -11,7 +11,17 @@ import {
   Typography,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { LogOut, Menu as MenuIcon, Moon, Search, Settings, Sparkles, Sun } from "lucide-react";
+import {
+  Lock,
+  LogOut,
+  Menu as MenuIcon,
+  Moon,
+  Plus,
+  Search,
+  Settings,
+  Sparkles,
+  Sun,
+} from "lucide-react";
 import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
@@ -40,7 +50,7 @@ interface HeaderProps {
 }
 
 export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderProps) {
-  const { pubkey, isLoggedIn, method, logout } = useAuthStore();
+  const { pubkey, isLoggedIn, accounts, logout, switchAccount, openAuthModal } = useAuthStore();
   const { toggleSidebar, aiPanelOpen, setAIPanelOpen, themeMode, toggleTheme } = useSettingsStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -50,7 +60,6 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
   const routeLabel =
     Object.entries(ROUTE_LABELS).find(([path]) => location.pathname.startsWith(path))?.[1] ??
     "Formstr";
-  const shortPubkey = pubkey ? `${pubkey.slice(0, 6)}…${pubkey.slice(-4)}` : "";
 
   return (
     <AppBar
@@ -203,24 +212,36 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
             >
               <Box sx={{ px: 2, py: 1 }}>
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  Signed in via
-                </Typography>
-                <Typography
-                  variant="caption"
-                  display="block"
-                  fontWeight={500}
-                  textTransform="capitalize"
-                >
-                  {method ?? "unknown"}
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{ fontFamily: "monospace", color: "text.secondary" }}
-                >
-                  {shortPubkey}
+                  Accounts
                 </Typography>
               </Box>
+              {accounts.map((acc) => (
+                <MenuItem
+                  key={acc.pubkey}
+                  dense
+                  selected={acc.pubkey === pubkey}
+                  onClick={() => {
+                    if (acc.pubkey !== pubkey) void switchAccount(acc.pubkey);
+                    setAnchorEl(null);
+                  }}
+                  sx={{ gap: 1, fontSize: 12.5, fontFamily: "monospace" }}
+                >
+                  {acc.locked && <Lock size={12} />}
+                  {`${acc.pubkey.slice(0, 8)}…${acc.pubkey.slice(-4)}`}
+                </MenuItem>
+              ))}
               <Divider />
+              <MenuItem
+                dense
+                onClick={() => {
+                  openAuthModal("login");
+                  setAnchorEl(null);
+                }}
+                sx={{ gap: 1.5, fontSize: 13 }}
+              >
+                <Plus size={14} />
+                Add account
+              </MenuItem>
               <MenuItem
                 dense
                 onClick={() => {
@@ -236,13 +257,13 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
               <MenuItem
                 dense
                 onClick={() => {
-                  logout();
+                  void logout();
                   setAnchorEl(null);
                 }}
                 sx={{ gap: 1.5, fontSize: 13, color: "error.main" }}
               >
                 <LogOut size={14} />
-                Logout
+                Log out
               </MenuItem>
             </Menu>
           </>

@@ -7,6 +7,8 @@ import { Outlet, useLocation } from "react-router-dom";
 import { AIChatPanel } from "../components/ai/AIChatPanel";
 import { CommandPalette, useCommandPaletteHotkey } from "../components/CommandPalette";
 import { LoginDialog } from "../components/LoginDialog";
+import { MigrationDialog } from "../components/MigrationDialog";
+import { UnlockDialog } from "../components/UnlockDialog";
 import { useAuthStore, useSettingsStore, useInvitationsStore } from "../stores";
 
 import { isFullBleedRoute } from "./fullBleed";
@@ -15,7 +17,10 @@ import { Sidebar, SIDEBAR_WIDTH } from "./Sidebar";
 
 export function AppShell() {
   const { sidebarOpen, aiPanelOpen, setSidebarOpen } = useSettingsStore();
-  const [loginOpen, setLoginOpen] = useState(false);
+  const authModalOpen = useAuthStore((s) => s.authModalOpen);
+  const authModalMode = useAuthStore((s) => s.authModalMode);
+  const openAuthModal = useAuthStore((s) => s.openAuthModal);
+  const closeAuthModal = useAuthStore((s) => s.closeAuthModal);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
@@ -49,7 +54,7 @@ export function AppShell() {
     <Sidebar
       collapsed={false}
       onLoginClick={() => {
-        setLoginOpen(true);
+        openAuthModal("login");
         setSidebarOpen(false);
       }}
     />
@@ -86,7 +91,7 @@ export function AppShell() {
         }}
       >
         <Header
-          onLoginClick={() => setLoginOpen(true)}
+          onLoginClick={() => openAuthModal("login")}
           onOpenCommandPalette={() => setPaletteOpen(true)}
           isMobile={isMobile || isTablet}
         />
@@ -131,11 +136,13 @@ export function AppShell() {
         </Box>
       )}
 
-      <LoginDialog open={loginOpen} onClose={() => setLoginOpen(false)} />
+      <LoginDialog open={authModalOpen && authModalMode === "login"} onClose={closeAuthModal} />
+      <UnlockDialog open={authModalOpen && authModalMode === "unlock"} onClose={closeAuthModal} />
+      <MigrationDialog />
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
-        onLoginClick={() => setLoginOpen(true)}
+        onLoginClick={() => openAuthModal("login")}
       />
     </Box>
   );
