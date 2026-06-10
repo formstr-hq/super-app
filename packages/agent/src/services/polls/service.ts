@@ -1,6 +1,7 @@
 import { signerManager, nostrRuntime, relayManager } from "@formstr/core";
-import type { EventTemplate, Event, Filter } from "nostr-tools";
+import type { EventTemplate, Event, Filter, UnsignedEvent } from "nostr-tools";
 
+import { minePollEvent, hasValidPow } from "./pow";
 import {
   POLLS_KINDS,
   type Poll,
@@ -76,6 +77,7 @@ export async function submitPollResponse(
   pollAuthor: string,
   selectedOptionIds: string[],
   pollRelays?: string[],
+  powDifficulty?: number,
 ): Promise<void> {
   const signer = await signerManager.getSigner();
   const relays = withModuleRelays(pollRelays);
@@ -89,12 +91,25 @@ export async function submitPollResponse(
     tags.push(["response", optionId]);
   }
 
-  const event: EventTemplate = {
+  let event: EventTemplate = {
     kind: POLLS_KINDS.response,
     created_at: Math.floor(Date.now() / 1000),
     tags,
     content: "",
   };
+
+  // PoW-gated polls: mine the unsigned event to the poll's difficulty (nonce +
+  // ["W", difficulty] query tag) — upstream rejects/never sees unmined votes.
+  if (powDifficulty && powDifficulty > 0) {
+    const unsigned: UnsignedEvent = { ...event, pubkey: await signer.getPublicKey() };
+    const mined = minePollEvent(unsigned, powDifficulty);
+    event = {
+      kind: mined.kind,
+      created_at: mined.created_at,
+      tags: mined.tags,
+      content: mined.content,
+    };
+  }
 
   const signed = await signer.signEvent(event);
   await nostrRuntime.publish(relays, signed);
@@ -162,11 +177,17 @@ function resultRelays(poll: Poll): string[] {
 }
 
 /** Map voter → their latest, non-cleared selected option ids (latest wins by created_at). */
-function latestResponsesByVoter(events: Event[], deleted: Set<string>): Map<string, string[]> {
+function latestResponsesByVoter(
+  events: Event[],
+  deleted: Set<string>,
+  powDifficulty = 0,
+): Map<string, string[]> {
   const latest = new Map<string, Event>();
   for (const e of events) {
     if (isPollDeleted(e, deleted)) continue;
     if (!e.tags.some((t) => t[0] === "response")) continue;
+    // PoW polls: drop under-target votes (upstream nip13.getPow gate).
+    if (powDifficulty > 0 && !hasValidPow(e, powDifficulty)) continue;
     const prev = latest.get(e.pubkey);
     if (!prev || e.created_at > prev.created_at) latest.set(e.pubkey, e);
   }
@@ -191,11 +212,13 @@ export async function fetchPollResults(poll: Poll): Promise<PollResults> {
     kinds: [POLLS_KINDS.response, POLLS_KINDS.responseLegacy],
     "#e": [poll.id],
     ...(poll.endsAt ? { until: poll.endsAt } : {}),
+    // PoW polls: upstream queries votes by their ["W", difficulty] tag.
+    ...(poll.powDifficulty ? { "#W": [String(poll.powDifficulty)] } : {}),
   } as Filter);
 
   const authors = Array.from(new Set(events.map((e: Event) => e.pubkey)));
   const deleted = await fetchDeletions(relays, authors);
-  return computeResults(latestResponsesByVoter(events, deleted));
+  return computeResults(latestResponsesByVoter(events, deleted, poll.powDifficulty ?? 0));
 }
 
 // ── Fetch Recent Polls ──────────────────────────────────
@@ -295,12 +318,13 @@ function computeResults(responses: Map<string, string[]>): PollResults {
   const results = new Map<string, OptionResult>();
   const totalVoters = responses.size;
 
-  // Count votes per option (a voter may select several in a multiple-choice poll).
+  // Count votes per option (a voter may select several in a multiple-choice poll;
+  // duplicate response tags for the same option count once — upstream dedups).
   const counts = new Map<string, string[]>();
   for (const [pubkey, selected] of responses) {
     for (const optionId of selected) {
       const existing = counts.get(optionId) ?? [];
-      existing.push(pubkey);
+      if (!existing.includes(pubkey)) existing.push(pubkey);
       counts.set(optionId, existing);
     }
   }
