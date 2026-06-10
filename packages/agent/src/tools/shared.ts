@@ -41,13 +41,21 @@ interface AiField {
   gridRows?: string[];
   gridCols?: string[];
   fileConfig?: FormFieldFileConfig;
+  maxStars?: number;
 }
 
 const ANSWER_TYPES = new Set<string>(Object.values(AnswerType));
 
+/** Pre-rename enum strings still produced by old callers/AI prompts. */
+const LEGACY_TYPE_ALIASES: Record<string, AnswerType> = {
+  multiChoiceGrid: AnswerType.multipleChoiceGrid,
+};
+
 /** Coerce an arbitrary type string to a known AnswerType, defaulting to short text. */
 function coerceType(type: string | undefined): AnswerType {
-  return type && ANSWER_TYPES.has(type) ? (type as AnswerType) : AnswerType.shortText;
+  if (!type) return AnswerType.shortText;
+  if (LEGACY_TYPE_ALIASES[type]) return LEGACY_TYPE_ALIASES[type];
+  return ANSWER_TYPES.has(type) ? (type as AnswerType) : AnswerType.shortText;
 }
 
 function normalizeOptions(options: AiField["options"]): FormOption[] | undefined {
@@ -75,6 +83,7 @@ export function aiFieldsToFormFields(value: unknown): FormField[] {
     gridRows: f.gridRows,
     gridCols: f.gridCols,
     fileConfig: f.fileConfig,
+    maxStars: f.maxStars,
   }));
 }
 

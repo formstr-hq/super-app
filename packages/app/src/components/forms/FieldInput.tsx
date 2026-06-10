@@ -268,7 +268,7 @@ export function FieldInput({
         />
       );
 
-    case AnswerType.multiChoiceGrid:
+    case AnswerType.multipleChoiceGrid:
     case AnswerType.checkboxGrid:
       return (
         <Box>

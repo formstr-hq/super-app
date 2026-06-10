@@ -65,6 +65,8 @@ describe("FillFormDialog", () => {
           expect.objectContaining({ fieldId: "q2" }),
         ]),
         false,
+        undefined,
+        undefined, // form.relays — none on this template
       );
     });
   });

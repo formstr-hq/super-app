@@ -56,6 +56,11 @@ export const useFormsStore = create<FormsStore>((set, get) => ({
     }
     set({ isLoading: true, error: null, responses: [] });
     const summary = get().myForms.find((f) => f.pubkey === pubkey && f.id === formId);
+    // Include the template's own ["relay"] hints — responses to custom-relay forms
+    // (e.g. authored on formstr.app) may only exist there.
+    const current = get().currentForm;
+    const formRelays =
+      current && current.pubkey === pubkey && current.id === formId ? current.relays : undefined;
     responsesSub = formsService.subscribeToResponses(
       pubkey,
       formId,
@@ -67,6 +72,7 @@ export const useFormsStore = create<FormsStore>((set, get) => ({
         ),
       () => set({ isLoading: false }),
       summary?.signingKey,
+      formRelays,
     );
     return Promise.resolve();
   },

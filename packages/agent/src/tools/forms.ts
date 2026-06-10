@@ -32,6 +32,7 @@ const fieldShape = z
       .optional(),
     gridRows: z.array(z.string()).optional(),
     gridCols: z.array(z.string()).optional(),
+    maxStars: z.number().optional(),
     fileConfig: z
       .object({
         blossomServer: z.string().optional(),
@@ -142,7 +143,14 @@ export const formsTools: ToolEntry[] = [
       const signingKey = mine.find(
         (f) => f.pubkey === formAuthorPubkey && f.id === formId,
       )?.signingKey;
-      const responses = await forms.fetchResponses(formAuthorPubkey, formId, signingKey);
+      // Honor the template's own ["relay"] hints when querying for responses.
+      const template = await forms.fetchForm(formAuthorPubkey, formId);
+      const responses = await forms.fetchResponses(
+        formAuthorPubkey,
+        formId,
+        signingKey,
+        template?.relays,
+      );
 
       const blocks = responses.map((r) => {
         const when = new Date(r.createdAt * 1000).toISOString();
@@ -335,6 +343,8 @@ export const formsTools: ToolEntry[] = [
         `publicly submits ${answers.length} answer(s) to form ${formId}`,
       );
       if (blocked) return blocked;
+      // Honor the template's own ["relay"] hints when publishing the response.
+      const template = await forms.fetchForm(formAuthorPubkey, formId);
       await forms.submitResponse(
         formAuthorPubkey,
         formId,
@@ -344,6 +354,8 @@ export const formsTools: ToolEntry[] = [
           metadata: a.metadata,
         })),
         Boolean(encrypt),
+        undefined,
+        template?.relays,
       );
       return ok(`Submitted ${answers.length} answer(s) to form ${formId}.`);
     },

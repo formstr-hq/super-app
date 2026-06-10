@@ -38,6 +38,7 @@ import {
   fetchMyForms,
   deleteForm,
   saveToMyForms,
+  submitResponse,
   subscribeToResponses,
   updateForm,
   shareForm,
@@ -87,11 +88,39 @@ describe("createForm — plain form", () => {
     expect(result.formId).toBeTruthy();
     expect(result.pubkey).toBe("aabbccdd");
   });
+
+  it("always tags plaintext forms public and writes per-relay relay tags (upstream parity)", async () => {
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
+
+    // no settings.publicForm — upstream tags EVERY plaintext form ["t","public"]
+    await createForm({
+      name: "Survey",
+      fields: [{ id: "f1", type: "shortText" as any, label: "Name" }],
+    });
+
+    const formEvent = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(formEvent.tags).toContainEqual(["t", "public"]);
+    expect(formEvent.tags).toContainEqual(["relay", "wss://relay.test"]);
+  });
+
+  it("writes field tags through the upstream codec (primitive slot + renderElement)", async () => {
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
+
+    await createForm({
+      name: "Survey",
+      fields: [{ id: "f1", type: "shortText" as any, label: "Name" }],
+    });
+
+    const formEvent = (nostrRuntime.publish as any).mock.calls[0][1];
+    const fieldTag = formEvent.tags.find((t: string[]) => t[0] === "field");
+    expect(fieldTag[2]).toBe("text"); // primitive, not the AnswerType
+    expect(JSON.parse(fieldTag[5]).renderElement).toBe("shortText");
+  });
 });
 
 describe("createForm — encrypted form", () => {
-  it("encrypts fields with formSigner, adds encryption tag, persists keys to kind-14083", async () => {
-    const mockFormSigner = { nip44Encrypt: vi.fn().mockResolvedValue("enc_fields") };
+  it("encrypts the FULL spec into content; outer tags carry no settings/encryption", async () => {
+    const mockFormSigner = { nip44Encrypt: vi.fn().mockResolvedValue("enc_spec") };
     (LocalSigner as any).mockImplementationOnce(() => mockFormSigner);
     (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
 
@@ -108,16 +137,25 @@ describe("createForm — encrypted form", () => {
     const calls = (nostrRuntime.publish as any).mock.calls;
     const formEvent = calls[0][1];
     expect(formEvent.kind).toBe(30168);
-    expect(formEvent.content).toBe("enc_fields");
-    expect(formEvent.tags.some((t: string[]) => t[0] === "encryption" && t[1] === "view-key")).toBe(
-      true,
-    );
+    expect(formEvent.content).toBe("enc_spec");
 
-    // formSigner.nip44Encrypt was called with viewPubkey and the field JSON
+    // Upstream layout: detection is content !== "" — NO nonstandard encryption tag,
+    // NO plaintext settings tag; outer tags are only d/name/relay (+allowed/p).
+    expect(formEvent.tags.some((t: string[]) => t[0] === "encryption")).toBe(false);
+    expect(formEvent.tags.some((t: string[]) => t[0] === "settings")).toBe(false);
+    expect(formEvent.tags).toContainEqual(["d", result.formId]);
+    expect(formEvent.tags).toContainEqual(["name", "Secret"]);
+    expect(formEvent.tags).toContainEqual(["relay", "wss://relay.test"]);
+
+    // The encrypted payload is the full spec tag array: d + name + field rows
     expect(mockFormSigner.nip44Encrypt).toHaveBeenCalledWith(
       expect.any(String), // viewPubkey
       expect.stringContaining('"field"'),
     );
+    const specJson = mockFormSigner.nip44Encrypt.mock.calls[0][1];
+    const spec = JSON.parse(specJson) as string[][];
+    expect(spec.some((t) => t[0] === "d" && t[1] === result.formId)).toBe(true);
+    expect(spec.some((t) => t[0] === "name" && t[1] === "Secret")).toBe(true);
 
     // kind-14083 published with NIP-44 self-encryption, keys serialised in payload
     const listEvent = calls[1][1];
@@ -128,8 +166,8 @@ describe("createForm — encrypted form", () => {
     );
   });
 
-  it("includes a settings tag on the encrypted form event", async () => {
-    const mockFormSigner = { nip44Encrypt: vi.fn().mockResolvedValue("enc_fields") };
+  it("puts settings inside the encrypted spec, not in plaintext outer tags", async () => {
+    const mockFormSigner = { nip44Encrypt: vi.fn().mockResolvedValue("enc_spec") };
     (LocalSigner as any).mockImplementationOnce(() => mockFormSigner);
 
     await createForm({
@@ -140,9 +178,30 @@ describe("createForm — encrypted form", () => {
     });
 
     const formEvent = (nostrRuntime.publish as any).mock.calls[0][1];
-    const settingsTag = formEvent.tags.find((t: string[]) => t[0] === "settings");
-    expect(settingsTag).toBeTruthy();
-    expect(JSON.parse(settingsTag[1])).toMatchObject({ thankYouText: "Cheers" });
+    expect(formEvent.tags.some((t: string[]) => t[0] === "settings")).toBe(false);
+
+    const spec = JSON.parse(mockFormSigner.nip44Encrypt.mock.calls[0][1]) as string[][];
+    const settingsRow = spec.find((t) => t[0] === "settings");
+    expect(settingsRow).toBeTruthy();
+    expect(JSON.parse(settingsRow![1])).toMatchObject({ thankYouText: "Cheers" });
+  });
+
+  it("writes allowed/p outer tags from allowedResponders and collaborators", async () => {
+    const mockFormSigner = { nip44Encrypt: vi.fn().mockResolvedValue("enc_spec") };
+    (LocalSigner as any).mockImplementationOnce(() => mockFormSigner);
+
+    await createForm({
+      name: "Secret",
+      fields: [{ id: "f1", type: "shortText" as any, label: "Q" }],
+      settings: { allowedResponders: ["pubA"], collaborators: ["pubB"] },
+      encrypt: true,
+    });
+
+    const formEvent = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(formEvent.tags).toContainEqual(["allowed", "pubA"]);
+    // p = allowed ∪ collaborators
+    expect(formEvent.tags).toContainEqual(["p", "pubA"]);
+    expect(formEvent.tags).toContainEqual(["p", "pubB"]);
   });
 });
 
@@ -169,10 +228,73 @@ describe("fetchForm — plain form", () => {
     expect(form!.fields).toHaveLength(1);
     expect(form!.isEncrypted).toBe(false);
   });
+
+  it("collects relay tags into template.relays and resolves renderElement types", async () => {
+    (nostrRuntime.fetchOne as any).mockResolvedValue({
+      id: "eid",
+      pubkey: "formpub",
+      kind: 30168,
+      created_at: 1000,
+      sig: "sig",
+      content: "",
+      tags: [
+        ["d", "form1"],
+        ["name", "My Form"],
+        ["relay", "wss://custom.relay"],
+        ["relay", "wss://other.relay"],
+        // upstream-authored field: primitive in slot 2, widget in renderElement
+        ["field", "f1", "text", "Birthday", "[]", '{"renderElement":"date","required":true}'],
+      ],
+    } satisfies Event);
+
+    const form = await fetchForm("formpub", "form1");
+    expect(form!.relays).toEqual(["wss://custom.relay", "wss://other.relay"]);
+    expect(form!.fields[0].type).toBe("date");
+    expect(form!.fields[0].required).toBe(true);
+  });
 });
 
 describe("fetchForm — encrypted, correct viewKey", () => {
-  it("decrypts fields using view key signer", async () => {
+  it("decrypts an upstream full-spec payload: name/settings/fields from content", async () => {
+    const mockViewSigner = {
+      nip44Decrypt: vi.fn().mockResolvedValue(
+        JSON.stringify([
+          ["d", "form1"],
+          ["name", "Enc Form"],
+          ["settings", '{"description":"hidden desc"}'],
+          ["field", "f1", "text", "Secret Q", "[]", '{"renderElement":"shortText"}'],
+        ]),
+      ),
+    };
+    (LocalSigner as any).mockImplementationOnce(() => mockViewSigner);
+
+    // Upstream-shaped event: outer tags only d+name, no settings/encryption tags
+    (nostrRuntime.fetchOne as any).mockResolvedValue({
+      id: "eid",
+      pubkey: "formpub",
+      kind: 30168,
+      created_at: 1000,
+      sig: "sig",
+      content: "enc_blob",
+      tags: [
+        ["d", "form1"],
+        ["name", "Enc Form"],
+      ],
+    } satisfies Event);
+
+    const form = await fetchForm(
+      "formpub",
+      "form1",
+      "aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd",
+    );
+    expect(form!.isEncrypted).toBe(true);
+    expect(form!.fields).toHaveLength(1);
+    expect(form!.fields[0].label).toBe("Secret Q");
+    expect(form!.settings.description).toBe("hidden desc");
+    expect(mockViewSigner.nip44Decrypt).toHaveBeenCalledWith("formpub", "enc_blob");
+  });
+
+  it("still decodes a legacy super-app event (field-rows-only content + encryption tag)", async () => {
     const mockViewSigner = {
       nip44Decrypt: vi
         .fn()
@@ -193,6 +315,7 @@ describe("fetchForm — encrypted, correct viewKey", () => {
         ["d", "form1"],
         ["name", "Enc Form"],
         ["encryption", "view-key"],
+        ["settings", '{"description":"outer desc"}'],
       ],
     } satisfies Event);
 
@@ -201,14 +324,16 @@ describe("fetchForm — encrypted, correct viewKey", () => {
       "form1",
       "aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd",
     );
+    expect(form!.isEncrypted).toBe(true);
     expect(form!.fields).toHaveLength(1);
     expect(form!.fields[0].label).toBe("Secret Q");
-    expect(mockViewSigner.nip44Decrypt).toHaveBeenCalledWith("formpub", "enc_blob");
+    // legacy events keep settings in the outer tag
+    expect(form!.settings.description).toBe("outer desc");
   });
 });
 
 describe("fetchForm — encrypted, no viewKey", () => {
-  it("returns isEncrypted=true with empty fields", async () => {
+  it("detects encryption from non-empty content with no field tags (upstream shape)", async () => {
     (nostrRuntime.fetchOne as any).mockResolvedValue({
       id: "eid",
       pubkey: "formpub",
@@ -219,7 +344,6 @@ describe("fetchForm — encrypted, no viewKey", () => {
       tags: [
         ["d", "form1"],
         ["name", "Enc Form"],
-        ["encryption", "view-key"],
       ],
     } satisfies Event);
 
@@ -303,6 +427,43 @@ describe("fetchResponses — encrypted, no signingKey", () => {
     const responses = await fetchResponses("formpub", "form1");
     expect(responses[0].wasEncrypted).toBe(true);
     expect(responses[0].responses).toHaveLength(0);
+  });
+});
+
+// ── form-relay targeting (template ["relay"] hints) ───────────
+
+describe("response paths honor the form's relay hints", () => {
+  it("submitResponse publishes to formRelays ∪ module relays", async () => {
+    await submitResponse(
+      "formpub",
+      "form1",
+      [{ fieldId: "f1", answer: "A" }],
+      false,
+      undefined,
+      ["wss://custom.relay", "wss://relay.test"], // overlap must dedupe
+    );
+
+    const [relays, event] = (nostrRuntime.publish as any).mock.calls[0];
+    expect(event.kind).toBe(1069);
+    expect([...relays].sort()).toEqual(["wss://custom.relay", "wss://relay.test"]);
+  });
+
+  it("fetchResponses queries formRelays ∪ module relays", async () => {
+    await fetchResponses("formpub", "form1", undefined, ["wss://custom.relay"]);
+
+    const [relays] = (nostrRuntime.querySync as any).mock.calls[0];
+    expect([...relays].sort()).toEqual(["wss://custom.relay", "wss://relay.test"]);
+  });
+
+  it("subscribeToResponses subscribes on formRelays ∪ module relays", () => {
+    (nostrRuntime.subscribe as any).mockReturnValue({ unsub: vi.fn() });
+
+    subscribeToResponses("formpub", "form1", vi.fn(), undefined, undefined, [
+      "wss://custom.relay",
+    ]);
+
+    const [relays] = (nostrRuntime.subscribe as any).mock.calls[0];
+    expect([...relays].sort()).toEqual(["wss://custom.relay", "wss://relay.test"]);
   });
 });
 
@@ -534,6 +695,73 @@ describe("updateForm — public form", () => {
     expect(event.kind).toBe(30168);
     expect(event.tags).toContainEqual(["name", "New Name"]);
     expect(event.tags.filter((t: string[]) => t[0] === "field")).toHaveLength(2);
+    // plaintext republish keeps upstream-parity tags
+    expect(event.tags).toContainEqual(["t", "public"]);
+    expect(event.tags).toContainEqual(["relay", "wss://relay.test"]);
+  });
+});
+
+describe("updateForm — encrypted form", () => {
+  it("re-encrypts the FULL spec and keeps outer tags free of settings/encryption", async () => {
+    // fetchForm sees an upstream-shaped encrypted event
+    (nostrRuntime.fetchOne as any).mockResolvedValue({
+      id: "eid",
+      pubkey: "11".repeat(32),
+      kind: 30168,
+      created_at: 1000,
+      sig: "sig",
+      content: "enc_blob",
+      tags: [
+        ["d", "form1"],
+        ["name", "Old"],
+      ],
+    } satisfies Event);
+    // my-forms list lookup resolves the signing/view keys
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([
+        {
+          id: "list",
+          pubkey: "aabbccdd",
+          kind: 14083,
+          created_at: 1000,
+          sig: "s",
+          content: "enc_list",
+          tags: [],
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    (nip44SelfDecrypt as any).mockResolvedValue(
+      JSON.stringify([
+        ["f", `${"11".repeat(32)}:form1`, "", `${"22".repeat(32)}:${"33".repeat(32)}`],
+      ]),
+    );
+    const mockFormSigner = { nip44Encrypt: vi.fn().mockResolvedValue("enc_spec2") };
+    (LocalSigner as any).mockImplementation(() => mockFormSigner);
+
+    await updateForm({
+      formId: "form1",
+      pubkey: "11".repeat(32),
+      name: "New",
+      fields: [{ id: "f1", type: "shortText" as any, label: "Q" }],
+    });
+    (LocalSigner as any).mockReset();
+    (LocalSigner as any).mockImplementation(() => ({
+      nip44Encrypt: vi.fn(),
+      nip44Decrypt: vi.fn(),
+      getPublicKey: vi.fn(),
+      signEvent: vi.fn(),
+    }));
+
+    const [, event] = (nostrRuntime.publish as any).mock.calls.at(-1);
+    expect(event.kind).toBe(30168);
+    expect(event.content).toBe("enc_spec2");
+    expect(event.tags.some((t: string[]) => t[0] === "settings")).toBe(false);
+    expect(event.tags.some((t: string[]) => t[0] === "encryption")).toBe(false);
+    expect(event.tags).toContainEqual(["relay", "wss://relay.test"]);
+
+    const spec = JSON.parse(mockFormSigner.nip44Encrypt.mock.calls[0][1]) as string[][];
+    expect(spec.some((t) => t[0] === "name" && t[1] === "New")).toBe(true);
+    expect(spec.some((t) => t[0] === "field")).toBe(true);
   });
 });
 

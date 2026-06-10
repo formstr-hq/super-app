@@ -128,6 +128,7 @@ describe("loadResponses", () => {
       expect.any(Function),
       expect.any(Function),
       "sk",
+      undefined, // form relay hints — no currentForm loaded in this test
     );
 
     captured!({ id: "r1", pubkey: "x", responses: [], createdAt: 0, event: {} });

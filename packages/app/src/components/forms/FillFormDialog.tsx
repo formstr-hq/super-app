@@ -80,7 +80,14 @@ export function FillFormDialog({ open, form, isLoading, onClose }: Props) {
           }
           return { fieldId: f.id, answer };
         });
-      await formsService.submitResponse(form.pubkey, form.id, responses, form.isEncrypted);
+      await formsService.submitResponse(
+        form.pubkey,
+        form.id,
+        responses,
+        form.isEncrypted,
+        undefined,
+        form.relays,
+      );
       setSubmitted(true);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Failed to submit");

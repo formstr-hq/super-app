@@ -88,7 +88,14 @@ export function FillPage() {
         });
 
       if (identityMode === "me" && isLoggedIn) {
-        await formsService.submitResponse(form.pubkey, form.id, responses, form.isEncrypted);
+        await formsService.submitResponse(
+          form.pubkey,
+          form.id,
+          responses,
+          form.isEncrypted,
+          undefined,
+          form.relays,
+        );
       } else {
         // Anonymous: ephemeral key — sign and encrypt; discard key after publish
         const ephSk = generateSecretKey();
@@ -107,6 +114,7 @@ export function FillPage() {
           responses,
           form.isEncrypted,
           ephSigner,
+          form.relays,
         );
       }
       setSubmitted(true);

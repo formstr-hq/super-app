@@ -181,6 +181,7 @@ describe("FillPage", () => {
         expect.any(Array),
         true,
         expect.any(Object),
+        undefined, // form.relays — none on this template
       );
     });
   });

@@ -14,6 +14,7 @@ import type { EventTemplate, Event, Filter } from "nostr-tools";
 import { generateSecretKey, getPublicKey, finalizeEvent } from "nostr-tools";
 import { bytesToHex } from "nostr-tools/utils";
 
+import { buildFieldTag, parseFieldTag } from "./fieldCodec";
 import {
   encodeFormKeys,
   decodeFormKeys,
@@ -30,6 +31,52 @@ import {
   type FormResponseEvent,
   type FormSummary,
 } from "./types";
+
+/** Module relays ∪ a form's own `["relay"]` hints — upstream submits/fetches on both. */
+function relaysForForm(formRelays?: string[]): string[] {
+  return Array.from(
+    new Set([...relayManager.getRelaysForModule("forms"), ...(formRelays ?? [])]),
+  );
+}
+
+/**
+ * The form **spec** rows — d, name, settings, field rows. For plaintext forms these are
+ * published as event tags; for encrypted forms the whole array is NIP-44'd into `content`
+ * (upstream `nostr/createForm.ts` encrypts the full spec, not just the field rows).
+ */
+function buildSpecRows(formId: string, name: string, fields: FormField[], settings?: FormSettings) {
+  const rows: string[][] = [
+    ["d", formId],
+    ["name", name],
+  ];
+  if (settings) rows.push(["settings", JSON.stringify(settings)]);
+  for (const field of fields) rows.push(buildFieldTag(field));
+  return rows;
+}
+
+/**
+ * Outer tags for an **encrypted** template: only d/name/relay plus the access-control
+ * tags upstream reads — `["allowed", pk]` (submit gate) and `["p", pk]`
+ * (allowed ∪ collaborators). No settings, no `encryption` marker: formstr.app detects
+ * encryption purely via `content !== ""`.
+ */
+function buildEncryptedOuterTags(
+  formId: string,
+  name: string,
+  relays: string[],
+  settings?: FormSettings,
+): string[][] {
+  const tags: string[][] = [
+    ["d", formId],
+    ["name", name],
+    ...relays.map((r) => ["relay", r]),
+  ];
+  const allowed = settings?.allowedResponders ?? [];
+  const pTags = new Set([...allowed, ...(settings?.collaborators ?? [])]);
+  for (const pk of allowed) tags.push(["allowed", pk]);
+  for (const pk of pTags) tags.push(["p", pk]);
+  return tags;
+}
 
 // ── Create Form ─────────────────────────────────────────
 
@@ -53,14 +100,7 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
   const formId = crypto.randomUUID().slice(0, 8);
   const relays = relayManager.getRelaysForModule("forms");
 
-  const baseTags: string[][] = [
-    ["d", formId],
-    ["name", params.name],
-  ];
-  if (params.settings) baseTags.push(["settings", JSON.stringify(params.settings)]);
-  for (const field of params.fields) {
-    baseTags.push(buildFieldTag(field));
-  }
+  const specRows = buildSpecRows(formId, params.name, params.fields, params.settings);
 
   if (params.encrypt) {
     const signingKey = generateSecretKey();
@@ -71,22 +111,15 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
     const viewKeyHex = bytesToHex(viewKey);
     const viewPubkey = getPublicKey(viewKey);
 
-    // Encrypt fields: formSigner→viewPubkey so the view key can decrypt
+    // Encrypt the FULL spec (d/name/settings/fields): formSigner→viewPubkey so the
+    // view key can decrypt — and formstr.app gets name+settings back, not just fields.
     const formSigner = new LocalSigner(signingKey);
-    const fieldTags = baseTags.filter((t) => t[0] === "field");
-    const content = await formSigner.nip44Encrypt(viewPubkey, JSON.stringify(fieldTags));
-
-    const encTags: string[][] = [
-      ["d", formId],
-      ["name", params.name],
-      ["encryption", "view-key"],
-    ];
-    if (params.settings) encTags.push(["settings", JSON.stringify(params.settings)]);
+    const content = await formSigner.nip44Encrypt(viewPubkey, JSON.stringify(specRows));
 
     const event: EventTemplate = {
       kind: FORM_KINDS.template,
       created_at: Math.floor(Date.now() / 1000),
-      tags: encTags,
+      tags: buildEncryptedOuterTags(formId, params.name, relays, params.settings),
       content,
     };
     const signed = finalizeEvent(event, signingKey);
@@ -97,12 +130,13 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
     return { formId, pubkey: signingPubkey, signingKey: signingKeyHex, viewKey: viewKeyHex };
   }
 
-  // Public form — user signs with their own key
-  if (params.settings?.publicForm) baseTags.push(["t", "public"]);
+  // Public form — user signs with their own key. Upstream tags EVERY plaintext
+  // form ["t","public"] (its public browse filter), not just publicForm ones.
+  const tags: string[][] = [...specRows, ["t", "public"], ...relays.map((r) => ["relay", r])];
   const event: EventTemplate = {
     kind: FORM_KINDS.template,
     created_at: Math.floor(Date.now() / 1000),
-    tags: baseTags,
+    tags,
     content: "",
   };
   const signed = await signer.signEvent(event);
@@ -130,28 +164,19 @@ export async function fetchForm(
   } as Filter);
   if (!event) return null;
 
-  const template = parseFormEvent(event);
-
-  if (template.isEncrypted && event.content && viewKey) {
+  let decryptedRows: string[][] | undefined;
+  if (event.content && viewKey) {
     try {
       const viewSigner = makeViewKeySigner(viewKey);
       const decrypted = await viewSigner.nip44Decrypt(pubkey, event.content);
-      const fieldTags = JSON.parse(decrypted) as string[][];
-      template.fields = fieldTags
-        .filter((t) => t[0] === "field")
-        .map((t) => ({
-          id: t[1],
-          type: t[2] as FormField["type"],
-          label: t[3],
-          options: t[4] ? safeParseOptions(t[4]) : undefined,
-          required: t[5] ? JSON.parse(t[5])?.required : undefined,
-        }));
+      const rows = JSON.parse(decrypted);
+      if (Array.isArray(rows)) decryptedRows = rows as string[][];
     } catch {
-      // viewKey wrong or content malformed — leave fields empty
+      // viewKey wrong or content malformed — fall through to outer tags only
     }
   }
 
-  return template;
+  return parseFormEvent(event, decryptedRows);
 }
 
 // ── Submit Response ─────────────────────────────────────
@@ -162,6 +187,7 @@ export async function submitResponse(
   responses: FormResponse[],
   encrypt = false,
   overrideSigner?: NostrSigner,
+  formRelays?: string[],
 ): Promise<void> {
   const signer = overrideSigner ?? (await signerManager.getSigner());
 
@@ -186,8 +212,7 @@ export async function submitResponse(
   };
 
   const signed = await signer.signEvent(event);
-  const relays = relayManager.getRelaysForModule("forms");
-  await nostrRuntime.publish(relays, signed);
+  await nostrRuntime.publish(relaysForForm(formRelays), signed);
 }
 
 // ── Fetch Responses ─────────────────────────────────────
@@ -198,8 +223,9 @@ export function subscribeToResponses(
   onResponse: (response: FormResponseEvent) => void,
   onEose?: () => void,
   signingKey?: string,
+  formRelays?: string[],
 ): SubscriptionHandle {
-  const relays = relayManager.getRelaysForModule("forms");
+  const relays = relaysForForm(formRelays);
   const formSigner = signingKey ? makeSigningKeySigner(signingKey) : undefined;
 
   return nostrRuntime.subscribe(
@@ -234,9 +260,9 @@ export async function fetchResponses(
   formPubkey: string,
   formId: string,
   signingKey?: string,
+  formRelays?: string[],
 ): Promise<FormResponseEvent[]> {
-  const relays = relayManager.getRelaysForModule("forms");
-  const events = await nostrRuntime.querySync(relays, {
+  const events = await nostrRuntime.querySync(relaysForForm(formRelays), {
     kinds: [FORM_KINDS.response],
     "#a": [`${FORM_KINDS.template}:${formPubkey}:${formId}`],
   } as Filter);
@@ -516,6 +542,8 @@ export async function updateForm(params: UpdateFormParams): Promise<void> {
   const settings: FormSettings = { ...existing.settings, ...params.settings };
   const fields = params.fields ?? existing.fields;
 
+  const specRows = buildSpecRows(params.formId, name, fields, settings);
+
   if (existing.isEncrypted) {
     const summary = (await fetchMyForms()).find(
       (f) => f.id === params.formId && f.pubkey === params.pubkey,
@@ -526,19 +554,12 @@ export async function updateForm(params: UpdateFormParams): Promise<void> {
     const signingKeyBytes = hexToBytes(summary.signingKey);
     const formSigner = makeSigningKeySigner(summary.signingKey);
     const viewPubkey = getPublicKey(hexToBytes(summary.viewKey));
-    const fieldTags = fields.map(buildFieldTag);
-    const content = await formSigner.nip44Encrypt!(viewPubkey, JSON.stringify(fieldTags));
+    const content = await formSigner.nip44Encrypt!(viewPubkey, JSON.stringify(specRows));
 
-    const tags: string[][] = [
-      ["d", params.formId],
-      ["name", name],
-      ["encryption", "view-key"],
-      ["settings", JSON.stringify(settings)],
-    ];
     const event: EventTemplate = {
       kind: FORM_KINDS.template,
       created_at: Math.floor(Date.now() / 1000),
-      tags,
+      tags: buildEncryptedOuterTags(params.formId, name, relays, settings),
       content,
     };
     await nostrRuntime.publish(relays, finalizeEvent(event, signingKeyBytes));
@@ -547,13 +568,7 @@ export async function updateForm(params: UpdateFormParams): Promise<void> {
 
   // Public form — signed with the user's own key.
   const signer = await signerManager.getSigner();
-  const tags: string[][] = [
-    ["d", params.formId],
-    ["name", name],
-    ["settings", JSON.stringify(settings)],
-  ];
-  for (const field of fields) tags.push(buildFieldTag(field));
-  if (settings.publicForm) tags.push(["t", "public"]);
+  const tags: string[][] = [...specRows, ["t", "public"], ...relays.map((r) => ["relay", r])];
   const event: EventTemplate = {
     kind: FORM_KINDS.template,
     created_at: Math.floor(Date.now() / 1000),
@@ -647,41 +662,49 @@ export async function importForm(summary: FormSummary): Promise<void> {
 
 // ── Helpers ─────────────────────────────────────────────
 
-/** Build a kind-30168 `field` tag: ["field", id, type, label, optionsJSON, configJSON]. */
-function buildFieldTag(field: FormField): string[] {
-  const options = field.options ? JSON.stringify(field.options.map((o) => [o.id, o.label])) : "[]";
-  const config = JSON.stringify({ required: field.required, placeholder: field.placeholder });
-  return ["field", field.id, field.type, field.label, options, config];
-}
+/**
+ * Parse a kind-30168 template, optionally merging the decrypted spec rows.
+ *
+ * Outer tags come first, so `find` resolves name/settings from the plaintext tags when
+ * present — which covers both upstream full-spec payloads (outer name == inner name,
+ * settings only inside) and legacy super-app events (settings plaintext outside,
+ * field rows only inside).
+ */
+function parseFormEvent(event: Event, decryptedRows?: string[][]): FormTemplate {
+  const merged = decryptedRows ? [...event.tags, ...decryptedRows] : event.tags;
 
-function parseFormEvent(event: Event): FormTemplate {
-  const dTag = event.tags.find((t) => t[0] === "d")?.[1] ?? "";
-  const nameTag = event.tags.find((t) => t[0] === "name")?.[1] ?? "Untitled";
-  const settingsTag = event.tags.find((t) => t[0] === "settings")?.[1];
+  const dTag = merged.find((t) => t[0] === "d")?.[1] ?? "";
+  const nameTag = merged.find((t) => t[0] === "name")?.[1] ?? "Untitled";
+  const settingsTag = merged.find((t) => t[0] === "settings")?.[1];
   const encTag = event.tags.find((t) => t[0] === "encryption")?.[1];
+  const relays = event.tags.filter((t) => t[0] === "relay" && t[1]).map((t) => t[1]);
 
-  const fields: FormField[] = event.tags
-    .filter((t) => t[0] === "field")
-    .map((t) => ({
-      id: t[1],
-      type: t[2] as FormField["type"],
-      label: t[3],
-      options: t[4] ? safeParseOptions(t[4]) : undefined,
-      required: t[5] ? JSON.parse(t[5])?.required : undefined,
-    }));
+  const fields: FormField[] = merged.filter((t) => t[0] === "field").map(parseFieldTag);
 
-  // Explicit tag takes precedence; fall back to heuristic for old events
+  // Legacy explicit tag takes precedence; otherwise upstream's heuristic — non-empty
+  // content with no plaintext field rows means the spec is encrypted.
+  const outerHasFields = event.tags.some((t) => t[0] === "field");
   const isEncrypted =
-    encTag != null ? encTag === "view-key" : event.content.length > 0 && fields.length === 0;
+    encTag != null ? encTag === "view-key" : event.content.length > 0 && !outerHasFields;
+
+  let settings: FormSettings = {};
+  if (settingsTag) {
+    try {
+      settings = JSON.parse(settingsTag);
+    } catch {
+      // malformed settings — keep the form renderable
+    }
+  }
 
   return {
     id: dTag,
     name: nameTag,
     fields,
-    settings: settingsTag ? JSON.parse(settingsTag) : {},
+    settings,
     pubkey: event.pubkey,
     createdAt: event.created_at,
     isEncrypted,
+    ...(relays.length > 0 && { relays }),
     event,
   };
 }
@@ -703,12 +726,3 @@ function parseResponseEvent(event: Event): FormResponseEvent {
   };
 }
 
-function safeParseOptions(json: string): FormTemplate["fields"][0]["options"] {
-  try {
-    const arr = JSON.parse(json);
-    if (!Array.isArray(arr)) return undefined;
-    return arr.map((o: [string, string]) => ({ id: o[0], label: o[1] }));
-  } catch {
-    return undefined;
-  }
-}
