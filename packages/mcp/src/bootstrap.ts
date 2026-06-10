@@ -1,9 +1,13 @@
 import { relayManager, signerManager, nostrRuntime } from "@formstr/core";
+import { hexToBytes, type Signer, type StoredAccount } from "@formstr/signer";
+import type { AbstractSimplePool } from "nostr-tools/abstract-pool";
 import { useWebSocketImplementation as setWebSocketImplementation } from "nostr-tools/pool";
 import WebSocket from "ws";
 
-import { type Credential } from "./auth/credential";
-import { buildNip46Signer } from "./auth/login";
+import { buildMcpSigner } from "./auth/mcpSigner";
+import { mapMethod } from "./auth/methodMap";
+import { createPatchedPool } from "./auth/pool";
+import { toNostrSigner } from "./auth/toNostrSigner";
 
 function installLocalStorageShim(): void {
   const store = new Map<string, string>();
@@ -36,11 +40,33 @@ function overrideRelays(relays: string[]): void {
 }
 
 export interface BootstrapInput {
-  credential: Credential;
+  /** `--account <pubkey>` override; defaults to the keystore's active account. */
+  account?: string;
+  /** Operator relay override (applied to every module). */
   relays?: string[];
 }
 
-export async function bootstrap(input: BootstrapInput): Promise<void> {
+export interface BootstrapDeps {
+  /** Build the keystore-backed signer (overridable in tests). */
+  buildSigner?: () => Promise<Signer>;
+  /** WebSocket-patched pool for the NIP-46 resume (overridable in tests). */
+  pool?: AbstractSimplePool;
+  /** ncryptsec boot passphrase; defaults to `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE`. */
+  passphrase?: string;
+}
+
+/**
+ * Boot the runtime: install the Node shims, build the keystore-backed
+ * `@formstr/signer`, select + unlock the active account, and inject the unlocked
+ * signer into core's `signerManager`. Returns the account that was activated.
+ *
+ * Unlock is headless: ncryptsec accounts use `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE`;
+ * nip46 accounts resume from their stored client session.
+ */
+export async function bootstrap(
+  input: BootstrapInput,
+  deps: BootstrapDeps = {},
+): Promise<StoredAccount> {
   installLocalStorageShim();
   setWebSocketImplementation(WebSocket);
   // When bundled into a single CJS file, nostr-tools/pool's module-level _WebSocket
@@ -51,13 +77,62 @@ export async function bootstrap(input: BootstrapInput): Promise<void> {
   (nostrRuntime.pool as any)._WebSocket = WebSocket;
   if (input.relays?.length) overrideRelays(input.relays);
 
-  if (input.credential.method === "local") {
-    await signerManager.loginWithNsec(input.credential.nsec);
-  } else {
-    const { clientSecretKey, remoteSignerPubkey, relays, secret } = input.credential;
-    await signerManager.loginWithNip46(
-      { clientSecretKey, remoteSignerPubkey, relays, secret },
-      buildNip46Signer,
-    );
+  const signer = await (deps.buildSigner ?? buildMcpSigner)();
+  const account = await selectAccount(signer, input.account);
+  await unlock(signer, account, deps);
+
+  const active = signer.getActiveSigner();
+  if (!active) throw new Error("Unlock failed: no active signer after sign-in.");
+  signerManager.setActiveSigner(toNostrSigner(active), mapMethod(account.method), account.pubkey);
+  return account;
+}
+
+async function selectAccount(signer: Signer, requested?: string): Promise<StoredAccount> {
+  if (requested) {
+    const match = signer.listAccounts().find((a) => a.pubkey === requested);
+    if (!match) {
+      throw new Error(
+        `No stored account for --account ${requested}. Run \`formstr-mcp accounts\` to list them.`,
+      );
+    }
+    await signer.switchAccount(match.pubkey);
+    return match;
   }
+  const active = signer.getActiveAccount();
+  if (!active) {
+    throw new Error("No account found. Run `formstr-mcp login` to sign in.");
+  }
+  return active;
+}
+
+async function unlock(signer: Signer, account: StoredAccount, deps: BootstrapDeps): Promise<void> {
+  if (account.method === "ncryptsec") {
+    if (!account.ncryptsec) {
+      throw new Error(
+        "Stored ncryptsec account is missing its encrypted key. Run `formstr-mcp login`.",
+      );
+    }
+    const passphrase = deps.passphrase ?? process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE;
+    if (!passphrase) {
+      throw new Error(
+        "Set FORMSTR_MCP_NCRYPTSEC_PASSPHRASE to unlock the ncryptsec account at boot.",
+      );
+    }
+    await signer.loginWithNcryptsec(account.ncryptsec, passphrase);
+    return;
+  }
+  if (account.method === "nip46") {
+    if (!account.nip46) {
+      throw new Error("Stored nip46 account is missing its session. Run `formstr-mcp login`.");
+    }
+    const pool = deps.pool ?? createPatchedPool();
+    await signer.loginWithBunkerUri(account.nip46.uri, {
+      clientSecretKey: hexToBytes(account.nip46.clientSecretKey),
+      pool,
+    });
+    return;
+  }
+  throw new Error(
+    `Account method "${account.method}" cannot be unlocked headlessly — use ncryptsec or nip46.`,
+  );
 }

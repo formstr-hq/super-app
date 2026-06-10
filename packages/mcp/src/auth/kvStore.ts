@@ -3,71 +3,52 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { z } from "zod";
-
-import { type Credential, credentialSchema } from "./credential";
+import type { StorageAdapter } from "@formstr/signer";
 
 const SERVICE = "formstr-mcp";
-const KEYRING_ACCOUNT = "store";
+// A fresh keychain account / filename, distinct from the legacy `store` /
+// `credentials.enc` namespace the old Credential keystore used — old data is
+// simply ignored (breaking change; the user runs `formstr-mcp login` again).
+const KEYRING_ACCOUNT = "kv";
 
-const storeSchema = z.object({
-  default: z.string().optional(),
-  accounts: z.record(z.string(), credentialSchema),
-});
-type StoreShape = z.infer<typeof storeSchema>;
-const emptyStore = (): StoreShape => ({ accounts: {} });
+/** The persisted blob: a flat string→string map (the keys `@formstr/signer` writes). */
+type KvMap = Record<string, string>;
 
 /**
- * Credential storage. Prefers the OS keychain (macOS Keychain / Windows Credential
- * Manager / Linux Secret Service via `@napi-rs/keyring`); falls back to an AES-256-GCM
- * encrypted file (`~/.config/formstr-mcp/credentials.enc`, mode 0600) keyed by
- * `FORMSTR_MCP_PASSPHRASE` when no keychain is available (e.g. headless Linux).
+ * Encrypted key/value storage backing `@formstr/signer`. Prefers the OS keychain
+ * (macOS Keychain / Windows Credential Manager / Linux Secret Service via
+ * `@napi-rs/keyring`); falls back to an AES-256-GCM encrypted file
+ * (`~/.config/formstr-mcp/keystore.enc`, mode 0600) keyed by `FORMSTR_MCP_PASSPHRASE`
+ * when no keychain is available (e.g. headless Linux).
  *
  * Override with `FORMSTR_MCP_KEYSTORE=file|keychain` and the directory with
  * `FORMSTR_MCP_CONFIG_DIR`.
+ *
+ * `createKeystoreStorage()` resolves the backend (an async dynamic keyring import),
+ * loads the whole blob once into an in-memory map, and returns a **synchronous**
+ * `StorageAdapter` — the signer hydrates and persists synchronously through it.
  */
-export interface Keystore {
-  /** Get a credential by pubkey, or the default when omitted. */
-  get(pubkey?: string): Promise<Credential | null>;
-  /** Store a credential; becomes the default unless `makeDefault` is false. */
-  set(cred: Credential, makeDefault?: boolean): Promise<void>;
-  remove(pubkey: string): Promise<void>;
-  list(): Promise<string[]>;
+export async function createKeystoreStorage(): Promise<StorageAdapter> {
+  const backend = await selectBackend();
+  const map: KvMap = backend.load();
+  return {
+    get(key) {
+      return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : null;
+    },
+    set(key, value) {
+      map[key] = value;
+      backend.save(map);
+    },
+    remove(key) {
+      delete map[key];
+      backend.save(map);
+    },
+  };
 }
 
 interface Backend {
-  load(): StoreShape;
-  save(s: StoreShape): void;
-}
-
-export function createKeystore(): Keystore {
-  let backendP: Promise<Backend> | null = null;
-  const backend = () => (backendP ??= selectBackend());
-
-  return {
-    async get(pubkey) {
-      const store = (await backend()).load();
-      const key = pubkey ?? store.default;
-      return (key && store.accounts[key]) || null;
-    },
-    async set(cred, makeDefault = true) {
-      const b = await backend();
-      const store = b.load();
-      store.accounts[cred.pubkey] = cred;
-      if (makeDefault || !store.default) store.default = cred.pubkey;
-      b.save(store);
-    },
-    async remove(pubkey) {
-      const b = await backend();
-      const store = b.load();
-      delete store.accounts[pubkey];
-      if (store.default === pubkey) store.default = Object.keys(store.accounts)[0];
-      b.save(store);
-    },
-    async list() {
-      return Object.keys((await backend()).load().accounts);
-    },
-  };
+  load(): KvMap;
+  save(map: KvMap): void;
 }
 
 async function selectBackend(): Promise<Backend> {
@@ -80,6 +61,16 @@ async function selectBackend(): Promise<Backend> {
     }
   }
   return fileBackend();
+}
+
+function parseMap(raw: string | null | undefined): KvMap {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as KvMap) : {};
+  } catch {
+    return {};
+  }
 }
 
 // ── Keychain backend ────────────────────────────────────
@@ -97,14 +88,13 @@ async function keyringBackend(): Promise<Backend | null> {
   return {
     load() {
       try {
-        const raw = entry.getPassword();
-        return raw ? storeSchema.parse(JSON.parse(raw)) : emptyStore();
+        return parseMap(entry.getPassword());
       } catch {
-        return emptyStore(); // not-found or parse error → empty
+        return {}; // not-found or parse error → empty
       }
     },
-    save(store) {
-      entry.setPassword(JSON.stringify(store));
+    save(map) {
+      entry.setPassword(JSON.stringify(map));
     },
   };
 }
@@ -135,7 +125,7 @@ function configDir(): string {
   return process.env.FORMSTR_MCP_CONFIG_DIR ?? join(homedir(), ".config", SERVICE);
 }
 function filePath(): string {
-  return join(configDir(), "credentials.enc");
+  return join(configDir(), "keystore.enc");
 }
 
 const NO_PASSPHRASE =
@@ -149,18 +139,18 @@ function fileBackend(): Backend {
     // an existing file or to save.
     load() {
       const path = filePath();
-      if (!existsSync(path)) return emptyStore();
+      if (!existsSync(path)) return {};
       const passphrase = process.env.FORMSTR_MCP_PASSPHRASE;
       if (!passphrase) {
-        throw new Error("Encrypted credentials file exists but FORMSTR_MCP_PASSPHRASE is not set.");
+        throw new Error("Encrypted keystore file exists but FORMSTR_MCP_PASSPHRASE is not set.");
       }
-      return storeSchema.parse(JSON.parse(decryptBlob(readFileSync(path, "utf8"), passphrase)));
+      return parseMap(decryptBlob(readFileSync(path, "utf8"), passphrase));
     },
-    save(store) {
+    save(map) {
       const passphrase = process.env.FORMSTR_MCP_PASSPHRASE;
       if (!passphrase) throw new Error(NO_PASSPHRASE);
       mkdirSync(configDir(), { recursive: true });
-      writeFileSync(filePath(), encryptBlob(JSON.stringify(store), passphrase), { mode: 0o600 });
+      writeFileSync(filePath(), encryptBlob(JSON.stringify(map), passphrase), { mode: 0o600 });
     },
   };
 }
@@ -189,13 +179,13 @@ function decryptBlob(blob: string, passphrase: string): string {
   );
 }
 
-/** Test/diagnostic helper: the resolved credentials-file path. */
-export function credentialsFilePath(): string {
+/** Test/diagnostic helper: the resolved keystore-file path. */
+export function keystoreFilePath(): string {
   return filePath();
 }
 
 /** Test/diagnostic helper: file permission bits (e.g. 0o600), or null if absent. */
-export function credentialsFileMode(): number | null {
+export function keystoreFileMode(): number | null {
   const path = filePath();
   return existsSync(path) ? statSync(path).mode & 0o777 : null;
 }

@@ -1,21 +1,44 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { createSigner } from "@formstr/signer";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 
+import { createKeystoreStorage } from "../src/auth/kvStore";
 import { buildServer } from "../src/server";
 
-const NSEC = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5";
+// The server now boots from the encrypted keystore (no plaintext nsec). Seed a
+// temp keystore with an ncryptsec account and unlock it at boot via the passphrase
+// envs — the same headless path operators use.
+const NCRYPTSEC_PASS = "ncryptsec-boot-pass";
+const bootEnv: Record<string, string> = {
+  FORMSTR_MCP_KEYSTORE: "file",
+  FORMSTR_MCP_CONFIG_DIR: mkdtempSync(join(tmpdir(), "fmcp-smoke-")),
+  FORMSTR_MCP_PASSPHRASE: "file-backend-pass",
+  FORMSTR_MCP_NCRYPTSEC_PASSPHRASE: NCRYPTSEC_PASS,
+};
 
-// process.env has string|undefined values; StdioClientTransport requires Record<string,string>
-const safeEnv: Record<string, string> = Object.fromEntries(
-  Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-);
+beforeAll(async () => {
+  Object.assign(process.env, bootEnv);
+  const signer = createSigner({ storage: await createKeystoreStorage(), appName: "smoke-test" });
+  await signer.createAccount(NCRYPTSEC_PASS);
+});
+
+function spawnEnv(): Record<string, string> {
+  const base = Object.fromEntries(
+    Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
+  );
+  return { ...base, ...bootEnv };
+}
 
 async function toolNames(args: string[]): Promise<Set<string>> {
   const transport = new StdioClientTransport({
     command: "node",
     args: ["dist/index.js", ...args],
-    env: { ...safeEnv, FORMSTR_NSEC: NSEC },
+    env: spawnEnv(),
   });
   const client = new Client({ name: "test", version: "0.0.1" });
   await client.connect(transport);
