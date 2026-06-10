@@ -143,13 +143,26 @@ export async function encryptFileWithKey(
   fileBytes: Uint8Array,
 ): Promise<{ ciphertext: string; privateKeyHex: string }> {
   const secretKey = generateSecretKey();
+  const privateKeyHex = bytesToHex(secretKey);
+  const ciphertext = await encryptFileWithExistingKey(fileBytes, privateKeyHex);
+  return { ciphertext, privateKeyHex };
+}
+
+/**
+ * Encrypt file bytes under an EXISTING per-file secret key (hex) — used by the
+ * standalone Drive to encrypt a file's preview thumbnail with the same key as
+ * the file itself (`crypto.ts: encryptFileWithExistingKey`).
+ */
+export async function encryptFileWithExistingKey(
+  fileBytes: Uint8Array,
+  privateKeyHex: string,
+): Promise<string> {
+  const secretKey = hexToBytes(privateKeyHex);
   const pubkey = getPublicKey(secretKey);
   const conversationKey = nip44.v2.utils.getConversationKey(secretKey, pubkey);
 
   const plaintextBase64 = uint8ArrayToBase64(fileBytes);
-  const ciphertext = await aesGcmEncrypt(plaintextBase64, conversationKey);
-
-  return { ciphertext, privateKeyHex: bytesToHex(secretKey) };
+  return aesGcmEncrypt(plaintextBase64, conversationKey);
 }
 
 /** Decrypt a file blob using the stored per-file secret key (hex). */

@@ -1,7 +1,13 @@
 import { generateSecretKey, getPublicKey, nip44 } from "nostr-tools";
 import { describe, expect, it } from "vitest";
 
-import { aesGcmDecrypt, aesGcmEncrypt, decryptFileWithKey, encryptFileWithKey } from "./aesGcm";
+import {
+  aesGcmDecrypt,
+  aesGcmEncrypt,
+  decryptFileWithKey,
+  encryptFileWithExistingKey,
+  encryptFileWithKey,
+} from "./aesGcm";
 import { hexToBytes } from "./hex";
 
 function base64ToBytes(b64: string): Uint8Array {
@@ -43,6 +49,13 @@ describe("file crypto (standalone formstr-drive parity)", () => {
     const recovered = base64ToBytes(plaintextBase64);
 
     expect(new TextDecoder().decode(recovered)).toBe("hello drive interop");
+  });
+
+  it("encryptFileWithExistingKey reuses the file's key (preview thumbnails)", async () => {
+    const { privateKeyHex } = await encryptFileWithKey(new Uint8Array([1, 2, 3]));
+    const preview = new Uint8Array([7, 8, 9, 10]);
+    const ciphertext = await encryptFileWithExistingKey(preview, privateKeyHex);
+    expect(Array.from(await decryptFileWithKey(ciphertext, privateKeyHex))).toEqual([7, 8, 9, 10]);
   });
 
   it("decryptFileWithKey with the wrong key throws", async () => {

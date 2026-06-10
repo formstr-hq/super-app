@@ -3,6 +3,8 @@ import { DEFAULT_BLOSSOM_SERVERS } from "@formstr/agent/services/drive";
 import * as driveService from "@formstr/agent/services/drive/service";
 import { create } from "zustand";
 
+import { generateImagePreview } from "../lib/imagePreview";
+
 const LS_SERVER = "formstr:drive-server";
 const LS_CUSTOM_SERVERS = "formstr:drive-custom-servers";
 const LS_CUSTOM_FOLDERS = "formstr:drive-custom-folders";
@@ -84,8 +86,11 @@ export const useDriveStore = create<DriveStore>((set, get) => ({
   async uploadFile(params) {
     set({ isUploading: true, error: null });
     try {
+      // Preview thumbnails are best-effort (upstream formstr-drive renders them).
+      const preview = params.preview ?? (await generateImagePreview(params.file)) ?? undefined;
       const metadata = await driveService.uploadFile({
         ...params,
+        preview,
         blossomServer: params.blossomServer ?? get().selectedServer,
       });
       set((state) => ({ files: [...state.files, metadata], isUploading: false }));

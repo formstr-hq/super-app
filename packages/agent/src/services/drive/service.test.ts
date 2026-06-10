@@ -23,6 +23,7 @@ vi.mock("@formstr/core", () => ({
   encryptFileWithKey: vi.fn(() =>
     Promise.resolve({ ciphertext: "CIPHERTEXT", privateKeyHex: "deadbeef" }),
   ),
+  encryptFileWithExistingKey: vi.fn(() => Promise.resolve("PREVIEW-CIPHERTEXT")),
   decryptFileWithKey: vi.fn(() => Promise.resolve(new Uint8Array([1, 2, 3]))),
 }));
 
@@ -139,6 +140,68 @@ describe("uploadFile", () => {
     const [, event] = (nostrRuntime.publish as any).mock.calls[0];
     expect(event.kind).toBe(34578);
     expect(event.tags).toContainEqual(["d", "serverhash"]);
+    // upstream contract: the algorithm field is always written
+    expect(JSON.parse(event.content).encryptionAlgorithm).toBe("aes-gcm");
+  });
+
+  it("encrypts a preview with the SAME per-file key and records previewHash", async () => {
+    const uploadMock = vi
+      .fn()
+      .mockResolvedValueOnce({ sha256: "filehash", url: "u", size: 3 })
+      .mockResolvedValueOnce({ sha256: "previewhash", url: "u", size: 1 });
+    (BlossomClient as any).mockImplementation(() => ({ upload: uploadMock }));
+
+    const bytes = new Uint8Array([1, 2, 3]);
+    const file = {
+      name: "pic.png",
+      type: "image/png",
+      size: bytes.byteLength,
+      arrayBuffer: () => Promise.resolve(bytes.buffer),
+    } as unknown as File;
+    const preview = new Uint8Array([9, 9]);
+    const result = await uploadFile({ file, blossomServer: "https://srv", preview });
+
+    const { encryptFileWithExistingKey } = await import("@formstr/core");
+    expect(encryptFileWithExistingKey).toHaveBeenCalledWith(preview, "deadbeef");
+    expect(uploadMock).toHaveBeenCalledTimes(2);
+    expect(result.previewHash).toBe("previewhash");
+    const [, event] = (nostrRuntime.publish as any).mock.calls[0];
+    expect(JSON.parse(event.content).previewHash).toBe("previewhash");
+  });
+
+  it("a failed preview upload does not fail the file upload", async () => {
+    const uploadMock = vi
+      .fn()
+      .mockResolvedValueOnce({ sha256: "filehash", url: "u", size: 3 })
+      .mockRejectedValueOnce(new Error("preview server down"));
+    (BlossomClient as any).mockImplementation(() => ({ upload: uploadMock }));
+
+    const bytes = new Uint8Array([1]);
+    const file = {
+      name: "pic.png",
+      type: "image/png",
+      size: 1,
+      arrayBuffer: () => Promise.resolve(bytes.buffer),
+    } as unknown as File;
+    const result = await uploadFile({
+      file,
+      blossomServer: "https://srv",
+      preview: new Uint8Array([9]),
+    });
+    expect(result.hash).toBe("filehash");
+    expect(result.previewHash).toBeUndefined();
+  });
+});
+
+describe("saveFileMetadata — algorithm backfill", () => {
+  it("renameFile preserves previewHash and backfills encryptionAlgorithm on legacy entries", async () => {
+    const { renameFile: rename } = await import("./service");
+    await rename(meta({ hash: "h1", previewHash: "ph" }), "new-name.txt");
+    const [, event] = (nostrRuntime.publish as any).mock.calls[0];
+    const written = JSON.parse(event.content);
+    expect(written.name).toBe("new-name.txt");
+    expect(written.previewHash).toBe("ph");
+    expect(written.encryptionAlgorithm).toBe("aes-gcm");
   });
 });
 
