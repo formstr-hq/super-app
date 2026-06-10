@@ -313,11 +313,12 @@ function buildCalendarTools(): ToolEntry[] {
     "rsvp_event",
     {
       description:
-        "RSVP to a calendar event on your identity. Optionally suggest a new time (suggestedStart/suggestedEnd, unix seconds) and add a note (comment). Requires confirm:true.",
+        "RSVP to a calendar event on your identity. Optionally suggest a new time (suggestedStart/suggestedEnd, unix seconds) and add a note (comment). For private events pass the event's viewKey (nsec) if known — otherwise it is looked up from your calendar lists. Requires confirm:true.",
       inputSchema: {
         eventCoordinate: z.string(),
         status: z.enum(["accepted", "declined", "tentative"]),
         isPrivate: z.boolean().optional(),
+        viewKey: z.string().optional(),
         suggestedStart: z.number().optional(),
         suggestedEnd: z.number().optional(),
         comment: z.string().optional(),
@@ -328,6 +329,7 @@ function buildCalendarTools(): ToolEntry[] {
       eventCoordinate,
       status,
       isPrivate,
+      viewKey,
       suggestedStart,
       suggestedEnd,
       comment,
@@ -335,17 +337,17 @@ function buildCalendarTools(): ToolEntry[] {
     }) => {
       const blocked = requireConfirm("rsvp_event", { confirm }, `sends "${status}" RSVP`);
       if (blocked) return blocked;
+      // Private RSVPs need the event viewKey to take the standalone-compatible
+      // kind-32069 path — calendar.formstr.app never reads the gift-wrap
+      // fallback. The user's calendar lists carry it in their eventRefs.
+      let key = viewKey;
+      if (isPrivate && !key) {
+        key = await calendar.lookupEventViewKey(eventCoordinate);
+      }
       const hasExtra =
         suggestedStart !== undefined || suggestedEnd !== undefined || comment !== undefined;
-      if (hasExtra) {
-        await calendarRsvp.rsvpToEvent(eventCoordinate, status, Boolean(isPrivate), {
-          suggestedStart,
-          suggestedEnd,
-          comment,
-        });
-      } else {
-        await calendarRsvp.rsvpToEvent(eventCoordinate, status, Boolean(isPrivate));
-      }
+      const extra = hasExtra ? { suggestedStart, suggestedEnd, comment } : undefined;
+      await calendarRsvp.rsvpToEvent(eventCoordinate, status, Boolean(isPrivate), extra, key);
       return ok(`RSVP "${status}" sent.`);
     },
   );
@@ -387,6 +389,9 @@ function buildCalendarTools(): ToolEntry[] {
         rrule: args.rrule ?? existing.repeat.rrule ?? undefined,
         startTzid: args.startTzid ?? existing.startTzid,
         registrationFormRef: existing.registrationFormRef,
+        registrationFormViewKey: existing.registrationFormViewKey,
+        notificationPreference: existing.notificationPreference,
+        viewKey: existing.viewKey,
         existingId: existing.id,
       };
       const event = existing.isPrivate
@@ -430,6 +435,8 @@ function buildCalendarTools(): ToolEntry[] {
         rrule: existing.repeat.rrule ?? undefined,
         startTzid: existing.startTzid,
         registrationFormRef: formRef,
+        notificationPreference: existing.notificationPreference,
+        viewKey: existing.viewKey,
         existingId: existing.id,
       };
       const event = existing.isPrivate

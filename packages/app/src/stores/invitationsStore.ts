@@ -2,9 +2,14 @@ import {
   extractInvitationFromWrap,
   type InvitationRumor,
 } from "@formstr/agent/services/calendar/rsvp";
-import { fetchCalendarEventByCoordinate } from "@formstr/agent/services/calendar/service";
+import {
+  fetchCalendarEventByCoordinate,
+  fetchParticipantRemovals,
+  getInvitationInboxRelays,
+  publishParticipantRemovalEvent,
+} from "@formstr/agent/services/calendar/service";
 import { CALENDAR_KINDS, type CalendarEvent } from "@formstr/agent/services/calendar/types";
-import { signerManager, nostrRuntime, relayManager, type SubscriptionHandle } from "@formstr/core";
+import { signerManager, nostrRuntime, type SubscriptionHandle } from "@formstr/core";
 import type { Filter } from "nostr-tools";
 import { create } from "zustand";
 
@@ -37,13 +42,19 @@ export const useInvitationsStore = create<InvitationsStore>((set, get) => ({
     try {
       const signer = await signerManager.getSigner();
       const pubkey = await signer.getPublicKey();
-      const relays = relayManager.getRelaysForModule("calendar");
+      // Module relays ∪ the user's NIP-65 read relays: upstream delivers each
+      // wrap to the recipient's own relay list, not to our module set.
+      const relays = await getInvitationInboxRelays(pubkey);
+      // The user's own kind-84 opt-outs — dismissed invitations stay gone
+      // across sessions (the relays keep serving the wraps).
+      const removals = await fetchParticipantRemovals(pubkey, relays);
       const filters: Filter[] = [
         { kinds: [CALENDAR_KINDS.giftWrap, CALENDAR_KINDS.rsvpGiftWrap], "#p": [pubkey] },
       ];
       const handle = nostrRuntime.subscribe(relays, filters, {
         onEvent: (wrap) => {
           void (async () => {
+            if (removals.ids.has(wrap.id)) return;
             const invitation = await extractInvitationFromWrap(wrap);
             if (!invitation) return;
             const event = await fetchCalendarEventByCoordinate(invitation.eventCoordinate);
@@ -79,6 +90,15 @@ export const useInvitationsStore = create<InvitationsStore>((set, get) => ({
   },
 
   dismiss(wrapId) {
+    // Persist the opt-out as a kind-84 participant removal e-tagging the wrap,
+    // exactly as upstream does on dismiss — otherwise the invitation
+    // resurfaces every session and calendar.formstr.app never learns of it.
+    void publishParticipantRemovalEvent({
+      kinds: [CALENDAR_KINDS.giftWrap],
+      eventIds: [wrapId],
+    }).catch(() => {
+      // Best-effort: the local dismissal still applies this session.
+    });
     set((state) => ({ invitations: state.invitations.filter((i) => i.wrapId !== wrapId) }));
   },
 

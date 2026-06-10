@@ -129,6 +129,15 @@ export function EventDialog({
         participants: participants.length ? participants : undefined,
         rrule: buildRRuleString(rruleParts),
         registrationFormRef: formRef || undefined,
+        // Preserve fields the dialog doesn't edit so an edit round-trip keeps
+        // them on the wire (form viewKey, reminder pref, the event's own
+        // viewKey so prior invitees keep decryption access).
+        registrationFormViewKey:
+          formRef && formRef === event?.registrationFormRef
+            ? event?.registrationFormViewKey
+            : undefined,
+        notificationPreference: event?.notificationPreference,
+        viewKey: event?.viewKey,
         existingId: event?.id,
       });
       onClose();

@@ -103,17 +103,21 @@ export async function publishPrivateCalendarEvent(
   // REPLACES the event's tags with this decrypted array, then reads the event
   // id from the "d" row. Without it every super-app private event collapses
   // under id "" in calendar.formstr.app and only one survives.
-  const eventData: string[][] = [
+  // start/end are JSON numbers (unix seconds), exactly as upstream writes them.
+  const eventData: (string | number)[][] = [
     ["title", draft.title],
     ["description", draft.description],
-    ["start", String(Math.floor(draft.begin.getTime() / 1000))],
-    ["end", String(Math.floor(draft.end.getTime() / 1000))],
+    ["start", Math.floor(draft.begin.getTime() / 1000)],
+    ["end", Math.floor(draft.end.getTime() / 1000)],
     ["d", eventId],
   ];
 
   if (draft.image) eventData.push(["image", draft.image]);
   if (draft.location) eventData.push(["location", draft.location]);
   for (const cat of draft.categories ?? []) eventData.push(["t", cat]);
+  // Upstream always writes the creator's own ["p"] row first (organizer
+  // display + RSVP-authorization context), then the invited participants.
+  eventData.push(["p", pubkey]);
   for (const p of draft.participants ?? []) eventData.push(["p", p]);
 
   if (draft.startTzid) eventData.push(["start_tzid", draft.startTzid]);
@@ -123,7 +127,16 @@ export async function publishPrivateCalendarEvent(
     eventData.push(["L", "rrule"]);
     eventData.push(["l", draft.rrule]);
   }
-  if (draft.registrationFormRef) eventData.push(["form", draft.registrationFormRef]);
+  if (draft.notificationPreference) eventData.push(["notification", draft.notificationPreference]);
+  if (draft.registrationFormRef) {
+    // Optional 3rd element = the form's read-only viewKey (never the signing/
+    // response key), letting invitees open an encrypted registration form.
+    eventData.push(
+      draft.registrationFormViewKey
+        ? ["form", draft.registrationFormRef, draft.registrationFormViewKey]
+        : ["form", draft.registrationFormRef],
+    );
+  }
 
   // Encrypt the content with a per-event viewKey (shareable with invitees),
   // matching the standalone. On edit we re-use the supplied key so existing
@@ -148,7 +161,11 @@ export async function publishPrivateCalendarEvent(
   // Send NIP-59 invitations: a gift-wrapped rumor carrying the addressable
   // coordinate (+ relay hint) and the viewKey nsec, exactly as the standalone
   // expects (see upstream getDetailsFromGiftWrap). Empty content; data is in tags.
+  // Each wrap is published to the PARTICIPANT's NIP-65 relay list (upstream
+  // fetchRelayLists), not our own module relays — otherwise recipients whose
+  // relay sets don't overlap ours never see the invitation.
   if (draft.participants?.length) {
+    const relayLists = await fetchRelayListsForPubkeys(draft.participants);
     for (const participant of draft.participants) {
       const wrap = await wrapEvent(
         {
@@ -163,7 +180,7 @@ export async function publishPrivateCalendarEvent(
         participant,
         CALENDAR_KINDS.giftWrap,
       );
-      await nostrRuntime.publish(relays, wrap);
+      await nostrRuntime.publish(relayLists.get(participant) ?? relays, wrap);
     }
   }
 
@@ -190,8 +207,54 @@ export async function publishPrivateCalendarEvent(
     startTzid: draft.startTzid,
     endTzid: draft.endTzid,
     registrationFormRef: draft.registrationFormRef,
+    registrationFormViewKey: draft.registrationFormViewKey,
+    notificationPreference: draft.notificationPreference,
     event: signed,
   };
+}
+
+// ── Relay discovery (NIP-65) ────────────────────────────
+
+/**
+ * Batch-fetch the NIP-65 relay lists (kind 10002) for a set of pubkeys,
+ * newest-wins per author. Mirrors upstream `fetchRelayLists`: invitation gift
+ * wraps must land on the RECIPIENT's relays, not the author's. Pubkeys with no
+ * relay list are omitted (callers fall back to the module relays).
+ */
+export async function fetchRelayListsForPubkeys(pubkeys: string[]): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (pubkeys.length === 0) return result;
+
+  const relays = relayManager.getRelaysForModule("calendar");
+  const events = await nostrRuntime.querySync(relays, { kinds: [10002], authors: pubkeys });
+
+  const newest = new Map<string, Event>();
+  for (const event of events) {
+    const prev = newest.get(event.pubkey);
+    if (!prev || event.created_at > prev.created_at) newest.set(event.pubkey, event);
+  }
+  for (const [pubkey, event] of newest) {
+    const urls = event.tags.filter((t) => t[0] === "r" && t[1]).map((t) => t[1]);
+    if (urls.length > 0) result.set(pubkey, urls);
+  }
+  return result;
+}
+
+/**
+ * Relays to read the user's invitation gift wraps from: the calendar module
+ * relays unioned with the user's own NIP-65 READ relays. Upstream delivers
+ * wraps to the recipient's relay list, so reading only module relays misses
+ * invitations sent by calendar.formstr.app users.
+ */
+export async function getInvitationInboxRelays(pubkey: string): Promise<string[]> {
+  const relays = relayManager.getRelaysForModule("calendar");
+  try {
+    const configs = await relayManager.fetchUserRelays(pubkey);
+    const readRelays = configs.filter((c) => c.read).map((c) => c.url);
+    return [...new Set([...relays, ...readRelays])];
+  } catch {
+    return relays;
+  }
 }
 
 // ── Fetch Calendar Events ───────────────────────────────
@@ -692,6 +755,78 @@ export async function deleteCalendarList(coordinate: string): Promise<void> {
   await nostrRuntime.publish(relays, signed);
 }
 
+// ── Participant removal (kind 84) ───────────────────────
+
+/**
+ * Publish a kind-84 participant-removal event: the signed-in user opts out of
+ * an event they were invited to (same tag structure as a NIP-09 deletion).
+ * Upstream publishes this when an invitation is dismissed; its EventStore (and
+ * ours) then suppresses the referenced wraps/coordinates, so the dismissal
+ * sticks across sessions and is honored by calendar.formstr.app too.
+ */
+export async function publishParticipantRemovalEvent({
+  kinds,
+  eventIds = [],
+  coordinates = [],
+  reason = "",
+}: {
+  kinds: number[];
+  eventIds?: string[];
+  coordinates?: string[];
+  reason?: string;
+}): Promise<void> {
+  const signer = await signerManager.getSigner();
+
+  const tags: string[][] = [];
+  for (const id of eventIds) tags.push(["e", id]);
+  for (const coord of coordinates) tags.push(["a", coord]);
+  for (const kind of kinds) tags.push(["k", String(kind)]);
+
+  const event: EventTemplate = {
+    kind: CALENDAR_KINDS.participantRemoval,
+    created_at: Math.floor(Date.now() / 1000),
+    tags,
+    content: reason,
+  };
+
+  const signed = await signer.signEvent(event);
+  const relays = relayManager.getRelaysForModule("calendar");
+  await nostrRuntime.publish(relays, signed);
+}
+
+/** Ids/coordinates the user opted out of via their own kind-84 events. */
+export interface ParticipantRemovalIndex {
+  ids: Set<string>;
+  coordinates: Set<string>;
+}
+
+/**
+ * Fetch the user's own kind-84 participant removals and index their `e`/`a`
+ * targets. Applied at invitation-load time so dismissed invitations stay gone
+ * (the relays keep serving the wraps; without this they resurface every
+ * session). Also feeds the core EventStore via querySync, which suppresses
+ * subsequently received wraps matching the removals.
+ */
+export async function fetchParticipantRemovals(
+  pubkey: string,
+  relays = relayManager.getRelaysForModule("calendar"),
+): Promise<ParticipantRemovalIndex> {
+  const ids = new Set<string>();
+  const coordinates = new Set<string>();
+
+  const events = await nostrRuntime.querySync(relays, {
+    kinds: [CALENDAR_KINDS.participantRemoval],
+    authors: [pubkey],
+  });
+  for (const ev of events) {
+    for (const tag of ev.tags) {
+      if (tag[0] === "e" && tag[1]) ids.add(tag[1]);
+      else if (tag[0] === "a" && tag[1]) coordinates.add(tag[1]);
+    }
+  }
+  return { ids, coordinates };
+}
+
 // ── Helpers ─────────────────────────────────────────────
 
 export async function parseCalendarEvent(
@@ -746,7 +881,12 @@ export async function parseCalendarEvent(
     null;
   const startTzid = tags.find((t) => t[0] === "start_tzid")?.[1];
   const endTzid = tags.find((t) => t[0] === "end_tzid")?.[1];
-  const registrationFormRef = tags.find((t) => t[0] === "form")?.[1];
+  // Upstream ["form", naddr, viewKey?]: the optional 3rd element is the form's
+  // read-only viewKey, letting invitees open an encrypted registration form.
+  const formTag = tags.find((t) => t[0] === "form");
+  const registrationFormRef = formTag?.[1];
+  const registrationFormViewKey = formTag?.[2];
+  const notificationPreference = tags.find((t) => t[0] === "notification")?.[1];
 
   return {
     id: dTag,
@@ -769,6 +909,8 @@ export async function parseCalendarEvent(
     startTzid,
     endTzid,
     registrationFormRef,
+    registrationFormViewKey,
+    notificationPreference,
     event,
   };
 }
@@ -785,7 +927,12 @@ export interface InvitationWithEvent extends InvitationRumor {
 export async function fetchInvitationsSync(): Promise<InvitationWithEvent[]> {
   const signer = await signerManager.getSigner();
   const pubkey = await signer.getPublicKey();
-  const relays = relayManager.getRelaysForModule("calendar");
+  // Module relays ∪ the user's NIP-65 read relays — upstream delivers each
+  // wrap to the recipient's own relay list, not to our module set.
+  const relays = await getInvitationInboxRelays(pubkey);
+
+  // Honor the user's own kind-84 opt-outs so dismissed invitations stay gone.
+  const removals = await fetchParticipantRemovals(pubkey, relays);
 
   const wraps = await nostrRuntime.querySync(relays, {
     kinds: [CALENDAR_KINDS.giftWrap, CALENDAR_KINDS.rsvpGiftWrap],
@@ -795,7 +942,7 @@ export async function fetchInvitationsSync(): Promise<InvitationWithEvent[]> {
   const seen = new Set<string>();
   const out: InvitationWithEvent[] = [];
   for (const wrap of wraps) {
-    if (seen.has(wrap.id)) continue;
+    if (seen.has(wrap.id) || removals.ids.has(wrap.id)) continue;
     seen.add(wrap.id);
     const invitation = await extractInvitationFromWrap(wrap);
     if (!invitation) continue;
@@ -806,4 +953,21 @@ export async function fetchInvitationsSync(): Promise<InvitationWithEvent[]> {
     out.push({ ...invitation, event: event ?? undefined });
   }
   return out;
+}
+
+/**
+ * Find the viewKey for a private event from the user's own calendar lists
+ * (each eventRef is `[coordinate, relayHint, viewKey]`). Used by callers that
+ * have only a coordinate in hand — e.g. the MCP `rsvp_event` tool — so private
+ * RSVPs can take the standalone-compatible kind-32069 path instead of the
+ * gift-wrap fallback upstream never reads.
+ */
+export async function lookupEventViewKey(eventCoordinate: string): Promise<string | undefined> {
+  const lists = await fetchCalendarLists();
+  for (const list of lists) {
+    for (const ref of list.eventRefs) {
+      if (ref[0] === eventCoordinate && ref[2]) return ref[2];
+    }
+  }
+  return undefined;
 }

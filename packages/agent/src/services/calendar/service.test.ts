@@ -1,6 +1,7 @@
 import {
   signerManager,
   nostrRuntime,
+  relayManager,
   nip44SelfDecrypt,
   nip44SelfEncrypt,
   wrapEvent,
@@ -12,7 +13,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@formstr/core", () => ({
   signerManager: { getSigner: vi.fn() },
   nostrRuntime: { publish: vi.fn(), fetchOne: vi.fn(), querySync: vi.fn(), subscribe: vi.fn() },
-  relayManager: { getRelaysForModule: vi.fn(() => ["wss://relay.test"]) },
+  relayManager: {
+    getRelaysForModule: vi.fn(() => ["wss://relay.test"]),
+    fetchUserRelays: vi.fn(),
+  },
   nip44SelfEncrypt: vi.fn(),
   nip44SelfDecrypt: vi.fn(),
   wrapEvent: vi.fn(),
@@ -41,8 +45,12 @@ import {
   deleteCalendarList,
   fetchCalendarLists,
   fetchInvitationsSync,
+  fetchParticipantRemovals,
+  getInvitationInboxRelays,
+  lookupEventViewKey,
   moveEventBetweenCalendarLists,
   parseCalendarEvent,
+  publishParticipantRemovalEvent,
   publishPrivateCalendarEvent,
   publishPublicCalendarEvent,
   removeEventFromCalendarList,
@@ -65,6 +73,7 @@ beforeEach(() => {
   (signerManager.getSigner as any).mockResolvedValue(mockSigner);
   (nostrRuntime.publish as any).mockResolvedValue(undefined);
   (nostrRuntime.querySync as any).mockResolvedValue([]);
+  (relayManager.fetchUserRelays as any).mockResolvedValue([]);
   (nip44SelfEncrypt as any).mockResolvedValue("enc");
   (nip44SelfDecrypt as any).mockResolvedValue("{}");
 });
@@ -618,6 +627,8 @@ describe("deletion filtering — deletes survive a refresh", () => {
 describe("fetchInvitationsSync", () => {
   it("unwraps gift-wraps, resolves the referenced event, and dedupes by wrapId", async () => {
     (nostrRuntime.querySync as any)
+      // First query = the user's own kind-84 participant removals (none here).
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {
           id: "w1",
@@ -870,5 +881,289 @@ describe("event↔calendar membership", () => {
 
     expect(result).toBeNull();
     expect(nostrRuntime.publish).not.toHaveBeenCalled();
+  });
+});
+
+// ── Fix 5: upstream private-event payload parity ────────────────────────────
+
+describe("publishPrivateCalendarEvent — upstream payload parity", () => {
+  const draft = (extra: Record<string, unknown> = {}) => ({
+    title: "Secret",
+    description: "",
+    begin: new Date(1700000000000),
+    end: new Date(1700003600000),
+    isPrivate: true,
+    ...extra,
+  });
+
+  const encryptedRows = () =>
+    JSON.parse((nip44SelfEncrypt as any).mock.calls[0][1]) as (string | number)[][];
+
+  it("writes start/end as JSON numbers (unix seconds), matching upstream", async () => {
+    await publishPrivateCalendarEvent(draft() as any, "default");
+    const rows = encryptedRows();
+    // Upstream's preparePrivateCalendarEvent writes numbers, not strings.
+    expect(rows).toContainEqual(["start", 1700000000]);
+    expect(rows).toContainEqual(["end", 1700003600]);
+  });
+
+  it("writes the author ['p'] row before participant p rows", async () => {
+    (wrapEvent as any).mockResolvedValue({ id: "wrap", kind: CALENDAR_KINDS.giftWrap });
+    await publishPrivateCalendarEvent(draft({ participants: ["pubA", "pubB"] }) as any, "default");
+    const pRows = encryptedRows().filter((r) => r[0] === "p");
+    // Upstream always writes the creator's own p row first (organizer display
+    // + RSVP-authorization context), then the participants.
+    expect(pRows.map((r) => r[1])).toEqual(["aabbccdd", "pubA", "pubB"]);
+  });
+
+  it("writes ['form', naddr, viewKey] when a form viewKey is supplied", async () => {
+    await publishPrivateCalendarEvent(
+      draft({ registrationFormRef: "naddr1xyz", registrationFormViewKey: "fvk" }) as any,
+      "default",
+    );
+    expect(encryptedRows()).toContainEqual(["form", "naddr1xyz", "fvk"]);
+  });
+
+  it("writes a ['notification', pref] row when notificationPreference is set", async () => {
+    await publishPrivateCalendarEvent(draft({ notificationPreference: "1h" }) as any, "default");
+    expect(encryptedRows()).toContainEqual(["notification", "1h"]);
+  });
+});
+
+describe("parseCalendarEvent — upstream private payload tolerance", () => {
+  const privateEvt = {
+    id: "e",
+    pubkey: "author",
+    kind: CALENDAR_KINDS.privateEvent,
+    created_at: 1,
+    sig: "s",
+    content: "cipher",
+    tags: [["d", "d1"]],
+  };
+
+  it("reads numeric start/end rows, the form viewKey and the notification row", async () => {
+    (decryptWithViewKey as any).mockResolvedValue(
+      JSON.stringify([
+        ["title", "Upstream Private"],
+        ["start", 1700000000],
+        ["end", 1700003600],
+        ["form", "naddr1abc", "formviewkey"],
+        ["notification", "30m"],
+        ["d", "d1"],
+      ]),
+    );
+    const parsed = await parseCalendarEvent(privateEvt as any, "nsec1k");
+    expect(parsed?.begin).toBe(1700000000000);
+    expect(parsed?.end).toBe(1700003600000);
+    expect(parsed?.registrationFormRef).toBe("naddr1abc");
+    expect(parsed?.registrationFormViewKey).toBe("formviewkey");
+    expect(parsed?.notificationPreference).toBe("30m");
+  });
+});
+
+// ── Fix 5: invitation gift wraps target the participant's NIP-65 relays ────
+
+describe("publishPrivateCalendarEvent — NIP-65 invitation relay targeting", () => {
+  it("publishes each wrap to the participant's relay list, falling back to module relays", async () => {
+    (wrapEvent as any).mockImplementation((_r: any, _s: any, recipient: string) =>
+      Promise.resolve({ id: `wrap-${recipient}`, kind: CALENDAR_KINDS.giftWrap }),
+    );
+    // pubA published a kind-10002 relay list; pubB did not.
+    (nostrRuntime.querySync as any).mockImplementation((_relays: string[], filter: any) => {
+      if (filter.kinds?.includes(10002)) {
+        return Promise.resolve([
+          {
+            id: "rl",
+            pubkey: "pubA",
+            kind: 10002,
+            created_at: 10,
+            sig: "s",
+            content: "",
+            tags: [
+              ["r", "wss://a.inbox"],
+              ["r", "wss://a2.inbox", "read"],
+            ],
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    await publishPrivateCalendarEvent(
+      {
+        title: "Secret",
+        description: "",
+        begin: new Date(1700000000000),
+        end: new Date(1700003600000),
+        participants: ["pubA", "pubB"],
+        isPrivate: true,
+      },
+      "default",
+    );
+
+    const calls = (nostrRuntime.publish as any).mock.calls;
+    const wrapA = calls.find((c: any[]) => c[1]?.id === "wrap-pubA");
+    const wrapB = calls.find((c: any[]) => c[1]?.id === "wrap-pubB");
+    expect(wrapA[0]).toEqual(["wss://a.inbox", "wss://a2.inbox"]);
+    expect(wrapB[0]).toEqual(["wss://relay.test"]);
+  });
+});
+
+describe("getInvitationInboxRelays", () => {
+  it("unions module relays with the user's NIP-65 read relays", async () => {
+    (relayManager.fetchUserRelays as any).mockResolvedValue([
+      { url: "wss://me.inbox", read: true, write: true },
+      { url: "wss://me.outbox", read: false, write: true },
+    ]);
+    const relays = await getInvitationInboxRelays("aabbccdd");
+    expect(relays).toContain("wss://relay.test");
+    expect(relays).toContain("wss://me.inbox");
+    expect(relays).not.toContain("wss://me.outbox");
+  });
+
+  it("falls back to module relays when the relay-list lookup fails", async () => {
+    (relayManager.fetchUserRelays as any).mockRejectedValue(new Error("offline"));
+    const relays = await getInvitationInboxRelays("aabbccdd");
+    expect(relays).toEqual(["wss://relay.test"]);
+  });
+});
+
+// ── Fix 5: kind-84 participant removal ──────────────────────────────────────
+
+describe("publishParticipantRemovalEvent", () => {
+  it("publishes a kind-84 event with e/a/k tags, mirroring upstream", async () => {
+    await publishParticipantRemovalEvent({
+      kinds: [CALENDAR_KINDS.giftWrap],
+      eventIds: ["wrapid1"],
+      coordinates: ["32678:author:d1"],
+      reason: "dismissed",
+    });
+    const [relays, evt] = (nostrRuntime.publish as any).mock.calls[0];
+    expect(relays).toEqual(["wss://relay.test"]);
+    expect(evt.kind).toBe(84);
+    expect(evt.content).toBe("dismissed");
+    expect(evt.tags).toContainEqual(["e", "wrapid1"]);
+    expect(evt.tags).toContainEqual(["a", "32678:author:d1"]);
+    expect(evt.tags).toContainEqual(["k", "1052"]);
+  });
+});
+
+describe("fetchParticipantRemovals", () => {
+  it("collects ignored event ids and coordinates from the user's own kind-84s", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "r1",
+        pubkey: "aabbccdd",
+        kind: 84,
+        created_at: 1,
+        sig: "s",
+        content: "",
+        tags: [
+          ["e", "wrapid1"],
+          ["a", "32678:author:d1"],
+          ["k", "1052"],
+        ],
+      },
+    ]);
+    const removals = await fetchParticipantRemovals("aabbccdd");
+    expect(removals.ids.has("wrapid1")).toBe(true);
+    expect(removals.coordinates.has("32678:author:d1")).toBe(true);
+    const filter = (nostrRuntime.querySync as any).mock.calls[0][1];
+    expect(filter.kinds).toEqual([84]);
+    expect(filter.authors).toEqual(["aabbccdd"]);
+  });
+});
+
+describe("fetchInvitationsSync — dismissed invitations stay gone", () => {
+  it("skips wraps whose id was opted out via a kind-84 removal", async () => {
+    (nostrRuntime.querySync as any)
+      // 1) own kind-84 removals e-tagging wrap w1
+      .mockResolvedValueOnce([
+        {
+          id: "r1",
+          pubkey: "aabbccdd",
+          kind: 84,
+          created_at: 1,
+          sig: "s",
+          content: "",
+          tags: [["e", "w1"]],
+        },
+      ])
+      // 2) the gift wraps
+      .mockResolvedValueOnce([
+        {
+          id: "w1",
+          pubkey: "s",
+          kind: CALENDAR_KINDS.giftWrap,
+          created_at: 5,
+          sig: "s",
+          content: "x",
+          tags: [],
+        },
+        {
+          id: "w2",
+          pubkey: "s",
+          kind: CALENDAR_KINDS.giftWrap,
+          created_at: 5,
+          sig: "s",
+          content: "x",
+          tags: [],
+        },
+      ])
+      .mockResolvedValue([]);
+    (unwrapEvent as any).mockResolvedValue({
+      kind: CALENDAR_KINDS.rumor,
+      pubkey: "author",
+      content: "",
+      tags: [["a", "32678:author:abc12345"]],
+    });
+
+    const invites = await fetchInvitationsSync();
+    expect(invites).toHaveLength(1);
+    expect(invites[0].wrapId).toBe("w2");
+  });
+
+  it("queries the wraps on the NIP-65 inbox relays", async () => {
+    (relayManager.fetchUserRelays as any).mockResolvedValue([
+      { url: "wss://me.inbox", read: true, write: true },
+    ]);
+    (nostrRuntime.querySync as any).mockResolvedValue([]);
+    await fetchInvitationsSync();
+    const wrapCall = (nostrRuntime.querySync as any).mock.calls.find((c: any[]) =>
+      c[1].kinds?.includes(CALENDAR_KINDS.giftWrap),
+    );
+    expect(wrapCall[0]).toContain("wss://me.inbox");
+    expect(wrapCall[0]).toContain("wss://relay.test");
+  });
+});
+
+// ── Fix 5: viewKey auto-discovery for RSVPs (MCP path) ─────────────────────
+
+describe("lookupEventViewKey", () => {
+  it("finds the viewKey for a coordinate from the user's calendar lists", async () => {
+    (nostrRuntime.querySync as any).mockImplementation((_relays: string[], filter: any) => {
+      if (filter.kinds?.includes(CALENDAR_KINDS.calendarList)) {
+        return Promise.resolve([
+          {
+            id: "cl",
+            pubkey: "aabbccdd",
+            kind: CALENDAR_KINDS.calendarList,
+            created_at: 1,
+            sig: "s",
+            content: "enc",
+            tags: [["d", "cal1"]],
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    (nip44SelfDecrypt as any).mockResolvedValue(
+      JSON.stringify([
+        ["title", "Cal"],
+        ["a", "32678:author:d1", "wss://relay.test", "nsec1viewkey"],
+      ]),
+    );
+    await expect(lookupEventViewKey("32678:author:d1")).resolves.toBe("nsec1viewkey");
+    await expect(lookupEventViewKey("32678:author:other")).resolves.toBeUndefined();
   });
 });
