@@ -3,6 +3,7 @@ import { useTheme } from "@mui/material/styles";
 import { Menu as MenuIcon, Moon, Search, Sparkles, Sun } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
+import formstrLogo from "../assets/formstr.png";
 import { AccountMenu } from "../components/AccountMenu";
 import { useAuthStore, useSettingsStore } from "../stores";
 
@@ -61,9 +62,12 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
         </IconButton>
 
         {/* Brand */}
-        <Typography variant="body2" fontWeight={700} noWrap sx={{ letterSpacing: "-0.02em" }}>
-          Formstr
-        </Typography>
+        <Box
+          component="img"
+          src={formstrLogo}
+          alt="Formstr"
+          sx={{ height: 32, display: "block", flexShrink: 0 }}
+        />
 
         {/* Module tabs (desktop) */}
         <Box sx={{ display: { xs: "none", md: "flex" }, alignItems: "center", gap: 0.25, ml: 1 }}>

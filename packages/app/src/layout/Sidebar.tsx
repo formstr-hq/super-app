@@ -8,12 +8,12 @@ import {
   ListItemIcon,
   ListItemText,
   Tooltip,
-  Typography,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { FileText, Calendar, FileEdit, HardDrive, BarChart3, Radio, LogIn } from "lucide-react";
+import { FileText, Calendar, FileEdit, HardDrive, BarChart3, LogIn } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import formstrLogo from "../assets/formstr.png";
 import { AccountMenu } from "../components/AccountMenu";
 import { useAuthStore } from "../stores";
 
@@ -55,41 +55,21 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
         }}
       >
         {!collapsed && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Box
-              sx={{
-                width: 22,
-                height: 22,
-                bgcolor: "text.primary",
-                borderRadius: "5px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Radio size={11} style={{ color: theme.palette.background.default }} />
-            </Box>
-            <Typography variant="body2" fontWeight={600}>
-              Formstr
-            </Typography>
-          </Box>
+          <Box
+            component="img"
+            src={formstrLogo}
+            alt="Formstr"
+            sx={{ height: 20, display: "block" }}
+          />
         )}
 
         {collapsed && (
           <Box
-            sx={{
-              width: 22,
-              height: 22,
-              bgcolor: "text.primary",
-              borderRadius: "5px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Radio size={11} style={{ color: theme.palette.background.default }} />
-          </Box>
+            component="img"
+            src={formstrLogo}
+            alt="Formstr"
+            sx={{ height: 20, display: "block" }}
+          />
         )}
       </Box>
 
