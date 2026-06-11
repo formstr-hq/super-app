@@ -1,16 +1,19 @@
 import type { FormSummary } from "@formstr/agent/services/forms/types";
-import { Box, Card, Divider, IconButton, Tooltip, Typography } from "@mui/material";
-import { BarChart3, Link, Lock, Pencil, Trash2 } from "lucide-react";
+import { Box, Card, Divider, Tooltip, Typography } from "@mui/material";
+import { Lock } from "lucide-react";
+
+import { FormActions } from "./FormActions";
 
 interface Props {
   form: FormSummary;
   onFill: (form: FormSummary) => void;
+  onEdit?: (form: FormSummary) => void;
   onViewResponses: (form: FormSummary) => void;
   onDelete: (form: FormSummary) => void;
   onCopyLink: (form: FormSummary) => void;
 }
 
-export function FormCard({ form, onFill, onViewResponses, onDelete, onCopyLink }: Props) {
+export function FormCard({ form, onFill, onEdit, onViewResponses, onDelete, onCopyLink }: Props) {
   const meta: string[] = [];
   if (form.responseCount !== undefined) {
     meta.push(`${form.responseCount} ${form.responseCount === 1 ? "response" : "responses"}`);
@@ -63,53 +66,17 @@ export function FormCard({ form, onFill, onViewResponses, onDelete, onCopyLink }
       <Divider sx={{ mt: 0.25 }} />
 
       <Box
-        sx={{ display: "flex", alignItems: "center", gap: 0.25, color: "text.secondary" }}
+        sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <Tooltip title="Fill form">
-          <IconButton
-            size="small"
-            aria-label="Fill form"
-            onClick={() => onFill(form)}
-            sx={{ color: "inherit", "&:hover": { color: "text.primary" } }}
-          >
-            <Pencil size={15} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="View responses">
-          <IconButton
-            size="small"
-            aria-label="View responses"
-            onClick={() => onViewResponses(form)}
-            sx={{ color: "inherit", "&:hover": { color: "text.primary" } }}
-          >
-            <BarChart3 size={15} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Copy link">
-          <IconButton
-            size="small"
-            aria-label="Copy link"
-            onClick={() => onCopyLink(form)}
-            sx={{ color: "inherit", "&:hover": { color: "text.primary" } }}
-          >
-            <Link size={15} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Delete">
-          <IconButton
-            size="small"
-            aria-label="Delete"
-            onClick={() => onDelete(form)}
-            sx={{
-              ml: "auto",
-              color: "error.main",
-              "&:hover": { bgcolor: "rgba(220, 38, 38, 0.08)" },
-            }}
-          >
-            <Trash2 size={15} />
-          </IconButton>
-        </Tooltip>
+        <FormActions
+          form={form}
+          onFill={onFill}
+          onEdit={onEdit}
+          onViewResponses={onViewResponses}
+          onDelete={onDelete}
+          onCopyLink={onCopyLink}
+        />
       </Box>
     </Card>
   );

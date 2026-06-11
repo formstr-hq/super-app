@@ -2,37 +2,52 @@
  * nkeys encoding — shared between Forms and Pages.
  * Bech32 + TLV encoding for passing encryption keys via URL hash fragments.
  *
- * TLV Structure:
- *   Type 0: key name (UTF-8 string)
- *   Type 1: key value (hex-encoded 32-byte key)
+ * Wire format (MUST match the standalone apps byte-for-byte — formstr.app and
+ * nostr-docs ship an identical `utils/nkeys.ts`; see
+ * `upstream/nostr-forms/packages/formstr-app/src/utils/nkeys.ts`):
  *
- * Format: nkeys1... (bech32, max 2048 chars)
+ *   TLV row:   [type (1 byte), length (1 byte), value (`length` bytes)]
+ *   Type 0:    key name  (UTF-8 string)
+ *   Type 1:    key value (UTF-8 string, e.g. hex-encoded 32-byte key)
+ *   Layout:    ALL type-0 rows first, then ALL type-1 rows; decode pairs
+ *              names[i] ↔ values[i] by index.
+ *
+ * Format: nkeys1... (bech32, max 2048 chars — same limit as naddr)
  * Design: URL hash fragments (#nkeys1...) never sent to server — keys stay client-only.
  */
 
 const PREFIX = "nkeys";
+const BECH32_LIMIT = 2048;
 
 export function encodeNKeys(keys: Record<string, string>): string {
-  const tlvBytes: number[] = [];
+  const encoder = new TextEncoder();
+  const names: Uint8Array[] = [];
+  const values: Uint8Array[] = [];
 
   for (const [name, value] of Object.entries(keys)) {
-    // Type 0: key name
-    const nameBytes = new TextEncoder().encode(name);
-    tlvBytes.push(0); // type
-    tlvBytes.push(nameBytes.length >> 8, nameBytes.length & 0xff); // length (2 bytes)
-    tlvBytes.push(...nameBytes);
-
-    // Type 1: key value (hex string as bytes)
-    const valueBytes = new TextEncoder().encode(value);
-    tlvBytes.push(1); // type
-    tlvBytes.push(valueBytes.length >> 8, valueBytes.length & 0xff); // length (2 bytes)
-    tlvBytes.push(...valueBytes);
+    const nameBytes = encoder.encode(name);
+    const valueBytes = encoder.encode(value);
+    if (nameBytes.length > 255) throw new Error(`nkeys: key name too long (${name.length})`);
+    if (valueBytes.length > 255) throw new Error(`nkeys: value too long for key "${name}"`);
+    names.push(nameBytes);
+    values.push(valueBytes);
   }
 
-  const data = new Uint8Array(tlvBytes);
-  // Convert to 5-bit groups for bech32
-  const words = bech32ToWords(data);
-  return bech32Encode(PREFIX, words);
+  // Grouped layout: all names (type 0) before all values (type 1).
+  const tlvBytes: number[] = [];
+  for (const nameBytes of names) {
+    tlvBytes.push(0, nameBytes.length, ...nameBytes);
+  }
+  for (const valueBytes of values) {
+    tlvBytes.push(1, valueBytes.length, ...valueBytes);
+  }
+
+  const words = bech32ToWords(new Uint8Array(tlvBytes));
+  const encoded = bech32Encode(PREFIX, words);
+  if (encoded.length > BECH32_LIMIT) {
+    throw new Error(`nkeys: encoded length ${encoded.length} exceeds ${BECH32_LIMIT}`);
+  }
+  return encoded;
 }
 
 export function decodeNKeys(encoded: string): Record<string, string> {
@@ -42,27 +57,24 @@ export function decodeNKeys(encoded: string): Record<string, string> {
 
   const { words } = bech32Decode(encoded);
   const data = bech32FromWords(words);
-  const result: Record<string, string> = {};
+  const decoder = new TextDecoder();
 
+  const names: string[] = [];
+  const values: string[] = [];
   let i = 0;
-  let currentName = "";
-
-  while (i < data.length) {
+  while (i + 2 <= data.length) {
     const type = data[i];
-    const length = (data[i + 1] << 8) | data[i + 2];
-    i += 3;
-
-    const valueBytes = data.slice(i, i + length);
-    const value = new TextDecoder().decode(valueBytes);
-    i += length;
-
-    if (type === 0) {
-      currentName = value;
-    } else if (type === 1) {
-      result[currentName] = value;
-    }
+    const length = data[i + 1];
+    const value = decoder.decode(data.slice(i + 2, i + 2 + length));
+    i += 2 + length;
+    if (type === 0) names.push(value);
+    else if (type === 1) values.push(value);
   }
 
+  const result: Record<string, string> = {};
+  names.forEach((name, idx) => {
+    result[name] = values[idx] ?? "";
+  });
   return result;
 }
 

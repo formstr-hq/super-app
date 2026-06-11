@@ -153,7 +153,13 @@ function buildPollsTools(): ToolEntry[] {
       if (blocked) return blocked;
       const poll = await polls.fetchPoll(pollEventId);
       if (!poll) return fail("Poll not found.");
-      await polls.submitPollResponse(pollEventId, poll.pubkey, optionIds, poll.relays);
+      await polls.submitPollResponse(
+        pollEventId,
+        poll.pubkey,
+        optionIds,
+        poll.relays,
+        poll.powDifficulty,
+      );
       return ok(`Voted on poll ${pollEventId}.`);
     },
   );

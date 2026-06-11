@@ -1,5 +1,5 @@
 import type { PageSummary } from "@formstr/agent/services/pages";
-import { Box, Button, Chip, Divider, Typography } from "@mui/material";
+import { Box, Button, Chip, Divider, Skeleton, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { FileText, Plus } from "lucide-react";
 import type { ReactNode } from "react";
@@ -10,6 +10,7 @@ interface PagesSidebarProps {
   selectedAddress?: string;
   allTags: string[];
   activeTag: string | null;
+  isLoading?: boolean;
   onSelect: (page: PageSummary) => void;
   onNew: () => void;
   onToggleTag: (tag: string | null) => void;
@@ -114,6 +115,7 @@ export function PagesSidebar({
   selectedAddress,
   allTags,
   activeTag,
+  isLoading = false,
   onSelect,
   onNew,
   onToggleTag,
@@ -158,7 +160,17 @@ export function PagesSidebar({
         }}
       >
         <SectionLabel>My Pages</SectionLabel>
-        {pages.length === 0 ? (
+        {isLoading ? (
+          [1, 2, 3, 4, 5].map((i) => (
+            <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 1, px: 0.85, py: 0.85 }}>
+              <Skeleton variant="rounded" width={14} height={14} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Skeleton variant="text" width="70%" height={16} />
+                <Skeleton variant="text" width="45%" height={13} />
+              </Box>
+            </Box>
+          ))
+        ) : pages.length === 0 ? (
           <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
             No pages yet
           </Typography>

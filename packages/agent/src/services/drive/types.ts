@@ -14,7 +14,10 @@ export interface FileMetadata {
   uploadedAt: number;
   server: string; // Blossom server URL
   encryptionKey: string; // hex key for file decryption
+  /** Always "aes-gcm" on write (upstream formstr-drive contract). */
+  encryptionAlgorithm?: string;
   deleted?: boolean;
+  /** Blossom hash of the encrypted preview thumbnail (same per-file key). */
   previewHash?: string;
 }
 
@@ -25,9 +28,11 @@ export interface FolderNode {
   files: FileMetadata[];
 }
 
+// Upstream formstr-drive's DEFAULT_SERVERS, same order (the first entry is the
+// default upload target).
 export const DEFAULT_BLOSSOM_SERVERS = [
-  "https://blossom.primal.net",
   "https://nostr.download",
+  "https://blossom.primal.net",
   "https://blossom.oxtr.dev",
 ];
 

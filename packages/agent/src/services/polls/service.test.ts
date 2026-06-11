@@ -307,3 +307,48 @@ describe("parsePollEvent — label fallback", () => {
     expect(poll?.content).toBe("Real Q");
   });
 });
+
+describe("PoW polls (NIP-13) — upstream parity", () => {
+  const D = 8; // 8 leading zero bits — fast to mine in tests (~256 hashes)
+
+  it('submitPollResponse mines the vote: nonce + ["W", difficulty] tags, id meets target', async () => {
+    const { getEventHash, nip13 } = await import("nostr-tools");
+    await submitPollResponse("poll1", AUTHOR, ["o1"], [], D);
+    const tmpl = (mockSigner.signEvent as any).mock.calls[0][0];
+    const nonce = tmpl.tags.find((t: string[]) => t[0] === "nonce");
+    expect(nonce?.[2]).toBe(String(D));
+    expect(tmpl.tags).toContainEqual(["W", String(D)]);
+    // The mined id (over the voter's pubkey) satisfies the difficulty.
+    expect(nip13.getPow(getEventHash({ ...tmpl, pubkey: AUTHOR }))).toBeGreaterThanOrEqual(D);
+  });
+
+  it("does NOT add nonce/W tags when the poll has no PoW requirement", async () => {
+    await submitPollResponse("poll1", AUTHOR, ["o1"], []);
+    const tmpl = (mockSigner.signEvent as any).mock.calls[0][0];
+    expect(tmpl.tags.find((t: string[]) => t[0] === "nonce")).toBeUndefined();
+    expect(tmpl.tags.find((t: string[]) => t[0] === "W")).toBeUndefined();
+  });
+
+  it("fetchPollResults filters by #W and drops under-target votes", async () => {
+    const minedId = "00" + "f".repeat(62); // pow = 8
+    const weakId = "f".repeat(64); // pow = 0
+    mockResultsQuery([
+      { ...resp("v1", ["o1"], 1000, minedId), id: minedId },
+      { ...resp("v2", ["o2"], 1000, weakId), id: weakId },
+    ]);
+    const res = await fetchPollResults(makePoll({ powDifficulty: D }));
+    expect(res.totalVotes).toBe(1);
+    expect(res.results.get("o1")?.count).toBe(1);
+    expect(res.results.get("o2")?.count ?? 0).toBe(0);
+    const call = (nostrRuntime.querySync as any).mock.calls.find((c: any[]) =>
+      c[1].kinds?.includes(1018),
+    );
+    expect(call[1]["#W"]).toEqual([String(D)]);
+  });
+
+  it("counts duplicate response tags for the same option once (upstream dedup)", async () => {
+    mockResultsQuery([resp("v1", ["o1", "o1"], 1000, "r1")]);
+    const res = await fetchPollResults(makePoll());
+    expect(res.results.get("o1")?.count).toBe(1);
+  });
+});

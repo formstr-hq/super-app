@@ -2,8 +2,18 @@ import type { CalendarList } from "@formstr/agent/services/calendar";
 import { bookingLinkUrl, type SchedulingPage } from "@formstr/agent/services/calendar/booking";
 import { Box, Checkbox, Divider, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { CalendarClock, Copy, ExternalLink, Inbox, Plus, Settings2 } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarRange,
+  Copy,
+  ExternalLink,
+  Inbox,
+  Plus,
+  Settings2,
+} from "lucide-react";
 import { useSnackbar } from "notistack";
+
+import { copyText } from "../../lib/clipboard";
 
 interface CalendarSidebarProps {
   calendars: CalendarList[];
@@ -17,7 +27,7 @@ interface CalendarSidebarProps {
   /** Pending invitation count for the rail badge. */
   pendingInvitations?: number;
   /** Which main view is active; drives the rail rows' selected state. */
-  view?: "calendar" | "invitations" | "bookings";
+  view?: "calendar" | "invitations" | "bookings" | "availability";
   /** When provided, the Invitations entry renders and opens the invitations view. */
   onOpenInvitations?: () => void;
   /** The user's booking links (scheduling pages). */
@@ -26,6 +36,8 @@ interface CalendarSidebarProps {
   pendingBookings?: number;
   /** When provided, the Bookings entry renders and opens the bookings view. */
   onOpenBookings?: () => void;
+  /** When provided, the Availability entry renders and opens the busy-list view. */
+  onOpenAvailability?: () => void;
 }
 
 export function CalendarSidebar({
@@ -42,16 +54,19 @@ export function CalendarSidebar({
   schedulingPages = [],
   pendingBookings = 0,
   onOpenBookings,
+  onOpenAvailability,
 }: CalendarSidebarProps) {
   const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
   const invitationsActive = view === "invitations";
   const bookingsActive = view === "bookings";
+  const availabilityActive = view === "availability";
 
   const copyLink = (page: SchedulingPage) => {
-    navigator.clipboard?.writeText(bookingLinkUrl(page)).then(
-      () => enqueueSnackbar("Booking link copied", { variant: "success" }),
-      () => enqueueSnackbar("Could not copy link", { variant: "error" }),
+    void copyText(bookingLinkUrl(page)).then((ok) =>
+      ok
+        ? enqueueSnackbar("Booking link copied", { variant: "success" })
+        : enqueueSnackbar("Could not copy link", { variant: "error" }),
     );
   };
 
@@ -167,7 +182,38 @@ export function CalendarSidebar({
         </Box>
       )}
 
-      {(onOpenInvitations || onOpenBookings) && <Divider sx={{ mb: 0.75 }} />}
+      {onOpenAvailability && (
+        <Box
+          component="button"
+          type="button"
+          onClick={onOpenAvailability}
+          aria-label="Availability"
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            width: "100%",
+            px: 1.1,
+            py: 1,
+            mb: 0.5,
+            borderRadius: 1,
+            border: "none",
+            cursor: "pointer",
+            font: "inherit",
+            textAlign: "left",
+            bgcolor: availabilityActive ? "text.primary" : "transparent",
+            color: availabilityActive ? "background.paper" : "text.primary",
+            "&:hover": { bgcolor: availabilityActive ? "text.primary" : "action.hover" },
+          }}
+        >
+          <CalendarRange size={15} />
+          <Typography variant="body2" sx={{ flex: 1, fontWeight: 500 }}>
+            Availability
+          </Typography>
+        </Box>
+      )}
+
+      {(onOpenInvitations || onOpenBookings || onOpenAvailability) && <Divider sx={{ mb: 0.75 }} />}
 
       <Box
         sx={{

@@ -137,7 +137,12 @@ describe("FillPage", () => {
     render(<FillPage />);
 
     await waitFor(() => {
-      expect(mockFetchForm).toHaveBeenCalledWith("a".repeat(64), "form1", "test-view-key");
+      expect(mockFetchForm).toHaveBeenCalledWith(
+        "a".repeat(64),
+        "form1",
+        "test-view-key",
+        undefined,
+      );
     });
   });
 
@@ -181,6 +186,7 @@ describe("FillPage", () => {
         expect.any(Array),
         true,
         expect.any(Object),
+        undefined, // form.relays — none on this template
       );
     });
   });

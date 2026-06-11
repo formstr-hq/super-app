@@ -91,6 +91,7 @@ describe("polls tools", () => {
       "author",
       ["o1"],
       ["wss://poll.relay"],
+      undefined,
     );
     expect(okRes.ok).toBeTruthy();
   });

@@ -1,8 +1,10 @@
 import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
-import { Box, Typography } from "@mui/material";
+import { Box, Paper, Skeleton, Typography } from "@mui/material";
+import { CalendarDays } from "lucide-react";
 
 import { calendarForEvent } from "../../lib/calendarMembership";
 import { expandEvents } from "../../lib/rrule";
+import { EmptyState } from "../EmptyState";
 
 import { EventCard } from "./EventCard";
 
@@ -11,6 +13,7 @@ interface CalendarListViewProps {
   /** Selected month — the list mirrors the grid's range so the two views agree. */
   year: number;
   month: number;
+  isLoading?: boolean;
   onEventClick: (event: CalendarEvent) => void;
   calendars?: CalendarList[];
 }
@@ -19,10 +22,24 @@ export function CalendarListView({
   events,
   year,
   month,
+  isLoading = false,
   onEventClick,
   calendars = [],
 }: CalendarListViewProps) {
   const colorFor = (e: CalendarEvent) => calendarForEvent(e, calendars)?.color;
+
+  if (isLoading) {
+    return (
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}>
+        {[1, 2, 3, 4, 5].map((i) => (
+          <Paper key={i} variant="outlined" sx={{ p: 1.25, borderRadius: 1.5 }}>
+            <Skeleton variant="text" width="55%" height={18} />
+            <Skeleton variant="text" width="35%" height={14} />
+          </Paper>
+        ))}
+      </Box>
+    );
+  }
 
   // Show the same set the month grid shows (occurrences within the selected
   // month), as a chronological agenda. Keeping the range identical to
@@ -33,9 +50,12 @@ export function CalendarListView({
 
   if (inMonth.length === 0) {
     return (
-      <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-        No events this month.
-      </Typography>
+      <EmptyState
+        icon={CalendarDays}
+        title="No events this month"
+        description="Create an event or import invitations — private events stay encrypted."
+        compact
+      />
     );
   }
 

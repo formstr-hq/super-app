@@ -13,6 +13,8 @@ export const CALENDAR_KINDS = {
   rsvpGiftWrap: 1055,
   rsvpRumor: 55,
   participantRemoval: 84,
+  /** Public free/busy list, one per (user, YYYY-MM month). */
+  publicBusyList: 31926,
   // Appointment scheduling (Calendly-style booking links).
   schedulingPage: 31927,
   schedulingPagesList: 32680,
@@ -62,6 +64,14 @@ export interface CalendarEvent {
   startTzid?: string; // IANA timezone identifier (matches upstream "start_tzid")
   endTzid?: string;
   registrationFormRef?: string; // naddr of a Formstr form used as registration
+  /**
+   * Read-only viewKey for an encrypted registration form, carried as the 3rd
+   * element of the upstream ["form", naddr, viewKey] row. Never the form's
+   * signing/response key — that would grant invitees write access to the form.
+   */
+  registrationFormViewKey?: string;
+  /** Upstream ["notification", pref] row (device-local reminder preference). */
+  notificationPreference?: string;
   calendarId?: string;
   isInvitation?: boolean;
   relayHint?: string;
@@ -77,6 +87,12 @@ export interface CalendarList {
   eventRefs: string[][];
   createdAt: number;
   isVisible: boolean;
+  /**
+   * Upstream ["notifications","disabled"] row. Only the non-default
+   * ("disabled") value is persisted on the wire; round-tripping it keeps the
+   * preference set in calendar.formstr.app intact across super-app edits.
+   */
+  notificationPreference?: "enabled" | "disabled";
 }
 
 export interface RSVPResponse {
@@ -106,6 +122,10 @@ export interface CalendarEventDraft {
   startTzid?: string;
   endTzid?: string;
   registrationFormRef?: string;
+  /** Read-only viewKey for an encrypted registration form (see CalendarEvent). */
+  registrationFormViewKey?: string;
+  /** Reminder preference written as the upstream ["notification", pref] row. */
+  notificationPreference?: string;
   image?: string;
   website?: string;
   /** When updating, re-use the same addressable `d` identifier. */

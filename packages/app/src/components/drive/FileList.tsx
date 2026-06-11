@@ -1,6 +1,7 @@
 import type { FileMetadata } from "@formstr/agent/services/drive";
 import {
   Box,
+  Button,
   Chip,
   CircularProgress,
   IconButton,
@@ -8,7 +9,6 @@ import {
   Menu,
   MenuItem,
   Skeleton,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -23,7 +23,10 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { useDriveStore } from "../../stores/driveStore";
+import { EmptyState } from "../EmptyState";
 
 interface FileListProps {
   childFolders: string[];
@@ -37,6 +40,36 @@ interface FileListProps {
   onDelete: (file: FileMetadata) => void;
 }
 
+/** Decrypted webp thumbnail (kind-34578 previewHash) with the file icon as fallback. */
+function FileThumb({ file }: { file: FileMetadata }) {
+  const theme = useTheme();
+  const previewUrl = useDriveStore((s) => s.previewUrls[file.hash]);
+  const loadPreview = useDriveStore((s) => s.loadPreview);
+
+  useEffect(() => {
+    if (file.previewHash) void loadPreview(file);
+  }, [file, loadPreview]);
+
+  if (previewUrl) {
+    return (
+      <Box
+        component="img"
+        src={previewUrl}
+        alt=""
+        sx={{
+          width: 28,
+          height: 28,
+          objectFit: "cover",
+          borderRadius: 0.75,
+          flexShrink: 0,
+          border: `1px solid ${theme.palette.divider}`,
+        }}
+      />
+    );
+  }
+  return <FileIcon size={16} color={theme.palette.text.secondary} style={{ flexShrink: 0 }} />;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -45,7 +78,7 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-const GRID = "1fr 90px 120px 110px 40px";
+const GRID = "1fr 90px 120px 110px auto";
 
 export function FileList({
   childFolders,
@@ -91,38 +124,11 @@ export function FileList({
 
   if (childFolders.length === 0 && files.length === 0) {
     return (
-      <Box
-        sx={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          py: 10,
-          gap: 1.5,
-          textAlign: "center",
-        }}
-      >
-        <Box
-          sx={{
-            width: 56,
-            height: 56,
-            borderRadius: 2,
-            bgcolor: "action.hover",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <CloudUpload size={28} color={theme.palette.text.secondary} />
-        </Box>
-        <Typography variant="body2" fontWeight={500}>
-          Drop files here
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          or use the Upload button above
-        </Typography>
-      </Box>
+      <EmptyState
+        icon={CloudUpload}
+        title="Drop files here"
+        description="Files are encrypted end-to-end before upload — or use the Upload button above."
+      />
     );
   }
 
@@ -209,11 +215,10 @@ export function FileList({
             py: 1.15,
             borderBottom: `1px solid ${theme.palette.divider}`,
             "&:hover": { bgcolor: "action.hover" },
-            "&:hover .file-actions": { opacity: 1 },
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, minWidth: 0 }}>
-            <FileIcon size={16} color={theme.palette.text.secondary} style={{ flexShrink: 0 }} />
+            <FileThumb file={file} />
             <Typography variant="body2" noWrap>
               {file.name}
             </Typography>
@@ -237,31 +242,24 @@ export function FileList({
               day: "numeric",
             })}
           </Typography>
-          <Box
-            className="file-actions"
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              opacity: 0,
-              transition: "opacity 150ms",
-            }}
-          >
-            <Tooltip title="Download">
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={downloadingHash === file.hash}
-                  onClick={() => onDownload(file)}
-                >
-                  {downloadingHash === file.hash ? (
-                    <CircularProgress size={14} />
-                  ) : (
-                    <Download size={15} />
-                  )}
-                </IconButton>
-              </span>
-            </Tooltip>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 0.5 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="inherit"
+              disabled={downloadingHash === file.hash}
+              onClick={() => onDownload(file)}
+              startIcon={
+                downloadingHash === file.hash ? (
+                  <CircularProgress size={12} />
+                ) : (
+                  <Download size={13} />
+                )
+              }
+              sx={{ fontSize: 12, px: 1, py: 0.25, color: "text.primary", borderColor: "divider" }}
+            >
+              Download
+            </Button>
             <IconButton size="small" onClick={(e) => openMenu(e, file)}>
               <MoreVertical size={15} />
             </IconButton>

@@ -62,6 +62,80 @@ describe("AI settings migration", () => {
     expect(s.compatBaseUrl).toBe("http://localhost:1234/v1");
     expect(s.compatKey).toBeNull();
   });
+
+  it("falls back to ollama when the stored provider is not a known AIProviderType", () => {
+    // A stale value from an older build must not leak through the cast — an
+    // unknown provider has no PROVIDER_DEFAULT_MODEL entry and crashes the AI panel.
+    localStorage.setItem("formstr:ai-provider", "lmstudio");
+    expect(readAISettings().aiProvider).toBe("ollama");
+  });
+});
+
+describe("saved prompts", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("adds a prompt with a normalized keyword and persists it", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ savedPrompts: [] });
+
+    useSettingsStore.getState().addSavedPrompt("/Weekly Report", "Write my weekly report: ");
+
+    const prompts = useSettingsStore.getState().savedPrompts;
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].keyword).toBe("weekly-report"); // leading slash stripped, lowercased, spaces → dashes
+    expect(prompts[0].prompt).toBe("Write my weekly report: ");
+    expect(prompts[0].id).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem("formstr:saved-prompts")!)[0].keyword).toBe(
+      "weekly-report",
+    );
+  });
+
+  it("rejects duplicate keywords", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ savedPrompts: [] });
+
+    expect(useSettingsStore.getState().addSavedPrompt("standup", "A")).toBe(true);
+    expect(useSettingsStore.getState().addSavedPrompt("Standup", "B")).toBe(false);
+    expect(useSettingsStore.getState().savedPrompts).toHaveLength(1);
+  });
+
+  it("updates and removes prompts, persisting each change", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ savedPrompts: [] });
+
+    useSettingsStore.getState().addSavedPrompt("poll", "Create a poll about ");
+    const id = useSettingsStore.getState().savedPrompts[0].id;
+
+    useSettingsStore.getState().updateSavedPrompt(id, { prompt: "Create a fun poll about " });
+    expect(useSettingsStore.getState().savedPrompts[0].prompt).toBe("Create a fun poll about ");
+
+    useSettingsStore.getState().removeSavedPrompt(id);
+    expect(useSettingsStore.getState().savedPrompts).toHaveLength(0);
+    expect(JSON.parse(localStorage.getItem("formstr:saved-prompts")!)).toEqual([]);
+  });
+});
+
+describe("busy-time publishing opt-out", () => {
+  it("defaults to enabled, and the setter persists both directions", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ publishBusyTimes: true });
+
+    useSettingsStore.getState().setPublishBusyTimes(false);
+    expect(useSettingsStore.getState().publishBusyTimes).toBe(false);
+    expect(localStorage.getItem("formstr:publish-busy-times")).toBe("false");
+
+    useSettingsStore.getState().setPublishBusyTimes(true);
+    expect(useSettingsStore.getState().publishBusyTimes).toBe(true);
+    expect(localStorage.getItem("formstr:publish-busy-times")).toBe("true");
+  });
+
+  it("readPublishBusyTimes treats anything but the stored opt-out as enabled", async () => {
+    const { readPublishBusyTimes } = await import("./settingsStore");
+    localStorage.removeItem("formstr:publish-busy-times");
+    expect(readPublishBusyTimes()).toBe(true);
+    localStorage.setItem("formstr:publish-busy-times", "false");
+    expect(readPublishBusyTimes()).toBe(false);
+  });
 });
 
 describe("settings setters", () => {

@@ -10,6 +10,7 @@ export const GATED_TOOLS = [
   "rsvp_event",
   "delete_page",
   "share_page",
+  "add_page_comment",
   "delete_poll",
   "clear_my_vote",
   "delete_file",

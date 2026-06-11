@@ -70,3 +70,41 @@ describe("calendarListCodec", () => {
     expect(encoded.find((t) => t[0] === "a" && t[1] === "a")).toBeUndefined();
   });
 });
+
+describe("notifications row round-trip (upstream parity)", () => {
+  it("encodes ['notifications','disabled'] only when the preference is disabled", () => {
+    const base = {
+      id: "id1",
+      eventId: "",
+      title: "Cal",
+      description: "",
+      color: "#fff",
+      eventRefs: [],
+      createdAt: 0,
+      isVisible: true,
+    };
+    expect(encodeCalendarList({ ...base, notificationPreference: "disabled" })).toContainEqual([
+      "notifications",
+      "disabled",
+    ]);
+    // Upstream persists only the non-default preference.
+    const enabled = encodeCalendarList({ ...base, notificationPreference: "enabled" });
+    expect(enabled.some((t) => t[0] === "notifications")).toBe(false);
+    const unset = encodeCalendarList(base);
+    expect(unset.some((t) => t[0] === "notifications")).toBe(false);
+  });
+
+  it("decodes the notifications row so a super-app edit no longer drops it", () => {
+    const list = decodeCalendarList(
+      [
+        ["title", "Cal"],
+        ["notifications", "disabled"],
+      ],
+      "id1",
+      "eid",
+    );
+    expect(list.notificationPreference).toBe("disabled");
+    // Round-trip: re-encoding preserves the upstream preference.
+    expect(encodeCalendarList(list)).toContainEqual(["notifications", "disabled"]);
+  });
+});

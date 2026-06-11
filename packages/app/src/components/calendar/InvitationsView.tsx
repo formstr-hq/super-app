@@ -1,11 +1,12 @@
 import { rsvpToEvent } from "@formstr/agent/services/calendar/rsvp";
 import { Box, Button, Chip, CircularProgress, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { ArrowLeft, Check, CircleHelp, X } from "lucide-react";
+import { ArrowLeft, Check, CircleHelp, Inbox, X } from "lucide-react";
 import { useSnackbar } from "notistack";
 import { useState } from "react";
 
 import { useInvitationsStore, type InvitationEntry } from "../../stores/invitationsStore";
+import { EmptyState } from "../EmptyState";
 
 function formatDate(ms?: number) {
   if (!ms) return "";
@@ -51,9 +52,12 @@ export function InvitationsView({ onBack }: InvitationsViewProps) {
       </Box>
 
       {pending.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
-          No pending invitations.
-        </Typography>
+        <EmptyState
+          icon={Inbox}
+          title="No pending invitations"
+          description="Invitations sent to your relays appear here — accept to add the event to your calendar."
+          compact
+        />
       ) : (
         <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
           {pending.map((inv) => (

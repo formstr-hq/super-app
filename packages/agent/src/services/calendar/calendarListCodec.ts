@@ -24,6 +24,8 @@ export function encodeCalendarList(list: CalendarList): string[][] {
     ["content", list.description ?? ""],
     ["color", list.color],
   ];
+  // Upstream persists only the non-default notification preference.
+  if (list.notificationPreference === "disabled") tags.push(["notifications", "disabled"]);
   for (const ref of list.eventRefs) tags.push(["a", ...ref]);
   return tags;
 }
@@ -36,6 +38,7 @@ export function decodeCalendarList(tags: string[][], dTag: string, eventId: stri
   let title = DEFAULT_TITLE;
   let description = "";
   let color = DEFAULT_COLOR;
+  let notificationPreference: "enabled" | "disabled" | undefined;
   const eventRefs: string[][] = [];
 
   for (const tag of tags) {
@@ -49,6 +52,9 @@ export function decodeCalendarList(tags: string[][], dTag: string, eventId: stri
         break;
       case "color":
         color = tag[1] || DEFAULT_COLOR;
+        break;
+      case "notifications":
+        notificationPreference = tag[1] === "disabled" ? "disabled" : "enabled";
         break;
       case "a":
         if (tag[1] === "a") {
@@ -75,5 +81,6 @@ export function decodeCalendarList(tags: string[][], dTag: string, eventId: stri
     eventRefs,
     createdAt: 0,
     isVisible: true,
+    notificationPreference,
   };
 }

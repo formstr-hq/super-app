@@ -1,6 +1,6 @@
 import {
-  Avatar,
   Box,
+  Button,
   Divider,
   IconButton,
   List,
@@ -8,13 +8,13 @@ import {
   ListItemIcon,
   ListItemText,
   Tooltip,
-  Typography,
-  Button,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { FileText, Calendar, FileEdit, HardDrive, BarChart3, Radio, LogIn } from "lucide-react";
+import { FileText, Calendar, FileEdit, HardDrive, BarChart3, LogIn } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import formstrLogo from "../assets/formstr.png";
+import { AccountMenu } from "../components/AccountMenu";
 import { useAuthStore } from "../stores";
 
 export const SIDEBAR_WIDTH = 240;
@@ -36,10 +36,8 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isLoggedIn, pubkey } = useAuthStore();
+  const { isLoggedIn } = useAuthStore();
   const theme = useTheme();
-
-  const shortPubkey = pubkey ? `${pubkey.slice(0, 6)}…${pubkey.slice(-4)}` : "";
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -57,41 +55,21 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
         }}
       >
         {!collapsed && (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Box
-              sx={{
-                width: 22,
-                height: 22,
-                bgcolor: "text.primary",
-                borderRadius: "5px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Radio size={11} style={{ color: theme.palette.background.default }} />
-            </Box>
-            <Typography variant="body2" fontWeight={600}>
-              Formstr
-            </Typography>
-          </Box>
+          <Box
+            component="img"
+            src={formstrLogo}
+            alt="Formstr"
+            sx={{ height: 20, display: "block" }}
+          />
         )}
 
         {collapsed && (
           <Box
-            sx={{
-              width: 22,
-              height: 22,
-              bgcolor: "text.primary",
-              borderRadius: "5px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Radio size={11} style={{ color: theme.palette.background.default }} />
-          </Box>
+            component="img"
+            src={formstrLogo}
+            alt="Formstr"
+            sx={{ height: 20, display: "block" }}
+          />
         )}
       </Box>
 
@@ -145,17 +123,7 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
       <Divider />
       <Box sx={{ px: 1.5, py: 1 }}>
         {isLoggedIn ? (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Avatar sx={{ width: 22, height: 22, fontSize: 10 }} />
-            {!collapsed && (
-              <Typography
-                variant="caption"
-                sx={{ color: "text.secondary", fontFamily: "monospace", lineHeight: 1 }}
-              >
-                {shortPubkey}
-              </Typography>
-            )}
-          </Box>
+          <AccountMenu variant="sidebar" />
         ) : collapsed ? (
           <Tooltip title="Sign In" placement="right">
             <IconButton size="small" onClick={onLoginClick} sx={{ color: "text.secondary" }}>

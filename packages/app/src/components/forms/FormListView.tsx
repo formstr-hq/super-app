@@ -1,8 +1,9 @@
 import type { FormSummary } from "@formstr/agent/services/forms/types";
-import { Box, Button, Grid2 as MuiGrid, Paper, Skeleton, Tooltip, Typography } from "@mui/material";
-import { Lock, Plus } from "lucide-react";
+import { Box, Grid2 as MuiGrid, Paper, Skeleton, Tooltip, Typography } from "@mui/material";
+import { ClipboardList, Lock } from "lucide-react";
 
 import type { FormsView } from "../../stores/settingsStore";
+import { EmptyState } from "../EmptyState";
 
 import { FormActions } from "./FormActions";
 import { FormCard } from "./FormCard";
@@ -12,6 +13,7 @@ interface Props {
   isLoading: boolean;
   view?: FormsView;
   onFill: (form: FormSummary) => void;
+  onEdit?: (form: FormSummary) => void;
   onViewResponses: (form: FormSummary) => void;
   onDelete: (form: FormSummary) => void;
   onCopyLink: (form: FormSummary) => void;
@@ -23,17 +25,45 @@ export function FormListView({
   isLoading,
   view = "grid",
   onFill,
+  onEdit,
   onViewResponses,
   onDelete,
   onCopyLink,
   onCreateNew,
 }: Props) {
   if (isLoading) {
+    if (view === "list") {
+      return (
+        <Paper variant="outlined" sx={{ borderRadius: 1.5, overflow: "hidden" }}>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Box
+              key={i}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                px: 2,
+                py: 1.25,
+                borderTop: i === 1 ? "none" : "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              <Skeleton variant="text" sx={{ flex: 1, maxWidth: 280 }} />
+              <Skeleton variant="text" width={70} />
+            </Box>
+          ))}
+        </Paper>
+      );
+    }
     return (
       <MuiGrid container spacing={1.5}>
-        {[1, 2, 3].map((i) => (
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <MuiGrid key={i} size={{ xs: 12, sm: 6, lg: 4 }}>
-            <Skeleton variant="rounded" height={80} />
+            <Paper variant="outlined" sx={{ p: 1.5 }}>
+              <Skeleton variant="text" width="65%" height={20} />
+              <Skeleton variant="text" width="40%" height={16} />
+              <Skeleton variant="rounded" height={28} sx={{ mt: 1.25 }} />
+            </Paper>
           </MuiGrid>
         ))}
       </MuiGrid>
@@ -42,14 +72,14 @@ export function FormListView({
 
   if (forms.length === 0) {
     return (
-      <Box sx={{ textAlign: "center", py: 8 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          No forms yet. Create your first form to get started.
-        </Typography>
-        <Button variant="contained" startIcon={<Plus size={16} />} onClick={onCreateNew}>
-          New Form
-        </Button>
-      </Box>
+      <EmptyState
+        icon={ClipboardList}
+        title="No forms yet"
+        description="Build an encrypted survey, share the link, and collect answers only you can read."
+        actionLabel="New form"
+        onAction={onCreateNew}
+        aiHint="or ask the AI to draft one"
+      />
     );
   }
 
@@ -96,6 +126,7 @@ export function FormListView({
               <FormActions
                 form={form}
                 onFill={onFill}
+                onEdit={onEdit}
                 onViewResponses={onViewResponses}
                 onDelete={onDelete}
                 onCopyLink={onCopyLink}
@@ -114,6 +145,7 @@ export function FormListView({
           <FormCard
             form={form}
             onFill={onFill}
+            onEdit={onEdit}
             onViewResponses={onViewResponses}
             onDelete={onDelete}
             onCopyLink={onCopyLink}

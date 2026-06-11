@@ -42,7 +42,7 @@ describe("FormCard", () => {
     expect(screen.queryByText("Encrypted")).not.toBeInTheDocument();
   });
 
-  it("calls onFill with the form when the Fill form action is clicked", () => {
+  it("calls onFill with the form when the Fill action is clicked", () => {
     const onFill = vi.fn();
     render(
       <FormCard
@@ -53,11 +53,11 @@ describe("FormCard", () => {
         onCopyLink={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /fill form/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^fill$/i }));
     expect(onFill).toHaveBeenCalledWith(base);
   });
 
-  it("calls onDelete with the form when the Delete action is clicked", () => {
+  it("calls onDelete with the form when the Delete action is clicked via overflow", () => {
     const onDelete = vi.fn();
     render(
       <FormCard
@@ -68,7 +68,8 @@ describe("FormCard", () => {
         onCopyLink={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /delete/i }));
     expect(onDelete).toHaveBeenCalledWith(base);
   });
 

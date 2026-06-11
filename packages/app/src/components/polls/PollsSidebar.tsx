@@ -1,17 +1,19 @@
-import type { Poll } from "@formstr/agent/services/polls";
 import { Box, Button, Chip, Divider, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { BarChart3, Plus } from "lucide-react";
+import { BarChart3, Compass, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 
+export type PollSection = "my" | "discover";
+
 interface PollsSidebarProps {
-  myPolls: Poll[];
-  recentPolls: Poll[];
-  selectedId?: string;
+  myPollsCount: number;
+  discoverCount: number;
+  activeSection: PollSection;
   allTopics: string[];
   activeTopic: string | null;
-  onSelect: (poll: Poll) => void;
+  isLoading?: boolean;
   onNew: () => void;
+  onSectionChange: (section: PollSection) => void;
   onToggleTopic: (topic: string | null) => void;
 }
 
@@ -34,21 +36,21 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-function PollRow({
-  poll,
-  selected,
+function NavButton({
+  icon: Icon,
+  label,
+  count,
+  active,
+  loading,
   onClick,
 }: {
-  poll: Poll;
-  selected: boolean;
+  icon: React.ElementType;
+  label: string;
+  count: number;
+  active: boolean;
+  loading?: boolean;
   onClick: () => void;
 }) {
-  const ended = poll.endsAt ? poll.endsAt * 1000 < Date.now() : false;
-  const sub = new Date(poll.createdAt * 1000).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-
   return (
     <Box
       role="button"
@@ -61,41 +63,41 @@ function PollRow({
         py: 0.85,
         borderRadius: 1,
         cursor: "pointer",
-        bgcolor: selected ? "text.primary" : "transparent",
-        color: selected ? "background.paper" : "text.primary",
-        "&:hover": { bgcolor: selected ? "text.primary" : "action.hover" },
+        bgcolor: active ? "text.primary" : "transparent",
+        color: active ? "background.paper" : "text.primary",
+        "&:hover": { bgcolor: active ? "text.primary" : "action.hover" },
       }}
     >
-      <BarChart3 size={14} style={{ flexShrink: 0, opacity: 0.7 }} />
-      <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography variant="body2" fontWeight={500} noWrap>
-          {poll.content || "Untitled poll"}
-        </Typography>
+      <Icon size={14} style={{ flexShrink: 0, opacity: 0.75 }} />
+      <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
+        {label}
+      </Typography>
+      {!loading && count > 0 && (
         <Typography
           variant="caption"
-          noWrap
           sx={{
-            display: "block",
-            color: selected ? "background.paper" : "text.secondary",
-            opacity: selected ? 0.7 : 1,
+            fontWeight: 600,
+            opacity: active ? 0.75 : 0.55,
+            minWidth: 16,
+            textAlign: "right",
           }}
         >
-          {poll.pollType === "multiplechoice" ? "Multiple · " : ""}
-          {poll.options.length} options · {ended ? "ended" : sub}
+          {count}
         </Typography>
-      </Box>
+      )}
     </Box>
   );
 }
 
 export function PollsSidebar({
-  myPolls,
-  recentPolls,
-  selectedId,
+  myPollsCount,
+  discoverCount,
+  activeSection,
   allTopics,
   activeTopic,
-  onSelect,
+  isLoading = false,
   onNew,
+  onSectionChange,
   onToggleTopic,
 }: PollsSidebarProps) {
   const theme = useTheme();
@@ -127,78 +129,54 @@ export function PollsSidebar({
         New Poll
       </Button>
 
-      <Box
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: 0.25,
-        }}
-      >
-        <SectionLabel>My Polls</SectionLabel>
-        {myPolls.length === 0 ? (
-          <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
-            No polls yet
-          </Typography>
-        ) : (
-          myPolls.map((p) => (
-            <PollRow
-              key={p.id}
-              poll={p}
-              selected={p.id === selectedId}
-              onClick={() => onSelect(p)}
-            />
-          ))
-        )}
+      <NavButton
+        icon={BarChart3}
+        label="My Polls"
+        count={myPollsCount}
+        active={activeSection === "my"}
+        loading={isLoading}
+        onClick={() => onSectionChange("my")}
+      />
+      <NavButton
+        icon={Compass}
+        label="Discover"
+        count={discoverCount}
+        active={activeSection === "discover"}
+        loading={isLoading}
+        onClick={() => onSectionChange("discover")}
+      />
 
-        {recentPolls.length > 0 && (
-          <>
-            <SectionLabel>Discover</SectionLabel>
-            {recentPolls.map((p) => (
-              <PollRow
-                key={p.id}
-                poll={p}
-                selected={p.id === selectedId}
-                onClick={() => onSelect(p)}
-              />
-            ))}
-          </>
-        )}
-
-        {allTopics.length > 0 && (
-          <>
-            <Divider sx={{ my: 1 }} />
-            <SectionLabel>Topics</SectionLabel>
-            <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", px: 0.5 }}>
-              {allTopics.map((t) => {
-                const on = activeTopic === t;
-                return (
-                  <Chip
-                    key={t}
-                    label={`#${t}`}
-                    size="small"
-                    variant="outlined"
-                    onClick={() => onToggleTopic(on ? null : t)}
-                    sx={{
-                      height: 22,
-                      fontSize: 11,
-                      cursor: "pointer",
-                      ...(on && {
-                        bgcolor: "text.primary",
-                        color: "background.paper",
-                        borderColor: "text.primary",
-                        "&:hover": { bgcolor: "text.primary" },
-                      }),
-                    }}
-                  />
-                );
-              })}
-            </Box>
-          </>
-        )}
-      </Box>
+      {allTopics.length > 0 && (
+        <>
+          <Divider sx={{ my: 1 }} />
+          <SectionLabel>Topics</SectionLabel>
+          <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", px: 0.5 }}>
+            {allTopics.map((t) => {
+              const on = activeTopic === t;
+              return (
+                <Chip
+                  key={t}
+                  label={`#${t}`}
+                  size="small"
+                  variant="outlined"
+                  onClick={() => onToggleTopic(on ? null : t)}
+                  sx={{
+                    height: 22,
+                    fontSize: 11,
+                    cursor: "pointer",
+                    ...(on && {
+                      bgcolor: "text.primary",
+                      color: "background.paper",
+                      borderColor: "text.primary",
+                      "&:hover": { bgcolor: "text.primary" },
+                    }),
+                  }}
+                />
+              );
+            })}
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

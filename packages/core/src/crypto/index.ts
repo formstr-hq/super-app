@@ -8,4 +8,10 @@ export {
   unwrapEvent,
 } from "./nip59";
 export { encodeNKeys, decodeNKeys } from "./nkeys";
-export { aesGcmEncrypt, aesGcmDecrypt, encryptFileWithKey, decryptFileWithKey } from "./aesGcm";
+export {
+  aesGcmEncrypt,
+  aesGcmDecrypt,
+  encryptFileWithKey,
+  encryptFileWithExistingKey,
+  decryptFileWithKey,
+} from "./aesGcm";

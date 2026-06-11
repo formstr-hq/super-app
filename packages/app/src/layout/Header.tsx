@@ -1,30 +1,10 @@
-import {
-  AppBar,
-  Avatar,
-  Box,
-  Divider,
-  IconButton,
-  InputBase,
-  Menu,
-  MenuItem,
-  Toolbar,
-  Typography,
-} from "@mui/material";
+import { AppBar, Avatar, Box, IconButton, InputBase, Toolbar, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import {
-  Lock,
-  LogOut,
-  Menu as MenuIcon,
-  Moon,
-  Plus,
-  Search,
-  Settings,
-  Sparkles,
-  Sun,
-} from "lucide-react";
-import { useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Menu as MenuIcon, Moon, Search, Sparkles, Sun } from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
 
+import formstrLogo from "../assets/formstr.png";
+import { AccountMenu } from "../components/AccountMenu";
 import { useAuthStore, useSettingsStore } from "../stores";
 
 const NAV_ITEMS = [
@@ -50,12 +30,10 @@ interface HeaderProps {
 }
 
 export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderProps) {
-  const { pubkey, isLoggedIn, accounts, logout, switchAccount, openAuthModal } = useAuthStore();
+  const { isLoggedIn } = useAuthStore();
   const { toggleSidebar, aiPanelOpen, setAIPanelOpen, themeMode, toggleTheme } = useSettingsStore();
   const location = useLocation();
-  const navigate = useNavigate();
   const theme = useTheme();
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const routeLabel =
     Object.entries(ROUTE_LABELS).find(([path]) => location.pathname.startsWith(path))?.[1] ??
@@ -84,9 +62,12 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
         </IconButton>
 
         {/* Brand */}
-        <Typography variant="body2" fontWeight={700} noWrap sx={{ letterSpacing: "-0.02em" }}>
-          Formstr
-        </Typography>
+        <Box
+          component="img"
+          src={formstrLogo}
+          alt="Formstr"
+          sx={{ height: 32, display: "block", flexShrink: 0 }}
+        />
 
         {/* Module tabs (desktop) */}
         <Box sx={{ display: { xs: "none", md: "flex" }, alignItems: "center", gap: 0.25, ml: 1 }}>
@@ -194,79 +175,7 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
 
         {/* User */}
         {isLoggedIn ? (
-          <>
-            <IconButton
-              size="small"
-              onClick={(e) => setAnchorEl(e.currentTarget)}
-              sx={{ p: 0, ml: 0.5 }}
-            >
-              <Avatar sx={{ width: 26, height: 26, fontSize: 11 }} />
-            </IconButton>
-            <Menu
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={() => setAnchorEl(null)}
-              PaperProps={{ sx: { minWidth: 160, mt: 0.5 } }}
-              transformOrigin={{ horizontal: "right", vertical: "top" }}
-              anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
-            >
-              <Box sx={{ px: 2, py: 1 }}>
-                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  Accounts
-                </Typography>
-              </Box>
-              {accounts.map((acc) => (
-                <MenuItem
-                  key={acc.pubkey}
-                  dense
-                  selected={acc.pubkey === pubkey}
-                  onClick={() => {
-                    if (acc.pubkey !== pubkey) void switchAccount(acc.pubkey);
-                    setAnchorEl(null);
-                  }}
-                  sx={{ gap: 1, fontSize: 12.5, fontFamily: "monospace" }}
-                >
-                  {acc.locked && <Lock size={12} />}
-                  {`${acc.pubkey.slice(0, 8)}…${acc.pubkey.slice(-4)}`}
-                </MenuItem>
-              ))}
-              <Divider />
-              <MenuItem
-                dense
-                onClick={() => {
-                  openAuthModal("login");
-                  setAnchorEl(null);
-                }}
-                sx={{ gap: 1.5, fontSize: 13 }}
-              >
-                <Plus size={14} />
-                Add account
-              </MenuItem>
-              <MenuItem
-                dense
-                onClick={() => {
-                  navigate("/settings");
-                  setAnchorEl(null);
-                }}
-                sx={{ gap: 1.5, fontSize: 13 }}
-              >
-                <Settings size={14} />
-                Settings
-              </MenuItem>
-              <Divider />
-              <MenuItem
-                dense
-                onClick={() => {
-                  void logout();
-                  setAnchorEl(null);
-                }}
-                sx={{ gap: 1.5, fontSize: 13, color: "error.main" }}
-              >
-                <LogOut size={14} />
-                Log out
-              </MenuItem>
-            </Menu>
-          </>
+          <AccountMenu />
         ) : (
           <IconButton size="small" onClick={onLoginClick} sx={{ color: "text.secondary", ml: 0.5 }}>
             <Avatar sx={{ width: 26, height: 26, fontSize: 11 }} />

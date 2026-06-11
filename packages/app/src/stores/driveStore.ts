@@ -3,6 +3,8 @@ import { DEFAULT_BLOSSOM_SERVERS } from "@formstr/agent/services/drive";
 import * as driveService from "@formstr/agent/services/drive/service";
 import { create } from "zustand";
 
+import { generateImagePreview } from "../lib/imagePreview";
+
 const LS_SERVER = "formstr:drive-server";
 const LS_CUSTOM_SERVERS = "formstr:drive-custom-servers";
 const LS_CUSTOM_FOLDERS = "formstr:drive-custom-folders";
@@ -32,6 +34,9 @@ interface DriveStore {
   isUploading: boolean;
   error: string | null;
 
+  /** Decrypted thumbnail object-URLs by file hash; null = attempted, none available. */
+  previewUrls: Record<string, string | null>;
+
   // Blossom servers
   servers: BlossomServerInfo[];
   selectedServer: string;
@@ -44,6 +49,8 @@ interface DriveStore {
   uploadFile(params: driveService.UploadFileParams): Promise<FileMetadata>;
   deleteFile(metadata: FileMetadata): Promise<void>;
   downloadFile(metadata: FileMetadata): Promise<Uint8Array>;
+  /** Lazily fetch + decrypt the kind-34578 previewHash thumbnail (once per hash). */
+  loadPreview(metadata: FileMetadata): Promise<void>;
   renameFile(metadata: FileMetadata, newName: string): Promise<void>;
   moveFile(metadata: FileMetadata, newFolder: string): Promise<void>;
 
@@ -63,6 +70,7 @@ export const useDriveStore = create<DriveStore>((set, get) => ({
   isLoading: false,
   isUploading: false,
   error: null,
+  previewUrls: {},
 
   servers: DEFAULT_BLOSSOM_SERVERS.map((url) => ({ url, source: "default" as const })),
   selectedServer:
@@ -84,8 +92,11 @@ export const useDriveStore = create<DriveStore>((set, get) => ({
   async uploadFile(params) {
     set({ isUploading: true, error: null });
     try {
+      // Preview thumbnails are best-effort (upstream formstr-drive renders them).
+      const preview = params.preview ?? (await generateImagePreview(params.file)) ?? undefined;
       const metadata = await driveService.uploadFile({
         ...params,
+        preview,
         blossomServer: params.blossomServer ?? get().selectedServer,
       });
       set((state) => ({ files: [...state.files, metadata], isUploading: false }));
@@ -111,6 +122,21 @@ export const useDriveStore = create<DriveStore>((set, get) => ({
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to download file" });
       throw e;
+    }
+  },
+
+  async loadPreview(metadata) {
+    if (!metadata.previewHash || metadata.hash in get().previewUrls) return;
+    // Mark before awaiting so concurrent rows don't double-fetch; a failure
+    // keeps the null marker (no retry storm against a dead server).
+    set((state) => ({ previewUrls: { ...state.previewUrls, [metadata.hash]: null } }));
+    try {
+      const bytes = await driveService.downloadPreview(metadata);
+      if (!bytes) return;
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "image/webp" }));
+      set((state) => ({ previewUrls: { ...state.previewUrls, [metadata.hash]: url } }));
+    } catch {
+      /* thumbnail is cosmetic — the null marker stands */
     }
   },
 

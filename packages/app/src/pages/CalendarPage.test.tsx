@@ -64,7 +64,7 @@ afterEach(() => cleanup());
 describe("CalendarPage view switching", () => {
   it("shows the calendar by default (not the invitation list)", () => {
     renderPage();
-    expect(screen.getByRole("button", { name: /new event/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /new event/i })[0]).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /back to calendar/i })).toBeNull();
   });
 
@@ -76,6 +76,6 @@ describe("CalendarPage view switching", () => {
     expect(screen.queryByRole("button", { name: /new event/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /back to calendar/i }));
-    expect(screen.getByRole("button", { name: /new event/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /new event/i })[0]).toBeInTheDocument();
   });
 });

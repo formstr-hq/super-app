@@ -9,6 +9,7 @@ import {
 import type { Event as NostrEvent, Filter } from "nostr-tools";
 import { nip19 } from "nostr-tools";
 
+import { addBusyRange } from "./busyList";
 import { addEventToCalendarList, publishPrivateCalendarEvent } from "./service";
 import { CALENDAR_KINDS, type CalendarEvent, type CalendarList } from "./types";
 import { decryptWithViewKey } from "./viewKey";
@@ -278,6 +279,15 @@ export async function approveBookingRequest(
     event.viewKey ?? request.viewKey ?? "",
   ];
   const updatedCalendar = await addEventToCalendarList(calendar, eventRef);
+
+  // Always publish a public busy entry (kind 31926) for an approved booking so
+  // future bookers see the slot as unavailable — the hosted BookingPage greys
+  // out slots from these. Best-effort: never block the approval on it.
+  try {
+    await addBusyRange({ start: request.start, end: request.end });
+  } catch {
+    // Busy-entry publish failed — the approval still stands.
+  }
 
   await sendBookingResponse({
     schedulingPageRef: request.schedulingPageRef,

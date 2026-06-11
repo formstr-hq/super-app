@@ -12,6 +12,12 @@ vi.mock("@formstr/agent/services/calendar/service", () => ({
   deleteCalendarEvent: vi.fn(),
 }));
 
+vi.mock("@formstr/agent/services/calendar/busyList", () => ({
+  addBusyRange: vi.fn().mockResolvedValue(undefined),
+  removeBusyRange: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { addBusyRange, removeBusyRange } from "@formstr/agent/services/calendar/busyList";
 import * as calendarService from "@formstr/agent/services/calendar/service";
 
 import { useCalendarStore } from "./calendarStore";
@@ -201,5 +207,112 @@ describe("updateEvent", () => {
     const events = useCalendarStore.getState().events;
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("New");
+  });
+});
+
+describe("public busy list (kind 31926) wiring", () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  it("createEvent publishes a busy range for a non-recurring event", async () => {
+    (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
+      evt({ id: "d9", begin: 1000, end: 2000 }),
+    );
+    await useCalendarStore.getState().createEvent({
+      title: "X",
+      description: "",
+      begin: new Date(1000),
+      end: new Date(2000),
+    } as any);
+    await flush();
+    expect(addBusyRange).toHaveBeenCalledWith({ start: 1000, end: 2000 });
+  });
+
+  it("createEvent skips the busy range for recurring events (raw ranges only)", async () => {
+    (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
+      evt({ id: "d9", begin: 1000, end: 2000, repeat: { rrule: "FREQ=DAILY" } }),
+    );
+    await useCalendarStore.getState().createEvent({
+      title: "X",
+      description: "",
+      begin: new Date(1000),
+      end: new Date(2000),
+      rrule: "FREQ=DAILY",
+    } as any);
+    await flush();
+    expect(addBusyRange).not.toHaveBeenCalled();
+  });
+
+  it("updateEvent swaps the old busy range for the new one when times change", async () => {
+    useCalendarStore.setState({ events: [evt({ id: "x", begin: 1000, end: 2000 })] });
+    (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
+      evt({ id: "x", begin: 3000, end: 4000 }),
+    );
+    await useCalendarStore.getState().updateEvent({
+      title: "X",
+      description: "",
+      begin: new Date(3000),
+      end: new Date(4000),
+      existingId: "x",
+    });
+    await flush();
+    expect(removeBusyRange).toHaveBeenCalledWith({ start: 1000, end: 2000 });
+    expect(addBusyRange).toHaveBeenCalledWith({ start: 3000, end: 4000 });
+  });
+
+  it("updateEvent leaves the busy lists alone when times are unchanged", async () => {
+    useCalendarStore.setState({ events: [evt({ id: "x", begin: 1000, end: 2000 })] });
+    (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
+      evt({ id: "x", begin: 1000, end: 2000, title: "Renamed" }),
+    );
+    await useCalendarStore.getState().updateEvent({
+      title: "Renamed",
+      description: "",
+      begin: new Date(1000),
+      end: new Date(2000),
+      existingId: "x",
+    });
+    await flush();
+    expect(removeBusyRange).not.toHaveBeenCalled();
+    expect(addBusyRange).not.toHaveBeenCalled();
+  });
+
+  it("deleteEvent removes the deleted event's busy range", async () => {
+    useCalendarStore.setState({ events: [evt({ id: "d1", begin: 1000, end: 2000 })] });
+    await useCalendarStore.getState().deleteEvent("d1", "31923:pub:d1");
+    await flush();
+    expect(removeBusyRange).toHaveBeenCalledWith({ start: 1000, end: 2000 });
+  });
+
+  it("createEvent publishes nothing when the user opted out of busy publishing", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ publishBusyTimes: false });
+    try {
+      (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
+        evt({ id: "d9", begin: 1000, end: 2000 }),
+      );
+      await useCalendarStore.getState().createEvent({
+        title: "X",
+        description: "",
+        begin: new Date(1000),
+        end: new Date(2000),
+      } as any);
+      await flush();
+      expect(addBusyRange).not.toHaveBeenCalled();
+    } finally {
+      useSettingsStore.setState({ publishBusyTimes: true });
+    }
+  });
+
+  it("deleteEvent still retracts the busy range when opted out (cleanup of past publishes)", async () => {
+    const { useSettingsStore } = await import("./settingsStore");
+    useSettingsStore.setState({ publishBusyTimes: false });
+    try {
+      useCalendarStore.setState({ events: [evt({ id: "d1", begin: 1000, end: 2000 })] });
+      await useCalendarStore.getState().deleteEvent("d1", "31923:pub:d1");
+      await flush();
+      expect(removeBusyRange).toHaveBeenCalledWith({ start: 1000, end: 2000 });
+    } finally {
+      useSettingsStore.setState({ publishBusyTimes: true });
+    }
   });
 });

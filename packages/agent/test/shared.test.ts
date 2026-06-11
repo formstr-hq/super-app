@@ -45,12 +45,19 @@ describe("shared transforms", () => {
         fileConfig: { maxBytes: 1024, mimeTypes: ["image/"] },
       },
     ]);
-    expect(grid.type).toBe("multiChoiceGrid");
+    // legacy enum string normalizes to the upstream-parity name
+    expect(grid.type).toBe("multipleChoiceGrid");
     expect(grid.gridRows).toEqual(["Speed", "Price"]);
     expect(grid.options).toEqual([{ id: "x", label: "Custom" }]);
     expect(file.type).toBe("fileUpload");
     expect(file.validation).toEqual({ required: true, max: 5 });
     expect(file.fileConfig).toEqual({ maxBytes: 1024, mimeTypes: ["image/"] });
+  });
+
+  it("maps rating fields with maxStars", () => {
+    const [rating] = aiFieldsToFormFields([{ label: "Stars", type: "rating", maxStars: 10 }]);
+    expect(rating.type).toBe("rating");
+    expect(rating.maxStars).toBe(10);
   });
 
   it("coerces unknown field types to shortText", () => {

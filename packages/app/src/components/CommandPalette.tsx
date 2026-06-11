@@ -17,6 +17,7 @@ import {
   FileEdit,
   FileText,
   FolderOpen,
+  Keyboard,
   LogOut,
   Moon,
   Plus,
@@ -34,6 +35,7 @@ interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onLoginClick?: () => void;
+  onOpenShortcuts?: () => void;
 }
 
 type CommandItem = {
@@ -46,7 +48,12 @@ type CommandItem = {
   danger?: boolean;
 };
 
-export function CommandPalette({ open, onOpenChange, onLoginClick }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  onOpenChange,
+  onLoginClick,
+  onOpenShortcuts,
+}: CommandPaletteProps) {
   const navigate = useNavigate();
   const { isLoggedIn, logout } = useAuthStore();
   const { themeMode, toggleTheme, aiPanelOpen, setAIPanelOpen } = useSettingsStore();
@@ -154,6 +161,18 @@ export function CommandPalette({ open, onOpenChange, onLoginClick }: CommandPale
       icon: themeMode === "dark" ? Sun : Moon,
       action: () => run(toggleTheme),
     },
+    ...(onOpenShortcuts
+      ? [
+          {
+            id: "help-shortcuts",
+            group: "Help",
+            label: "Keyboard shortcuts",
+            shortcut: "?",
+            icon: Keyboard,
+            action: () => run(onOpenShortcuts),
+          },
+        ]
+      : []),
     ...(isLoggedIn
       ? [
           {

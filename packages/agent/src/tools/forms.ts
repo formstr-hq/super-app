@@ -32,6 +32,7 @@ const fieldShape = z
       .optional(),
     gridRows: z.array(z.string()).optional(),
     gridCols: z.array(z.string()).optional(),
+    maxStars: z.number().optional(),
     fileConfig: z
       .object({
         blossomServer: z.string().optional(),
@@ -142,7 +143,14 @@ export const formsTools: ToolEntry[] = [
       const signingKey = mine.find(
         (f) => f.pubkey === formAuthorPubkey && f.id === formId,
       )?.signingKey;
-      const responses = await forms.fetchResponses(formAuthorPubkey, formId, signingKey);
+      // Honor the template's own ["relay"] hints when querying for responses.
+      const template = await forms.fetchForm(formAuthorPubkey, formId);
+      const responses = await forms.fetchResponses(
+        formAuthorPubkey,
+        formId,
+        signingKey,
+        template?.relays,
+      );
 
       const blocks = responses.map((r) => {
         const when = new Date(r.createdAt * 1000).toISOString();
@@ -274,24 +282,33 @@ export const formsTools: ToolEntry[] = [
     name: "share_form",
     description:
       "Share an encrypted form's view key with collaborators via NIP-59 gift-wrap so they can " +
-      "decrypt it. Requires confirm:true.",
+      "decrypt it. Pubkeys in `editors` additionally receive the signing key (edit access). " +
+      "Requires confirm:true.",
     inputSchema: {
       formId: z.string(),
       formPubkey: z.string(),
       recipients: z.array(z.string()),
+      editors: z.array(z.string()).optional(),
       confirm: z.boolean().optional(),
     },
     write: true,
-    handler: async ({ formId, formPubkey, recipients, confirm }) => {
+    handler: async ({ formId, formPubkey, recipients, editors, confirm }) => {
       const recipientHex = normalizePubkeyList(recipients);
-      if (recipientHex.length === 0) return fail("No valid recipients provided.", "BAD_INPUT");
+      const editorHex = normalizePubkeyList(editors ?? []);
+      if (recipientHex.length === 0 && editorHex.length === 0)
+        return fail("No valid recipients provided.", "BAD_INPUT");
       const blocked = requireConfirm(
         "share_form",
         { confirm },
-        `gift-wraps the view key of form ${formId} to ${recipientHex.length} recipient(s)`,
+        `gift-wraps the access keys of form ${formId} to ${recipientHex.length + editorHex.length} recipient(s)`,
       );
       if (blocked) return blocked;
-      const result = await forms.shareForm({ formId, formPubkey, recipients: recipientHex });
+      const result = await forms.shareForm({
+        formId,
+        formPubkey,
+        recipients: recipientHex,
+        editors: editorHex,
+      });
       const failedNote = result.failed.length ? ` (${result.failed.length} failed)` : "";
       return ok(`Shared view key with ${result.published} recipient(s)${failedNote}.`, {
         published: result.published,
@@ -335,6 +352,8 @@ export const formsTools: ToolEntry[] = [
         `publicly submits ${answers.length} answer(s) to form ${formId}`,
       );
       if (blocked) return blocked;
+      // Honor the template's own ["relay"] hints when publishing the response.
+      const template = await forms.fetchForm(formAuthorPubkey, formId);
       await forms.submitResponse(
         formAuthorPubkey,
         formId,
@@ -344,6 +363,8 @@ export const formsTools: ToolEntry[] = [
           metadata: a.metadata,
         })),
         Boolean(encrypt),
+        undefined,
+        template?.relays,
       );
       return ok(`Submitted ${answers.length} answer(s) to form ${formId}.`);
     },

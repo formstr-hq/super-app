@@ -1,4 +1,9 @@
-import { AnswerType, type FormField, type FormSettings } from "@formstr/agent/services/forms/types";
+import {
+  AnswerType,
+  type FormField,
+  type FormSettings,
+  type FormTemplate,
+} from "@formstr/agent/services/forms/types";
 import {
   Box,
   Button,
@@ -13,7 +18,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { ArrowLeft, PlusCircle, Send } from "lucide-react";
 import type { ReactNode } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { moveItem } from "../../lib/array";
 import { useFormsStore } from "../../stores";
@@ -24,9 +29,14 @@ import { FormSettingsSection } from "./FormSettingsSection";
 
 interface Props {
   onClose: () => void;
+  /** When set, the surface edits this existing form instead of creating a new one. */
+  editTemplate?: FormTemplate | null;
+  /** True while the template to edit is still loading. */
+  editLoading?: boolean;
 }
 
 const CHOICE_TYPES = new Set([AnswerType.radioButton, AnswerType.checkboxes, AnswerType.dropdown]);
+const GRID_TYPES = new Set([AnswerType.multipleChoiceGrid, AnswerType.checkboxGrid]);
 
 function PaneLabel({ children }: { children: ReactNode }) {
   return (
@@ -50,9 +60,10 @@ function PaneLabel({ children }: { children: ReactNode }) {
  * pane on the right that renders the form exactly as a responder would see it.
  * Replaces the old cramped create-form modal.
  */
-export function FormBuilderSurface({ onClose }: Props) {
-  const { createForm } = useFormsStore();
+export function FormBuilderSurface({ onClose, editTemplate, editLoading }: Props) {
+  const { createForm, updateForm } = useFormsStore();
   const theme = useTheme();
+  const isEdit = editTemplate !== undefined;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -61,6 +72,16 @@ export function FormBuilderSurface({ onClose }: Props) {
   const [settings, setSettings] = useState<FormSettings>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Seed the editor once the template to edit arrives.
+  useEffect(() => {
+    if (!editTemplate) return;
+    setName(editTemplate.name);
+    setDescription(editTemplate.settings?.description ?? "");
+    setFields(editTemplate.fields);
+    setEncrypt(editTemplate.isEncrypted);
+    setSettings(editTemplate.settings ?? {});
+  }, [editTemplate]);
 
   const patchSettings = (patch: Partial<FormSettings>) =>
     setSettings((prev) => ({ ...prev, ...patch }));
@@ -86,6 +107,13 @@ export function FormBuilderSurface({ onClose }: Props) {
         { id: crypto.randomUUID().slice(0, 6), label: "Option 1" },
         { id: crypto.randomUUID().slice(0, 6), label: "Option 2" },
       ];
+    }
+    if (updates.type && GRID_TYPES.has(updates.type)) {
+      if (!updated[index].gridRows?.length) updated[index].gridRows = ["Row 1", "Row 2"];
+      if (!updated[index].gridCols?.length) updated[index].gridCols = ["Column 1", "Column 2"];
+    }
+    if (updates.type === AnswerType.rating && updated[index].maxStars === undefined) {
+      updated[index].maxStars = 5;
     }
     setFields(updated);
   };
@@ -126,29 +154,50 @@ export function FormBuilderSurface({ onClose }: Props) {
     setFields(updated);
   };
 
+  /** Drop empty grid rows/columns the line-based editors leave behind. */
+  const sanitizeFields = (raw: FormField[]): FormField[] =>
+    raw.map((f) =>
+      GRID_TYPES.has(f.type)
+        ? {
+            ...f,
+            gridRows: (f.gridRows ?? []).map((r) => r.trim()).filter(Boolean),
+            gridCols: (f.gridCols ?? []).map((c) => c.trim()).filter(Boolean),
+          }
+        : f,
+    );
+
   const handleCreate = async () => {
     setIsSubmitting(true);
     setError(null);
     try {
-      await createForm({
-        name,
-        fields,
-        settings: {
-          publicForm: !encrypt,
-          description: description || undefined,
-          ...settings,
-        },
-        encrypt,
-      });
+      const cleanFields = sanitizeFields(fields);
+      const mergedSettings: FormSettings = {
+        publicForm: !encrypt,
+        ...settings,
+        description: description || undefined,
+      };
+      if (isEdit && editTemplate) {
+        await updateForm({
+          formId: editTemplate.id,
+          pubkey: editTemplate.pubkey,
+          name,
+          fields: cleanFields,
+          settings: mergedSettings,
+        });
+      } else {
+        await createForm({ name, fields: cleanFields, settings: mergedSettings, encrypt });
+      }
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create form");
+      setError(
+        e instanceof Error ? e.message : isEdit ? "Failed to save form" : "Failed to create form",
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const canSubmit = name.trim().length > 0 && fields.length > 0 && !isSubmitting;
+  const canSubmit = name.trim().length > 0 && fields.length > 0 && !isSubmitting && !editLoading;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -169,7 +218,7 @@ export function FormBuilderSurface({ onClose }: Props) {
           </IconButton>
         </Tooltip>
         <Typography variant="subtitle1" fontWeight={600} sx={{ flex: 1 }}>
-          New form
+          {isEdit ? "Edit form" : "New form"}
         </Typography>
         {error && (
           <Typography variant="caption" color="error" sx={{ mr: 1 }}>
@@ -180,7 +229,7 @@ export function FormBuilderSurface({ onClose }: Props) {
           Cancel
         </Button>
         <Button size="small" variant="contained" onClick={handleCreate} disabled={!canSubmit}>
-          {isSubmitting ? "Creating…" : "Create"}
+          {isSubmitting ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save" : "Create"}
         </Button>
       </Box>
 
@@ -210,6 +259,12 @@ export function FormBuilderSurface({ onClose }: Props) {
         >
           <PaneLabel>Build</PaneLabel>
 
+          {editLoading && (
+            <Typography variant="caption" color="text.secondary">
+              Loading form…
+            </Typography>
+          )}
+
           <TextField
             label="Form title"
             placeholder="Untitled form"
@@ -234,10 +289,14 @@ export function FormBuilderSurface({ onClose }: Props) {
                 checked={encrypt}
                 onChange={(e) => setEncrypt(e.target.checked)}
                 size="small"
+                disabled={isEdit}
               />
             }
             label={
-              <Typography variant="body2">Encrypt form (only you can see responses)</Typography>
+              <Typography variant="body2">
+                Encrypt form (only you can see responses)
+                {isEdit ? " — cannot be changed after creation" : ""}
+              </Typography>
             }
           />
 

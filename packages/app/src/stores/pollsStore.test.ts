@@ -50,6 +50,7 @@ describe("pollsStore", () => {
       "author1",
       ["o1"],
       ["wss://poll.relay"],
+      undefined,
     );
   });
 

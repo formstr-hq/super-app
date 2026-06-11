@@ -6,6 +6,24 @@ export type CloudProvider = "anthropic" | "openai" | "gemini";
 export type ApiKeys = { anthropic?: string; openai?: string; gemini?: string };
 export type FormsView = "grid" | "list";
 
+/** A reusable AI-panel prompt, inserted by typing `/keyword` in the chat input. */
+export interface SavedPrompt {
+  id: string;
+  /** Lowercase, no spaces, no leading slash — what the user types after "/". */
+  keyword: string;
+  prompt: string;
+}
+
+/** Normalize user input into a slash keyword: strip "/", lowercase, spaces → dashes. */
+export function normalizePromptKeyword(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^\/+/, "")
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9_-]/g, "");
+}
+
 const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 const DEFAULT_COMPAT_URL = "http://localhost:1234/v1";
 
@@ -52,8 +70,9 @@ export function migrateAISettings(): void {
 
 /** Read the (already-migrated) AI settings out of localStorage. */
 export function readAISettings(): AISettingsState {
+  const storedProvider = localStorage.getItem("formstr:ai-provider");
   return {
-    aiProvider: (localStorage.getItem("formstr:ai-provider") as AIProviderType) ?? "ollama",
+    aiProvider: storedProvider && isAIProvider(storedProvider) ? storedProvider : "ollama",
     apiKeys: parseJson<ApiKeys>(localStorage.getItem("formstr:ai-keys"), {}),
     aiModels: parseJson<Partial<Record<AIProviderType, string>>>(
       localStorage.getItem("formstr:ai-models"),
@@ -63,6 +82,11 @@ export function readAISettings(): AISettingsState {
     compatBaseUrl: localStorage.getItem("formstr:ai-compat-base-url") ?? DEFAULT_COMPAT_URL,
     compatKey: localStorage.getItem("formstr:ai-compat-key"),
   };
+}
+
+/** Busy-time publishing is on unless the user explicitly opted out. */
+export function readPublishBusyTimes(): boolean {
+  return localStorage.getItem("formstr:publish-busy-times") !== "false";
 }
 
 function isAIProvider(v: string): v is AIProviderType {
@@ -89,6 +113,8 @@ interface SettingsStore {
   sidebarOpen: boolean;
   sidebarCollapsed: boolean; // desktop: collapsed to icon-only
   formsView: FormsView; // forms list layout: card grid vs dense list
+  /** Auto-publish kind-31926 busy ranges from calendar events (device-local). */
+  publishBusyTimes: boolean;
 
   // AI settings
   aiProvider: AIProviderType;
@@ -98,18 +124,28 @@ interface SettingsStore {
   compatBaseUrl: string;
   compatKey: string | null;
   aiPanelOpen: boolean;
+  savedPrompts: SavedPrompt[];
 
   toggleTheme(): void;
   toggleSidebar(): void;
   setSidebarOpen(open: boolean): void;
   toggleSidebarCollapsed(): void;
   setFormsView(view: FormsView): void;
+  setPublishBusyTimes(enabled: boolean): void;
   setActiveProvider(provider: AIProviderType): void;
   setApiKey(provider: CloudProvider, key: string | null): void;
   setProviderModel(provider: AIProviderType, model: string | null): void;
   setOllamaUrl(url: string): void;
   setCompatConfig(config: { baseUrl?: string; key?: string | null }): void;
   setAIPanelOpen(open: boolean): void;
+  /** Returns false (and does nothing) when the normalized keyword is empty or taken. */
+  addSavedPrompt(keyword: string, prompt: string): boolean;
+  updateSavedPrompt(id: string, patch: Partial<Pick<SavedPrompt, "keyword" | "prompt">>): void;
+  removeSavedPrompt(id: string): void;
+}
+
+function persistSavedPrompts(prompts: SavedPrompt[]) {
+  localStorage.setItem("formstr:saved-prompts", JSON.stringify(prompts));
 }
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
@@ -117,6 +153,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   sidebarOpen: true,
   sidebarCollapsed: false,
   formsView: (localStorage.getItem("formstr:forms-view") as FormsView) ?? "grid",
+  publishBusyTimes: readPublishBusyTimes(),
 
   aiProvider: _ai.aiProvider,
   apiKeys: _ai.apiKeys,
@@ -125,6 +162,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   compatBaseUrl: _ai.compatBaseUrl,
   compatKey: _ai.compatKey,
   aiPanelOpen: false,
+  savedPrompts: parseJson<SavedPrompt[]>(localStorage.getItem("formstr:saved-prompts"), []),
 
   toggleTheme() {
     set((state) => {
@@ -150,6 +188,11 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   setFormsView(view: FormsView) {
     localStorage.setItem("formstr:forms-view", view);
     set({ formsView: view });
+  },
+
+  setPublishBusyTimes(enabled: boolean) {
+    localStorage.setItem("formstr:publish-busy-times", String(enabled));
+    set({ publishBusyTimes: enabled });
   },
 
   setActiveProvider(provider) {
@@ -200,5 +243,47 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
 
   setAIPanelOpen(open: boolean) {
     set({ aiPanelOpen: open });
+  },
+
+  addSavedPrompt(keyword, prompt) {
+    const normalized = normalizePromptKeyword(keyword);
+    if (!normalized) return false;
+    let added = false;
+    set((state) => {
+      if (state.savedPrompts.some((p) => p.keyword === normalized)) return state;
+      added = true;
+      const savedPrompts = [
+        ...state.savedPrompts,
+        { id: crypto.randomUUID(), keyword: normalized, prompt },
+      ];
+      persistSavedPrompts(savedPrompts);
+      return { savedPrompts };
+    });
+    return added;
+  },
+
+  updateSavedPrompt(id, patch) {
+    set((state) => {
+      const savedPrompts = state.savedPrompts.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              ...patch,
+              keyword:
+                patch.keyword !== undefined ? normalizePromptKeyword(patch.keyword) : p.keyword,
+            }
+          : p,
+      );
+      persistSavedPrompts(savedPrompts);
+      return { savedPrompts };
+    });
+  },
+
+  removeSavedPrompt(id) {
+    set((state) => {
+      const savedPrompts = state.savedPrompts.filter((p) => p.id !== id);
+      persistSavedPrompts(savedPrompts);
+      return { savedPrompts };
+    });
   },
 }));

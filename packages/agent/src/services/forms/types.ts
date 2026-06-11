@@ -22,8 +22,9 @@ export enum AnswerType {
   datetime = "datetime",
   fileUpload = "fileUpload",
   signature = "signature",
-  multiChoiceGrid = "multiChoiceGrid",
+  multipleChoiceGrid = "multipleChoiceGrid",
   checkboxGrid = "checkboxGrid",
+  rating = "rating",
   /** Page-break marker — not an answerable field, lets the filler paginate. */
   section = "section",
 }
@@ -64,6 +65,8 @@ export interface FormField {
   /** Columns for grid field types. */
   gridCols?: string[];
   fileConfig?: FormFieldFileConfig;
+  /** Star count for rating fields (upstream `answerSettings.maxStars`). */
+  maxStars?: number;
 }
 
 export interface FormOption {
@@ -99,6 +102,8 @@ export interface FormTemplate {
   /** "self" (author-only), "view-key" (gift-wrap distributed), or undefined when plaintext. */
   encryptionMode?: "self" | "view-key";
   decryptError?: FormDecryptError;
+  /** The form's `["relay", url]` hints — responses go to these ∪ module relays. */
+  relays?: string[];
   event?: Event;
 }
 
@@ -129,4 +134,6 @@ export interface FormSummary {
   signingKey?: string;
   /** Hex-encoded view key. Present only for encrypted forms you created. */
   viewKey?: string;
+  /** Relay hint from the kind-14083 entry (3rd slot) — formstr.app's retry path uses it. */
+  relay?: string;
 }

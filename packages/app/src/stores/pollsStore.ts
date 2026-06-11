@@ -94,7 +94,13 @@ export const usePollsStore = create<PollsStore>((set) => ({
 
   async submitResponse(poll, selectedOptionIds) {
     try {
-      await pollsService.submitPollResponse(poll.id, poll.pubkey, selectedOptionIds, poll.relays);
+      await pollsService.submitPollResponse(
+        poll.id,
+        poll.pubkey,
+        selectedOptionIds,
+        poll.relays,
+        poll.powDifficulty,
+      );
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to submit response" });
       throw e;

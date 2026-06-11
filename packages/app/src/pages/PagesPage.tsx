@@ -1,9 +1,13 @@
 import type { PageDocument, PageSummary } from "@formstr/agent/services/pages";
-import { Alert, Box, Snackbar, Typography } from "@mui/material";
-import { FileEdit } from "lucide-react";
+import { Alert, Box, Button, Snackbar } from "@mui/material";
+import { FileEdit, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
 
 import { AIPendingRow } from "../components/ai/AIPendingRow";
+import { EmptyState } from "../components/EmptyState";
+import { MobileRailDrawer } from "../components/MobileRailDrawer";
+import { PageHeader } from "../components/PageHeader";
 import { PageEditorSurface } from "../components/pages/PageEditorSurface";
 import { PagesSidebar } from "../components/pages/PagesSidebar";
 import { PageTagsPopover } from "../components/pages/PageTagsPopover";
@@ -17,6 +21,7 @@ export function PagesPage() {
     currentPage,
     tagsByAddress,
     activeTag,
+    isLoading,
     error,
     fetchMyPages,
     fetchSharedPages,
@@ -27,8 +32,11 @@ export function PagesPage() {
     setTags,
     setActiveTag,
     clearCurrent,
+    openSharedLink,
   } = usePagesStore();
   const pubkey = useAuthStore((s) => s.pubkey);
+  const { "*": splat } = useParams();
+  const { hash } = useLocation();
 
   const [mode, setMode] = useState<"empty" | "new" | "open">("empty");
   const [saving, setSaving] = useState(false);
@@ -42,6 +50,15 @@ export function PagesPage() {
       fetchSharedPages();
     }
   }, [pubkey, fetchMyPages, fetchSharedPages]);
+
+  // Share link: /pages/<naddr>#<nkeys> (also accepts upstream's /doc/<naddr> splat).
+  useEffect(() => {
+    const naddr = splat?.split("/").find((s) => s.startsWith("naddr1"));
+    if (naddr) {
+      setMode("open");
+      void openSharedLink(naddr, hash);
+    }
+  }, [splat, hash, openSharedLink]);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -98,21 +115,47 @@ export function PagesPage() {
   // A shared doc opened with only a viewKey (someone else's, no editKey) is read-only.
   const readOnly = !!currentPage && currentPage.pubkey !== pubkey && !currentPage.editKey;
 
+  const renderRail = (onNavigate: () => void) => (
+    <PagesSidebar
+      pages={visiblePages}
+      sharedPages={sharedPages}
+      selectedAddress={currentPage?.address}
+      allTags={allTags}
+      activeTag={activeTag}
+      isLoading={isLoading}
+      onSelect={(p) => {
+        openPage(p);
+        onNavigate();
+      }}
+      onNew={() => {
+        handleNew();
+        onNavigate();
+      }}
+      onToggleTag={setActiveTag}
+    />
+  );
+
   return (
     <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <PagesSidebar
-        pages={visiblePages}
-        sharedPages={sharedPages}
-        selectedAddress={currentPage?.address}
-        allTags={allTags}
-        activeTag={activeTag}
-        onSelect={openPage}
-        onNew={handleNew}
-        onToggleTag={setActiveTag}
-      />
+      {renderRail(() => {})}
+      <MobileRailDrawer ariaLabel="Open pages list">{renderRail}</MobileRailDrawer>
 
       <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
         <AIPendingRow module="pages" />
+        <PageHeader
+          title="Pages"
+          description="Encrypted Markdown docs with shareable view/edit links and inline comments."
+          action={
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<Plus size={14} />}
+              onClick={handleNew}
+            >
+              New page
+            </Button>
+          }
+        />
         {error && (
           <Alert severity="error" sx={{ m: 2, mb: 0, py: 0.5 }}>
             {error}
@@ -131,22 +174,14 @@ export function PagesPage() {
             onOpenTags={setTagsAnchor}
           />
         ) : (
-          <Box
-            sx={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 1.5,
-              color: "text.secondary",
-            }}
-          >
-            <FileEdit size={40} strokeWidth={1.4} />
-            <Typography variant="body2" fontWeight={500}>
-              Select a page or create a new one
-            </Typography>
-          </Box>
+          <EmptyState
+            icon={FileEdit}
+            title="No page open"
+            description="Encrypted Markdown docs with shareable view or edit links and inline comments."
+            actionLabel="New page"
+            onAction={handleNew}
+            aiHint="or ask the AI to write one"
+          />
         )}
       </Box>
 

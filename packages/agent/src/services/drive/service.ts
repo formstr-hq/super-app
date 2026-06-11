@@ -7,6 +7,7 @@ import {
   BlossomClient,
   createBlossomAuthEvent,
   encryptFileWithKey,
+  encryptFileWithExistingKey,
   decryptFileWithKey,
 } from "@formstr/core";
 import type { EventTemplate, Filter, VerifiedEvent } from "nostr-tools";
@@ -24,6 +25,9 @@ export interface UploadFileParams {
   file: File;
   folder?: string;
   blossomServer?: string;
+  /** Pre-rendered preview thumbnail bytes (e.g. a downscaled webp). Encrypted
+   *  with the SAME per-file key and uploaded alongside (upstream previewHash). */
+  preview?: Uint8Array;
 }
 
 export async function uploadFile(params: UploadFileParams): Promise<FileMetadata> {
@@ -43,6 +47,24 @@ export async function uploadFile(params: UploadFileParams): Promise<FileMetadata
   const blossom = new BlossomClient(server);
   const result = await blossom.upload(encryptedBytes, authEvent, params.file.type);
 
+  // Preview thumbnail: same key, same server (upstream uploadPreparedFile).
+  let previewHash: string | undefined;
+  if (params.preview) {
+    try {
+      const encryptedPreview = new TextEncoder().encode(
+        await encryptFileWithExistingKey(params.preview, privateKeyHex),
+      );
+      const previewAuth = await createBlossomAuthEvent(
+        "upload",
+        await sha256Hex(encryptedPreview),
+        signer,
+      );
+      previewHash = (await blossom.upload(encryptedPreview, previewAuth, "image/webp")).sha256;
+    } catch {
+      /* previews are best-effort; the file upload already succeeded */
+    }
+  }
+
   const metadata: FileMetadata = {
     name: params.file.name,
     hash: result.sha256,
@@ -51,11 +73,29 @@ export async function uploadFile(params: UploadFileParams): Promise<FileMetadata
     folder: params.folder ?? "/",
     uploadedAt: Date.now(),
     server,
+    ...(previewHash ? { previewHash } : {}),
     encryptionKey: privateKeyHex,
+    encryptionAlgorithm: "aes-gcm",
   };
 
   await saveFileMetadata(metadata);
   return metadata;
+}
+
+/** Download + decrypt a file's preview thumbnail (shares the file's key). */
+export async function downloadPreview(metadata: FileMetadata): Promise<Uint8Array | null> {
+  if (!metadata.previewHash) return null;
+  const blossom = new BlossomClient(metadata.server);
+  let authEvent: VerifiedEvent | undefined;
+  try {
+    const signer = await signerManager.getSigner();
+    authEvent = await createBlossomAuthEvent("get", metadata.previewHash, signer);
+  } catch {
+    // Continue without auth — public blobs don't require it.
+  }
+  const encryptedBytes = await blossom.download(metadata.previewHash, authEvent);
+  const ciphertext = new TextDecoder().decode(encryptedBytes);
+  return decryptFileWithKey(ciphertext, metadata.encryptionKey);
 }
 
 // ── Download File ───────────────────────────────────────
@@ -120,7 +160,13 @@ export async function fetchFileIndex(): Promise<FileMetadata[]> {
 
 export async function saveFileMetadata(metadata: FileMetadata): Promise<void> {
   const signer = await signerManager.getSigner();
-  const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(metadata));
+  // Backfill the algorithm field on rewrite — every blob ever written used AES-GCM,
+  // and upstream's FileMetadata always carries it.
+  const full: FileMetadata = {
+    ...metadata,
+    encryptionAlgorithm: metadata.encryptionAlgorithm ?? "aes-gcm",
+  };
+  const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(full));
 
   const event: EventTemplate = {
     kind: DRIVE_KINDS.fileMetadata,

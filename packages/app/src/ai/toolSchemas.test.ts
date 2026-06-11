@@ -6,7 +6,7 @@ describe("buildToolDefinitions", () => {
   const defs = buildToolDefinitions();
 
   it("wraps every registry schema as an OpenAI-style function tool", () => {
-    expect(defs.length).toBe(51);
+    expect(defs.length).toBe(53);
     for (const d of defs) {
       expect(d.type).toBe("function");
       expect(d.function.name).toBeTruthy();

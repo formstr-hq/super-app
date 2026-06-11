@@ -14,6 +14,7 @@ vi.mock("../src/services", () => ({
     addEventToCalendarList: vi.fn(),
     removeEventFromCalendarList: vi.fn(),
     fetchInvitationsSync: vi.fn(),
+    lookupEventViewKey: vi.fn(),
   },
   calendarRsvp: {
     rsvpToEvent: vi.fn(),
@@ -65,7 +66,7 @@ describe("calendar tools", () => {
     expect(rw.tools.has("rsvp_event")).toBe(true);
   });
 
-  it("rsvp_event requires confirm then calls rsvpToEvent with 3 args", async () => {
+  it("rsvp_event requires confirm then calls rsvpToEvent", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
     const blocked = await tools
@@ -77,8 +78,57 @@ describe("calendar tools", () => {
     const okRes = await tools
       .get("rsvp_event")!
       .handler({ eventCoordinate: "31923:pk:d", status: "accepted", confirm: true });
-    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith("31923:pk:d", "accepted", false);
+    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith(
+      "31923:pk:d",
+      "accepted",
+      false,
+      undefined,
+      undefined,
+    );
     expect(okRes.ok).toBeTruthy();
+  });
+
+  it("rsvp_event passes an explicit viewKey through to the service", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    await tools.get("rsvp_event")!.handler({
+      eventCoordinate: "32678:pk:d",
+      status: "accepted",
+      isPrivate: true,
+      viewKey: "nsec1explicit",
+      confirm: true,
+    });
+    expect(calendar.lookupEventViewKey).not.toHaveBeenCalled();
+    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith(
+      "32678:pk:d",
+      "accepted",
+      true,
+      undefined,
+      "nsec1explicit",
+    );
+  });
+
+  it("rsvp_event auto-discovers the viewKey from calendar lists for private events", async () => {
+    // Without the viewKey a private RSVP falls back to the gift-wrap path,
+    // which calendar.formstr.app never reads — the standalone-compatible
+    // kind-32069 path needs the event's viewKey from the user's lists.
+    (calendar.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    await tools.get("rsvp_event")!.handler({
+      eventCoordinate: "32678:pk:d",
+      status: "declined",
+      isPrivate: true,
+      confirm: true,
+    });
+    expect(calendar.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d");
+    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith(
+      "32678:pk:d",
+      "declined",
+      true,
+      undefined,
+      "nsec1fromlist",
+    );
   });
 
   it("create_calendar_event publishes a public event with a coordinate", async () => {
@@ -410,11 +460,13 @@ describe("calendar tools", () => {
       comment: "running late",
       confirm: true,
     });
-    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith("31923:pk:d", "tentative", false, {
-      suggestedStart: 1000,
-      suggestedEnd: 2000,
-      comment: "running late",
-    });
+    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith(
+      "31923:pk:d",
+      "tentative",
+      false,
+      { suggestedStart: 1000, suggestedEnd: 2000, comment: "running late" },
+      undefined,
+    );
   });
 
   it("fetch_event_rsvps includes suggested times and comment", async () => {

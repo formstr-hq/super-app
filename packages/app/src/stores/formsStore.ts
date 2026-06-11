@@ -16,6 +16,7 @@ interface FormsStore {
   loadForm(pubkey: string, formId: string): Promise<void>;
   loadResponses(pubkey: string, formId: string): Promise<void>;
   createForm(params: formsService.CreateFormParams): Promise<formsService.CreateFormResult>;
+  updateForm(params: formsService.UpdateFormParams): Promise<void>;
   deleteForm(formId: string, formPubkey: string): Promise<void>;
   clearCurrent(): void;
 }
@@ -56,6 +57,11 @@ export const useFormsStore = create<FormsStore>((set, get) => ({
     }
     set({ isLoading: true, error: null, responses: [] });
     const summary = get().myForms.find((f) => f.pubkey === pubkey && f.id === formId);
+    // Include the template's own ["relay"] hints — responses to custom-relay forms
+    // (e.g. authored on formstr.app) may only exist there.
+    const current = get().currentForm;
+    const formRelays =
+      current && current.pubkey === pubkey && current.id === formId ? current.relays : undefined;
     responsesSub = formsService.subscribeToResponses(
       pubkey,
       formId,
@@ -67,6 +73,7 @@ export const useFormsStore = create<FormsStore>((set, get) => ({
         ),
       () => set({ isLoading: false }),
       summary?.signingKey,
+      formRelays,
     );
     return Promise.resolve();
   },
@@ -88,6 +95,24 @@ export const useFormsStore = create<FormsStore>((set, get) => ({
       return result;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to create form" });
+      throw e;
+    }
+  },
+
+  async updateForm(params) {
+    set({ error: null });
+    try {
+      await formsService.updateForm(params);
+      set((state) => ({
+        myForms: state.myForms.map((f) =>
+          f.id === params.formId && f.pubkey === params.pubkey
+            ? { ...f, name: params.name ?? f.name }
+            : f,
+        ),
+        currentForm: null,
+      }));
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Failed to update form" });
       throw e;
     }
   },

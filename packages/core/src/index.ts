@@ -57,6 +57,7 @@ export {
   aesGcmEncrypt,
   aesGcmDecrypt,
   encryptFileWithKey,
+  encryptFileWithExistingKey,
   decryptFileWithKey,
 } from "./crypto";
 
