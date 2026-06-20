@@ -169,6 +169,13 @@ describe("bootstrap", () => {
     expect(calls.switchAccount[0]).toEqual([PUBKEY]);
   });
 
+  it("accepts an npub for --account and switches by its hex pubkey", async () => {
+    const { signer, calls } = fakeSigner(ncryptsecAccount);
+    // ncryptsecAccount.npub === "npub1x"; switchAccount must still receive the hex.
+    await bootstrap({ account: "npub1x" }, depsFor(signer, { passphrase: "pw" }));
+    expect(calls.switchAccount[0]).toEqual([PUBKEY]);
+  });
+
   it("throws when --account matches no stored account", async () => {
     const { signer } = fakeSigner(ncryptsecAccount);
     await expect(

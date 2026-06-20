@@ -4,6 +4,7 @@ import type { AbstractSimplePool } from "nostr-tools/abstract-pool";
 import { useWebSocketImplementation as setWebSocketImplementation } from "nostr-tools/pool";
 import WebSocket from "ws";
 
+import { findAccount } from "./auth/login";
 import { buildMcpSigner } from "./auth/mcpSigner";
 import { mapMethod } from "./auth/methodMap";
 import { createPatchedPool } from "./auth/pool";
@@ -97,7 +98,8 @@ export async function bootstrap(
 
 async function selectAccount(signer: Signer, requested?: string): Promise<StoredAccount> {
   if (requested) {
-    const match = signer.listAccounts().find((a) => a.pubkey === requested);
+    // Accept either an npub (what `accounts` shows) or a hex pubkey.
+    const match = findAccount(signer.listAccounts(), requested);
     if (!match) {
       throw new Error(
         `No stored account for --account ${requested}. Run \`formstr-mcp accounts\` to list them.`,

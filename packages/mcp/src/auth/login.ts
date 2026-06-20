@@ -129,3 +129,28 @@ export function whoami(signer: Signer): StoredAccount | null {
 export function listAccounts(signer: Signer): StoredAccount[] {
   return signer.listAccounts();
 }
+
+/**
+ * Resolve a stored account by either its `npub` or its hex `pubkey`. Returns
+ * null when nothing matches. `accounts` shows npubs, so users naturally pass an
+ * npub; the signer's switch/select APIs key on the hex pubkey — this bridges both.
+ */
+export function findAccount(accounts: StoredAccount[], target: string): StoredAccount | null {
+  return accounts.find((a) => a.npub === target || a.pubkey === target) ?? null;
+}
+
+/**
+ * Persist a new active account, selected by npub or hex pubkey. The MCP server
+ * (when not pinned with `--account`) boots whichever account is active, so this
+ * is how you point it at a different identity. Returns the now-active account.
+ */
+export async function doSwitch(signer: Signer, target: string): Promise<StoredAccount> {
+  const match = findAccount(listAccounts(signer), target);
+  if (!match) {
+    throw new Error(
+      `No stored account matching "${target}". Run \`formstr-mcp accounts\` to list them.`,
+    );
+  }
+  await signer.switchAccount(match.pubkey);
+  return match;
+}

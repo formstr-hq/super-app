@@ -21,7 +21,9 @@ npx -y @formstr/mcp login
 ```
 
 Subcommands: `formstr-mcp login` · `formstr-mcp whoami` · `formstr-mcp accounts` ·
-`formstr-mcp logout` · `formstr-mcp` (run the stdio server, the default).
+`formstr-mcp switch <npub>` · `formstr-mcp logout` · `formstr-mcp help` ·
+`formstr-mcp` (run the stdio server, the default). Run `formstr-mcp help` (or `-h`) for
+the full usage.
 
 ## Sign-in
 
@@ -39,7 +41,11 @@ offers four methods:
 Linux Secret Service via `@napi-rs/keyring`). On hosts without a keychain (e.g. headless
 Linux), set `FORMSTR_MCP_PASSPHRASE` to use an AES-256-GCM encrypted file at
 `~/.config/formstr-mcp/keystore.enc` (mode `0600`). Multiple identities are supported
-(`formstr-mcp accounts` lists them); select one at boot with `--account <pubkey>`.
+(`formstr-mcp accounts` lists them). Change the persisted active account with
+`formstr-mcp switch <npub>`, or pick one for a single boot with `--account <npub>`; the
+server follows the active account when neither is given, so switching accounts just works.
+Both `switch` and `--account` accept either the `npub` (as shown by `accounts`) or the hex
+pubkey.
 
 **Defense in depth:** even on the encrypted-file fallback the stored key is _also_ NIP-49
 encrypted, so recovering it needs **both** the keystore **and** the unlock passphrase.
@@ -82,7 +88,7 @@ unattended. At boot the active account is unlocked headlessly:
 | `FORMSTR_MCP_CONFIG_DIR`           | keystore directory (default `~/.config/formstr-mcp`)              |
 | `FORMSTR_RELAYS`                   | comma-separated relay override (optional)                         |
 
-CLI flags: `--relays <wss://a,wss://b>`, `--allow-writes`, `--account <pubkey>`.
+CLI flags: `--relays <wss://a,wss://b>`, `--allow-writes`, `--account <npub|hex>`.
 There is no plaintext-nsec path — a raw key is never read from env, flags, or a config file.
 
 ## Forms tools

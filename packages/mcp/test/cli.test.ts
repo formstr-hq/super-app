@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { parseCli, splitRelays } from "../src/cli";
+import { parseCli, splitRelays, helpText } from "../src/cli";
 
 describe("parseCli", () => {
   it("defaults to the run command", () => {
@@ -13,6 +13,20 @@ describe("parseCli", () => {
     expect(parseCli(["logout"]).command).toBe("logout");
     expect(parseCli(["whoami"]).command).toBe("whoami");
     expect(parseCli(["accounts"]).command).toBe("accounts");
+  });
+
+  it("parses the switch command with a positional target", () => {
+    const cli = parseCli(["switch", "npub1abc"]);
+    expect(cli.command).toBe("switch");
+    expect(cli.target).toBe("npub1abc");
+  });
+
+  it("recognizes the help command and -h/--help", () => {
+    expect(parseCli(["help"]).command).toBe("help");
+    expect(parseCli(["-h"]).command).toBe("help");
+    expect(parseCli(["--help"]).command).toBe("help");
+    // --help anywhere wins, even after another subcommand
+    expect(parseCli(["accounts", "--help"]).command).toBe("help");
   });
 
   it("parses --relays, --allow-writes, --account", () => {
@@ -39,5 +53,17 @@ describe("parseCli", () => {
     expect(splitRelays(" wss://a , , wss://b ")).toEqual(["wss://a", "wss://b"]);
     expect(splitRelays(undefined)).toBeUndefined();
     expect(splitRelays("")).toBeUndefined();
+  });
+});
+
+describe("helpText", () => {
+  it("lists every command and the main flags", () => {
+    const text = helpText();
+    for (const cmd of ["run", "login", "logout", "whoami", "accounts", "switch", "help"]) {
+      expect(text).toContain(cmd);
+    }
+    expect(text).toContain("--allow-writes");
+    expect(text).toContain("--account");
+    expect(text).toContain("FORMSTR_MCP_NCRYPTSEC_PASSPHRASE");
   });
 });

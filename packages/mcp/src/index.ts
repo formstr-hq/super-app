@@ -1,9 +1,9 @@
-import { doLogin, doLogout, listAccounts, whoami } from "./auth/login";
+import { doLogin, doLogout, doSwitch, listAccounts, whoami } from "./auth/login";
 import { buildMcpSigner } from "./auth/mcpSigner";
 import { createPatchedPool } from "./auth/pool";
 import { createTerminalIo, printQr } from "./auth/terminal";
 import { bootstrap } from "./bootstrap";
-import { parseCli, type Command } from "./cli";
+import { parseCli, helpText, type Command } from "./cli";
 import { resolveConfig } from "./config";
 import { startStdio } from "./server";
 
@@ -98,6 +98,19 @@ async function main(): Promise<Command> {
       }
       return cli.command;
     }
+    case "switch": {
+      if (!cli.target) {
+        throw new Error(
+          "Usage: formstr-mcp switch <npub|hex>. Run `formstr-mcp accounts` to list them.",
+        );
+      }
+      const account = await doSwitch(await buildMcpSigner(), cli.target);
+      console.error(`formstr-mcp: active account is now ${account.npub} (${account.method}).`);
+      return cli.command;
+    }
+    case "help":
+      console.error(helpText());
+      return cli.command;
     case "run":
     default:
       await runServer(cli);
