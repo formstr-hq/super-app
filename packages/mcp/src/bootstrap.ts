@@ -117,24 +117,7 @@ async function selectAccount(signer: Signer, requested?: string): Promise<Stored
 
 async function unlock(signer: Signer, account: StoredAccount, deps: BootstrapDeps): Promise<void> {
   if (account.method === "ncryptsec") {
-    if (!account.ncryptsec) {
-      throw new Error(
-        "Stored ncryptsec account is missing its encrypted key. Run `formstr-mcp login`.",
-      );
-    }
-    const passphrase =
-      deps.passphrase ??
-      process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE ??
-      (deps.promptPassphrase
-        ? await deps.promptPassphrase("Passphrase to unlock your key: ")
-        : undefined);
-    if (!passphrase) {
-      throw new Error(
-        "Set FORMSTR_MCP_NCRYPTSEC_PASSPHRASE to unlock the ncryptsec account at boot " +
-          "(or run in an interactive terminal to be prompted).",
-      );
-    }
-    await signer.loginWithNcryptsec(account.ncryptsec, passphrase);
+    await unlockNcryptsec(signer, account, deps);
     return;
   }
   if (account.method === "nip46") {
@@ -159,5 +142,76 @@ async function unlock(signer: Signer, account: StoredAccount, deps: BootstrapDep
   }
   throw new Error(
     `Account method "${account.method}" cannot be unlocked headlessly — use ncryptsec or nip46.`,
+  );
+}
+
+/** How many times an interactive run will re-ask for a mistyped passphrase. */
+const MAX_PASSPHRASE_ATTEMPTS = 3;
+
+/**
+ * Unlock a local (ncryptsec) account. Order of preference:
+ *   1. the configured passphrase (`--passphrase` dep or FORMSTR_MCP_NCRYPTSEC_PASSPHRASE);
+ *   2. if that's missing or wrong AND we have a terminal, prompt (with retries);
+ *   3. otherwise throw a verbose, actionable error.
+ *
+ * `deps.promptPassphrase` is only wired up on an interactive TTY — when an MCP host
+ * spawns the server, stdin is the JSON-RPC channel and there's nobody to prompt, so
+ * the configured passphrase is required and the errors say exactly how to provide it.
+ */
+async function unlockNcryptsec(
+  signer: Signer,
+  account: StoredAccount,
+  deps: BootstrapDeps,
+): Promise<void> {
+  if (!account.ncryptsec) {
+    throw new Error(
+      `Account ${account.npub} is stored as an ncryptsec but its encrypted key is missing. ` +
+        "Re-add it with `formstr-mcp login`.",
+    );
+  }
+  const ncryptsec = account.ncryptsec;
+  const tryUnlock = async (passphrase: string): Promise<boolean> => {
+    try {
+      await signer.loginWithNcryptsec(ncryptsec, passphrase);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const configured = deps.passphrase ?? process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE;
+  if (configured) {
+    if (await tryUnlock(configured)) return;
+    if (!deps.promptPassphrase) {
+      throw new Error(
+        `The configured passphrase did not unlock account ${account.npub} — it is most likely ` +
+          "the wrong passphrase for this account (each account has its own). Set " +
+          "FORMSTR_MCP_NCRYPTSEC_PASSPHRASE to the passphrase that matches this account, or " +
+          "switch to another with `formstr-mcp switch <npub>` (a nip46/bunker account needs no " +
+          "passphrase).",
+      );
+    }
+    console.error(
+      `formstr-mcp: the configured passphrase didn't unlock ${account.npub} — enter it manually.`,
+    );
+  } else if (!deps.promptPassphrase) {
+    throw new Error(
+      `Cannot unlock account ${account.npub} (ncryptsec): no passphrase is available. ` +
+        "FORMSTR_MCP_NCRYPTSEC_PASSPHRASE is not set and this process has no interactive terminal " +
+        "to prompt on — an MCP host runs the server with stdin wired to the JSON-RPC channel. " +
+        "Fix: add FORMSTR_MCP_NCRYPTSEC_PASSPHRASE to your MCP server config's `env`, or switch to " +
+        "a nip46/bunker account with `formstr-mcp switch <npub>` (resumes with no passphrase).",
+    );
+  }
+
+  const promptPassphrase = deps.promptPassphrase!;
+  for (let attempt = 1; attempt <= MAX_PASSPHRASE_ATTEMPTS; attempt++) {
+    const passphrase = await promptPassphrase(`Passphrase to unlock ${account.npub}: `);
+    if (await tryUnlock(passphrase)) return;
+    const left = MAX_PASSPHRASE_ATTEMPTS - attempt;
+    if (left > 0) console.error(`formstr-mcp: incorrect passphrase, ${left} attempt(s) left.`);
+  }
+  throw new Error(
+    `Incorrect passphrase for account ${account.npub} after ${MAX_PASSPHRASE_ATTEMPTS} attempts.`,
   );
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { parseCli, splitRelays, helpText } from "../src/cli";
+import { parseCli, splitRelays, helpText, formatFatal } from "../src/cli";
 
 describe("parseCli", () => {
   it("defaults to the run command", () => {
@@ -65,5 +65,21 @@ describe("helpText", () => {
     expect(text).toContain("--allow-writes");
     expect(text).toContain("--account");
     expect(text).toContain("FORMSTR_MCP_NCRYPTSEC_PASSPHRASE");
+  });
+});
+
+describe("formatFatal", () => {
+  it("returns just the message by default", () => {
+    expect(formatFatal(new Error("boom"))).toBe("boom");
+  });
+
+  it("returns the full stack trace in debug mode", () => {
+    const err = new Error("boom");
+    expect(formatFatal(err, true)).toBe(err.stack);
+    expect(formatFatal(err, true)).toContain("boom");
+  });
+
+  it("stringifies non-Error throwables", () => {
+    expect(formatFatal("plain string")).toBe("plain string");
   });
 });

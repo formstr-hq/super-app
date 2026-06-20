@@ -41,6 +41,16 @@ export function parseCli(argv: string[]): Cli {
   return { command, relays, allowWrites, account, target };
 }
 
+/**
+ * Render a thrown value for the fatal handler. Normally just the message (our
+ * errors are written to be self-explanatory); in debug mode the full stack, so
+ * `FORMSTR_MCP_DEBUG=1` surfaces where a failure originated.
+ */
+export function formatFatal(err: unknown, debug = false): string {
+  if (err instanceof Error) return debug && err.stack ? err.stack : err.message;
+  return String(err);
+}
+
 export function splitRelays(value: string | undefined): string[] | undefined {
   if (!value) return undefined;
   const parts = value

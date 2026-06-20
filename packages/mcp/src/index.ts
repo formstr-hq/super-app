@@ -3,7 +3,7 @@ import { buildMcpSigner } from "./auth/mcpSigner";
 import { createPatchedPool } from "./auth/pool";
 import { createTerminalIo, printQr } from "./auth/terminal";
 import { bootstrap } from "./bootstrap";
-import { parseCli, helpText, type Command } from "./cli";
+import { parseCli, helpText, formatFatal, type Command } from "./cli";
 import { resolveConfig } from "./config";
 import { startStdio } from "./server";
 
@@ -127,6 +127,8 @@ main()
     if (command !== "run") process.exit(0);
   })
   .catch((err) => {
-    console.error("formstr-mcp: fatal:", err instanceof Error ? err.message : err);
+    const debug = !!(process.env.FORMSTR_MCP_DEBUG || process.env.DEBUG);
+    console.error("formstr-mcp: fatal:", formatFatal(err, debug));
+    if (!debug) console.error("formstr-mcp: (set FORMSTR_MCP_DEBUG=1 for a full stack trace)");
     process.exit(1);
   });

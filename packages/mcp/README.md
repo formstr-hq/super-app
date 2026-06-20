@@ -77,8 +77,13 @@ Run `formstr-mcp login` once interactively to populate the keystore, then run th
 unattended. At boot the active account is unlocked headlessly:
 
 - **ncryptsec accounts** decrypt using `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE` (the passphrase
-  you set during `login`). Required for the `run` command when the active account is local.
-- **NIP-46 accounts** reconnect from their stored session — no passphrase needed.
+  you set during `login`). On an **interactive terminal** the server instead **prompts**
+  for it (and re-prompts up to 3× on a typo) — so the env var is only _required_ when an
+  MCP host spawns the server, since then stdin is the JSON-RPC channel and there's nobody
+  to prompt. Each account has its own passphrase.
+- **NIP-46 accounts** reconnect from their stored session — no passphrase needed. This is
+  the simplest setup for a host: `formstr-mcp switch <npub>` to a bunker account and the
+  config needs no secret at all.
 
 | Variable                           | Meaning                                                           |
 | ---------------------------------- | ----------------------------------------------------------------- |
@@ -87,6 +92,7 @@ unattended. At boot the active account is unlocked headlessly:
 | `FORMSTR_MCP_KEYSTORE`             | force `file` or `keychain` backend (optional)                     |
 | `FORMSTR_MCP_CONFIG_DIR`           | keystore directory (default `~/.config/formstr-mcp`)              |
 | `FORMSTR_RELAYS`                   | comma-separated relay override (optional)                         |
+| `FORMSTR_MCP_DEBUG`                | print full stack traces on fatal errors (set to `1`)              |
 
 CLI flags: `--relays <wss://a,wss://b>`, `--allow-writes`, `--account <npub|hex>`.
 There is no plaintext-nsec path — a raw key is never read from env, flags, or a config file.

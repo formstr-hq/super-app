@@ -9,6 +9,7 @@ import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
 import { describe, it, expect, vi } from "vitest";
 
 import {
+  describeBunkerError,
   doLogin,
   doLogout,
   doSwitch,
@@ -243,6 +244,35 @@ describe("doSwitch", () => {
     const { signer, calls } = multiAccountSigner([acctA, acctB]);
     await expect(doSwitch(signer, "npub1nope")).rejects.toThrow(/no stored account/i);
     expect(calls.switchAccount).toBeUndefined();
+  });
+});
+
+describe("describeBunkerError", () => {
+  it("explains a missing secret when the remote signer says 'no secret'", () => {
+    const msg = describeBunkerError("bunker://abc?relay=wss://r.example", new Error("no secret"));
+    expect(msg).toMatch(/secret/i);
+    expect(msg).toMatch(/nsec\.app|QR/i);
+  });
+
+  it("flags a secret-less URI even when the raw error is generic", () => {
+    const msg = describeBunkerError(
+      "bunker://abc?relay=wss://r.example",
+      new Error("connect timed out"),
+    );
+    expect(msg).toMatch(/secret/i);
+  });
+
+  it("explains an invalid bunker URI with the expected shape", () => {
+    const msg = describeBunkerError("garbage", new Error("@formstr/signer: invalid bunker URI"));
+    expect(msg).toMatch(/bunker:\/\/<pubkey>/);
+  });
+
+  it("preserves the raw signer error for context when the secret is present", () => {
+    const msg = describeBunkerError(
+      "bunker://abc?relay=wss://r.example&secret=tok",
+      new Error("weird relay failure"),
+    );
+    expect(msg).toMatch(/weird relay failure/);
   });
 });
 

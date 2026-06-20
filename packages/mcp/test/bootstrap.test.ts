@@ -17,8 +17,13 @@ function fakeActiveSigner(): ActiveSigner {
   };
 }
 
-/** A fake @formstr/signer that starts locked and unlocks on the matching loginWith*. */
-function fakeSigner(account: StoredAccount | null) {
+/**
+ * A fake @formstr/signer that starts locked and unlocks on the matching loginWith*.
+ * When `correctPassphrase` is given, `loginWithNcryptsec` throws on any other
+ * passphrase (modelling a real bad-passphrase decrypt failure); otherwise any
+ * passphrase succeeds.
+ */
+function fakeSigner(account: StoredAccount | null, opts: { correctPassphrase?: string } = {}) {
   let active: ActiveSigner | null = null;
   const accounts = account ? [account] : [];
   const calls: Record<string, unknown[]> = {};
@@ -33,6 +38,9 @@ function fakeSigner(account: StoredAccount | null) {
     },
     loginWithNcryptsec: async (ncryptsec: string, passphrase: string) => {
       rec("loginWithNcryptsec", ncryptsec, passphrase);
+      if (opts.correctPassphrase !== undefined && passphrase !== opts.correctPassphrase) {
+        throw new Error("invalid passphrase or corrupt ncryptsec");
+      }
       active = fakeActiveSigner();
       return account!;
     },
@@ -181,5 +189,61 @@ describe("bootstrap", () => {
     await expect(
       bootstrap({ account: "ff".repeat(32) }, depsFor(signer, { passphrase: "pw" })),
     ).rejects.toThrow(/account/i);
+  });
+});
+
+describe("bootstrap — ncryptsec passphrase handling", () => {
+  it("re-prompts on a wrong passphrase and unlocks on a later attempt", async () => {
+    const { signer, calls } = fakeSigner(ncryptsecAccount, { correctPassphrase: "right" });
+    delete process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE;
+    const answers = ["wrong-1", "right"];
+    let i = 0;
+    const promptPassphrase = vi.fn(async () => answers[i++]);
+
+    await bootstrap({}, depsFor(signer, { promptPassphrase }));
+
+    expect(promptPassphrase).toHaveBeenCalledTimes(2);
+    // the final (successful) unlock used the correct passphrase
+    expect((calls.loginWithNcryptsec.at(-1) as unknown[])[1]).toBe("right");
+  });
+
+  it("gives up with a clear 'incorrect passphrase' error after 3 attempts", async () => {
+    const { signer } = fakeSigner(ncryptsecAccount, { correctPassphrase: "right" });
+    delete process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE;
+    const promptPassphrase = vi.fn(async () => "nope");
+
+    await expect(bootstrap({}, depsFor(signer, { promptPassphrase }))).rejects.toThrow(
+      /incorrect passphrase/i,
+    );
+    expect(promptPassphrase).toHaveBeenCalledTimes(3);
+  });
+
+  it("falls back to prompting when the configured (env) passphrase is wrong on a TTY", async () => {
+    const { signer, calls } = fakeSigner(ncryptsecAccount, { correctPassphrase: "right" });
+    const promptPassphrase = vi.fn(async () => "right");
+
+    await bootstrap({}, depsFor(signer, { passphrase: "env-wrong", promptPassphrase }));
+
+    // tried the env passphrase first (failed), then prompted and succeeded
+    expect((calls.loginWithNcryptsec as unknown[][]).map((c) => c[1])).toEqual([
+      "env-wrong",
+      "right",
+    ]);
+    expect(promptPassphrase).toHaveBeenCalledTimes(1);
+  });
+
+  it("non-interactive + wrong env passphrase → verbose, actionable error (no prompt available)", async () => {
+    const { signer } = fakeSigner(ncryptsecAccount, { correctPassphrase: "right" });
+    await expect(bootstrap({}, depsFor(signer, { passphrase: "env-wrong" }))).rejects.toThrow(
+      /did not unlock|wrong passphrase|switch/i,
+    );
+  });
+
+  it("non-interactive + no passphrase → error names the env var and explains hosts can't prompt", async () => {
+    const { signer } = fakeSigner(ncryptsecAccount, { correctPassphrase: "right" });
+    delete process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE;
+    await expect(bootstrap({}, depsFor(signer))).rejects.toThrow(
+      /FORMSTR_MCP_NCRYPTSEC_PASSPHRASE/,
+    );
   });
 });
