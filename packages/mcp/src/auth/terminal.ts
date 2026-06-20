@@ -1,4 +1,5 @@
 import * as readline from "node:readline";
+import { Writable } from "node:stream";
 
 import QRCode from "qrcode";
 
@@ -17,7 +18,34 @@ export interface TerminalIo {
 }
 
 export function createTerminalIo(): TerminalIo {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+  // Route readline's output through a stream we can mute. On every keystroke
+  // readline repaints the line by writing cursor-move + clear-screen escapes
+  // (cursorTo / clearScreenDown) *straight to the output stream* — not through
+  // the echo path. So to hide a passphrase we must mute the WHOLE stream, not
+  // just the echoed characters: muting only the echo lets the clear sequence
+  // wipe the prompt while the (muted) repaint never redraws it, leaving a blank
+  // line and a process that looks hung. Letting readline paint the prompt and
+  // muting immediately after keeps the prompt on screen and the input hidden.
+  const stderr = process.stderr;
+  let muted = false;
+  const output = new Writable({
+    write(chunk, _enc, cb) {
+      if (!muted) stderr.write(chunk as Buffer | string);
+      cb();
+    },
+  });
+  // Mirror the real terminal's shape so readline's cursor/wrap math matches.
+  Object.defineProperties(output, {
+    isTTY: { get: () => stderr.isTTY },
+    columns: { get: () => stderr.columns },
+    rows: { get: () => stderr.rows },
+  });
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output,
+    terminal: Boolean(process.stdin.isTTY),
+  });
 
   return {
     prompt(question) {
@@ -25,18 +53,14 @@ export function createTerminalIo(): TerminalIo {
     },
     promptPassphrase(question) {
       return new Promise((resolve) => {
-        // Mute echo: swallow the interface's output for the duration of the read,
-        // then restore it. The prompt itself is written once up front.
-        process.stderr.write(question);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const muted = rl as any;
-        const original = muted._writeToOutput?.bind(rl);
-        muted._writeToOutput = () => {};
-        rl.question("", (answer) => {
-          muted._writeToOutput = original;
-          process.stderr.write("\n");
+        // question() paints the prompt synchronously; mute right after so the
+        // keystroke repaints (and their clear sequences) emit nothing.
+        rl.question(question, (answer) => {
+          muted = false;
+          stderr.write("\n");
           resolve(answer);
         });
+        muted = true;
       });
     },
     close() {
