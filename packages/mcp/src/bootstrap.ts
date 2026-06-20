@@ -1,5 +1,5 @@
 import { relayManager, signerManager, nostrRuntime } from "@formstr/core";
-import { hexToBytes, type Signer, type StoredAccount } from "@formstr/signer";
+import { type Signer, type StoredAccount } from "@formstr/signer";
 import type { AbstractSimplePool } from "nostr-tools/abstract-pool";
 import { useWebSocketImplementation as setWebSocketImplementation } from "nostr-tools/pool";
 import WebSocket from "ws";
@@ -126,10 +126,19 @@ async function unlock(signer: Signer, account: StoredAccount, deps: BootstrapDep
       throw new Error("Stored nip46 account is missing its session. Run `formstr-mcp login`.");
     }
     const pool = deps.pool ?? createPatchedPool();
-    await signer.loginWithBunkerUri(account.nip46.uri, {
-      clientSecretKey: hexToBytes(account.nip46.clientSecretKey),
-      pool,
-    });
+    // Silent resume: rebuild the BunkerSigner from the persisted
+    // remoteSignerPubkey + relays + clientSecretKey. We must NOT replay the
+    // pairing URI through loginWithBunkerUri — for a QR (nostrconnect://)
+    // login that URI is not a bunker:// URI and parseBunkerInput rejects it
+    // ("invalid bunker URI"). unlock() also skips the `connect` request, so
+    // there's no fresh approval prompt on every boot.
+    const active = await signer.unlock({ pool });
+    if (!active) {
+      throw new Error(
+        "Could not resume the stored nip46 session (its keys are incomplete). " +
+          "Run `formstr-mcp login` to re-pair.",
+      );
+    }
     return;
   }
   throw new Error(

@@ -1,5 +1,5 @@
 import { signerManager } from "@formstr/core";
-import { hexToBytes, type ActiveSigner, type Signer, type StoredAccount } from "@formstr/signer";
+import { type ActiveSigner, type Signer, type StoredAccount } from "@formstr/signer";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 import { bootstrap, type BootstrapDeps } from "../src/bootstrap";
@@ -41,6 +41,15 @@ function fakeSigner(account: StoredAccount | null) {
       active = fakeActiveSigner();
       return account!;
     },
+    // The 0.2.x silent-resume path. Reconstructs the runtime signer from the
+    // persisted nip46 fields (remoteSignerPubkey/relays/clientSecretKey) without
+    // re-parsing the pairing URI or re-sending `connect`.
+    unlock: async (opts: unknown) => {
+      rec("unlock", opts);
+      if (!account || account.method === "ncryptsec") return null;
+      active = fakeActiveSigner();
+      return active;
+    },
   };
   return { signer: signer as unknown as Signer, calls };
 }
@@ -57,7 +66,10 @@ const nip46Account: StoredAccount = {
   pubkey: PUBKEY,
   method: "nip46",
   nip46: {
-    uri: "bunker://remote?relay=wss://r.example",
+    // A `nostrconnect://` (QR pairing) URI — deliberately NOT a `bunker://` URI.
+    // Resuming must NOT feed this back through loginWithBunkerUri (which would
+    // throw "invalid bunker URI"); it must use the stored fields via unlock().
+    uri: "nostrconnect://abcd?relay=wss://r.example&secret=xyz",
     remoteSignerPubkey: "cd".repeat(32),
     relays: ["wss://r.example"],
     clientSecretKey: "00".repeat(32),
@@ -92,19 +104,30 @@ describe("bootstrap", () => {
     expect(pubkey).toBe(PUBKEY);
   });
 
-  it("resumes a nip46 session with the stored clientSecretKey + pool and injects as 'nip46'", async () => {
+  it("resumes a nip46 session via signer.unlock({ pool }) and injects as 'nip46'", async () => {
     const { signer, calls } = fakeSigner(nip46Account);
     const pool = { tag: "pool" } as unknown as BootstrapDeps["pool"];
     await bootstrap({}, depsFor(signer, { pool }));
 
-    const [uri, opts] = calls.loginWithBunkerUri[0] as [
-      string,
-      { clientSecretKey: Uint8Array; pool: unknown },
-    ];
-    expect(uri).toBe(nip46Account.nip46!.uri);
+    // Resume goes through unlock() with the pool — NOT loginWithBunkerUri, which
+    // would re-parse the nostrconnect:// pairing URI and throw "invalid bunker URI".
+    expect(calls.unlock).toBeDefined();
+    const [opts] = calls.unlock[0] as [{ pool: unknown }];
     expect(opts.pool).toBe(pool);
-    expect([...opts.clientSecretKey]).toEqual([...hexToBytes("00".repeat(32))]);
+    expect(calls.loginWithBunkerUri).toBeUndefined();
     expect(setActiveSpy.mock.calls[0][1]).toBe("nip46");
+  });
+
+  it("throws a re-pair hint when a nip46 session can't be resumed (incomplete keys)", async () => {
+    const incomplete: StoredAccount = {
+      ...nip46Account,
+      nip46: { ...nip46Account.nip46!, clientSecretKey: "" },
+    };
+    const { signer } = fakeSigner(incomplete);
+    // Make unlock report failure the way the real signer does for missing fields.
+    (signer as unknown as { unlock: () => Promise<null> }).unlock = async () => null;
+    const pool = { tag: "pool" } as unknown as BootstrapDeps["pool"];
+    await expect(bootstrap({}, depsFor(signer, { pool }))).rejects.toThrow(/re-?pair|login/i);
   });
 
   it("throws when an ncryptsec account has no boot passphrase", async () => {

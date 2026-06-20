@@ -3,7 +3,7 @@ import { buildMcpSigner } from "./auth/mcpSigner";
 import { createPatchedPool } from "./auth/pool";
 import { createTerminalIo, printQr } from "./auth/terminal";
 import { bootstrap } from "./bootstrap";
-import { parseCli } from "./cli";
+import { parseCli, type Command } from "./cli";
 import { resolveConfig } from "./config";
 import { startStdio } from "./server";
 
@@ -20,13 +20,18 @@ async function runServer(cli: ReturnType<typeof parseCli>): Promise<void> {
 
 async function runLogin(cli: ReturnType<typeof parseCli>): Promise<void> {
   const io = createTerminalIo();
+  // Own the pool here so we can tear it down once pairing is done. NIP-46
+  // logins (bunker + QR) open relay sockets and a live subscription on this
+  // pool; left open they keep the Node event loop alive and `login` hangs
+  // instead of returning to the shell.
+  const pool = createPatchedPool();
   try {
     const account = await doLogin({
       signer: await buildMcpSigner(),
       prompt: io.prompt,
       promptPassphrase: io.promptPassphrase,
       printQr,
-      pool: createPatchedPool(),
+      pool,
       relays: cli.relays,
     });
     console.error(
@@ -34,27 +39,32 @@ async function runLogin(cli: ReturnType<typeof parseCli>): Promise<void> {
     );
   } finally {
     io.close();
+    try {
+      pool.destroy();
+    } catch {
+      // best-effort: closing relay sockets must never mask a login result
+    }
   }
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<Command> {
   const cli = parseCli(process.argv.slice(2));
 
   switch (cli.command) {
     case "login":
       await runLogin(cli);
-      return;
+      return cli.command;
     case "logout": {
       await doLogout(await buildMcpSigner(), cli.account);
       console.error("formstr-mcp: signed out.");
-      return;
+      return cli.command;
     }
     case "whoami": {
       const who = whoami(await buildMcpSigner());
       console.error(
         who ? `formstr-mcp: ${who.npub} (${who.method})` : "formstr-mcp: not signed in.",
       );
-      return;
+      return cli.command;
     }
     case "accounts": {
       const signer = await buildMcpSigner();
@@ -62,21 +72,30 @@ async function main(): Promise<void> {
       const accounts = listAccounts(signer);
       if (accounts.length === 0) {
         console.error("formstr-mcp: no accounts. Run `formstr-mcp login`.");
-        return;
+        return cli.command;
       }
       for (const a of accounts) {
         const marker = active && a.pubkey === active.pubkey ? "* " : "  ";
         console.error(`${marker}${a.npub} (${a.method})`);
       }
-      return;
+      return cli.command;
     }
     case "run":
     default:
       await runServer(cli);
+      return "run";
   }
 }
 
-main().catch((err) => {
-  console.error("formstr-mcp: fatal:", err instanceof Error ? err.message : err);
-  process.exit(1);
-});
+main()
+  .then((command) => {
+    // One-shot subcommands (login/logout/whoami/accounts) must return to the
+    // shell. Force-exit so any relay sockets / NIP-46 subscription a login
+    // opened can't keep the event loop alive. `run` is the long-lived stdio
+    // server (kept alive by stdin) and must NOT exit here.
+    if (command !== "run") process.exit(0);
+  })
+  .catch((err) => {
+    console.error("formstr-mcp: fatal:", err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
