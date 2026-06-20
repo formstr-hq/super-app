@@ -1,6 +1,6 @@
 import { fetchProfile, type NostrProfile } from "@formstr/agent/services/profile";
 import type { NostrSigner, SignerMethod } from "@formstr/core";
-import { signerManager } from "@formstr/core";
+import { nostrRuntime, signerManager } from "@formstr/core";
 import { encryptSecretKey, hexToBytes, type StoredAccount } from "@formstr/signer";
 import { nip19 } from "nostr-tools";
 import { create } from "zustand";
@@ -156,9 +156,11 @@ export const useAuthStore = create<AuthStore>((set, get) => {
           if (active.method === "extension") {
             await appSigner.loginWithExtension();
           } else if (active.method === "nip46" && active.nip46) {
-            await appSigner.loginWithBunkerUri(active.nip46.uri, {
-              clientSecretKey: hexToBytes(active.nip46.clientSecretKey),
-            });
+            // Silent resume: rebuild the BunkerSigner from persisted state via the
+            // shared relay pool. Must NOT replay nip46.uri through loginWithBunkerUri —
+            // a QR (nostrconnect://) login stores a non-bunker URI that parseBunkerInput
+            // rejects ("invalid bunker URI"); unlock() also skips a re-approval prompt.
+            await appSigner.unlock({ pool: nostrRuntime.pool });
           }
         } catch {
           // Stay locked; the user can unlock manually.
@@ -211,9 +213,8 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       } else if (account.method === "extension") {
         await appSigner.loginWithExtension();
       } else if (account.method === "nip46" && account.nip46) {
-        await appSigner.loginWithBunkerUri(account.nip46.uri, {
-          clientSecretKey: hexToBytes(account.nip46.clientSecretKey),
-        });
+        // Silent resume via the shared relay pool — see init()'s auto-unlock note.
+        await appSigner.unlock({ pool: nostrRuntime.pool });
       }
     },
 
