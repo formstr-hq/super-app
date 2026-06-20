@@ -130,12 +130,32 @@ describe("bootstrap", () => {
     await expect(bootstrap({}, depsFor(signer, { pool }))).rejects.toThrow(/re-?pair|login/i);
   });
 
-  it("throws when an ncryptsec account has no boot passphrase", async () => {
+  it("throws when an ncryptsec account has no boot passphrase and no prompt", async () => {
     const { signer } = fakeSigner(ncryptsecAccount);
     delete process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE;
     await expect(bootstrap({}, depsFor(signer))).rejects.toThrow(
       /FORMSTR_MCP_NCRYPTSEC_PASSPHRASE/,
     );
+  });
+
+  it("prompts for the passphrase interactively when none is configured", async () => {
+    const { signer, calls } = fakeSigner(ncryptsecAccount);
+    delete process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE;
+    const promptPassphrase = vi.fn(async () => "typed-pw");
+    await bootstrap({}, depsFor(signer, { promptPassphrase }));
+
+    expect(promptPassphrase).toHaveBeenCalledTimes(1);
+    // The prompted passphrase (not the env var) unlocks the ncryptsec account.
+    expect(calls.loginWithNcryptsec[0]).toEqual(["ncryptsec1abc", "typed-pw"]);
+  });
+
+  it("prefers the env passphrase over prompting", async () => {
+    const { signer, calls } = fakeSigner(ncryptsecAccount);
+    const promptPassphrase = vi.fn(async () => "typed-pw");
+    await bootstrap({}, depsFor(signer, { passphrase: "env-pw", promptPassphrase }));
+
+    expect(promptPassphrase).not.toHaveBeenCalled();
+    expect(calls.loginWithNcryptsec[0]).toEqual(["ncryptsec1abc", "env-pw"]);
   });
 
   it("throws a friendly error when no account exists", async () => {

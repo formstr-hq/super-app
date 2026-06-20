@@ -53,6 +53,13 @@ export interface BootstrapDeps {
   pool?: AbstractSimplePool;
   /** ncryptsec boot passphrase; defaults to `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE`. */
   passphrase?: string;
+  /**
+   * Interactively read the ncryptsec passphrase when none is configured. Only
+   * wired up for interactive TTY runs — when an MCP host spawns the server,
+   * stdin is the JSON-RPC channel, so there's nobody to prompt and the env var
+   * is required instead.
+   */
+  promptPassphrase?: (question: string) => Promise<string>;
 }
 
 /**
@@ -60,8 +67,9 @@ export interface BootstrapDeps {
  * `@formstr/signer`, select + unlock the active account, and inject the unlocked
  * signer into core's `signerManager`. Returns the account that was activated.
  *
- * Unlock is headless: ncryptsec accounts use `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE`;
- * nip46 accounts resume from their stored client session.
+ * Unlock: ncryptsec accounts use `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE` (or, on an
+ * interactive run, `deps.promptPassphrase`); nip46 accounts resume from their
+ * stored client session.
  */
 export async function bootstrap(
   input: BootstrapInput,
@@ -112,10 +120,16 @@ async function unlock(signer: Signer, account: StoredAccount, deps: BootstrapDep
         "Stored ncryptsec account is missing its encrypted key. Run `formstr-mcp login`.",
       );
     }
-    const passphrase = deps.passphrase ?? process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE;
+    const passphrase =
+      deps.passphrase ??
+      process.env.FORMSTR_MCP_NCRYPTSEC_PASSPHRASE ??
+      (deps.promptPassphrase
+        ? await deps.promptPassphrase("Passphrase to unlock your key: ")
+        : undefined);
     if (!passphrase) {
       throw new Error(
-        "Set FORMSTR_MCP_NCRYPTSEC_PASSPHRASE to unlock the ncryptsec account at boot.",
+        "Set FORMSTR_MCP_NCRYPTSEC_PASSPHRASE to unlock the ncryptsec account at boot " +
+          "(or run in an interactive terminal to be prompted).",
       );
     }
     await signer.loginWithNcryptsec(account.ncryptsec, passphrase);

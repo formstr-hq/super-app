@@ -9,7 +9,25 @@ import { startStdio } from "./server";
 
 async function runServer(cli: ReturnType<typeof parseCli>): Promise<void> {
   const cfg = resolveConfig(cli, process.env);
-  const account = await bootstrap({ account: cfg.account, relays: cfg.relays });
+  // On an interactive terminal, prompt for the ncryptsec passphrase when it
+  // isn't set in the environment. When an MCP host spawns the server, stdin is
+  // the JSON-RPC channel (not a TTY) — there's nobody to prompt — so we skip it
+  // and the env var stays required. The terminal IO is created lazily so it only
+  // ever touches stdin when a passphrase is genuinely needed (not for nip46 or
+  // env-var unlocks), then closes before startStdio takes over stdin.
+  const deps = process.stdin.isTTY
+    ? {
+        promptPassphrase: async (question: string): Promise<string> => {
+          const io = createTerminalIo();
+          try {
+            return await io.promptPassphrase(question);
+          } finally {
+            io.close();
+          }
+        },
+      }
+    : {};
+  const account = await bootstrap({ account: cfg.account, relays: cfg.relays }, deps);
   console.error(
     `formstr-mcp: signed in as ${account.npub} (${account.method}), ` +
       `writes ${cfg.allowWrites ? "ENABLED" : "disabled"}`,
