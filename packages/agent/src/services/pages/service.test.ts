@@ -260,6 +260,22 @@ describe("doc metadata (kind 34579) — upstream read-merge-write", () => {
     expect(JSON.parse(written[1])).toEqual({ tags: ["a"] }); // title removed
   });
 
+  it("always writes a tags array even when the patch omits it (upstream DocMetadata.tags is required)", async () => {
+    // No existing metadata for this address → merged object would otherwise have
+    // no `tags` key, which makes pages.formstr.app's DocMetadataContext throw on
+    // `meta.tags.length` and lose ALL doc titles/tags/sharedAs.
+    routeQuerySync({ metadata: () => [] });
+    let written = "";
+    (nip44SelfEncrypt as any).mockImplementation((_s: unknown, plain: string) => {
+      written = plain;
+      return Promise.resolve("enc");
+    });
+    await saveDocMetadata(addr, { viewKey: "vk" });
+    const obj = JSON.parse(written);
+    expect(Array.isArray(obj.tags)).toBe(true);
+    expect(obj).toEqual({ tags: [], viewKey: "vk" });
+  });
+
   it("saveDocMetadata preserves UNKNOWN upstream keys on rewrite", async () => {
     routeQuerySync({ metadata: () => [metaEvent(addr, "ct-meta")] });
     (nip44SelfDecrypt as any).mockResolvedValue(JSON.stringify({ futureField: 42 }));
@@ -269,7 +285,7 @@ describe("doc metadata (kind 34579) — upstream read-merge-write", () => {
       return Promise.resolve("enc");
     });
     await saveDocMetadata(addr, { viewKey: "vk" });
-    expect(JSON.parse(written)).toEqual({ futureField: 42, viewKey: "vk" });
+    expect(JSON.parse(written)).toEqual({ futureField: 42, viewKey: "vk", tags: [] });
   });
 
   it("fetchDocTags returns a map of address -> tags", async () => {
@@ -349,7 +365,7 @@ describe("shared docs — kind-34579 viewKey entries (upstream model)", () => {
       return Promise.resolve("enc");
     });
     await addSharedPage([shared, "vk1", "ek1"]);
-    expect(JSON.parse(written)).toEqual({ viewKey: "vk1", editKey: "ek1" });
+    expect(JSON.parse(written)).toEqual({ viewKey: "vk1", editKey: "ek1", tags: [] });
     const e = (nostrRuntime.publish as any).mock.calls[0][1];
     expect(e.kind).toBe(PAGES_KINDS.docMetadata);
     expect(e.tags).toContainEqual(["d", shared]);
@@ -367,7 +383,7 @@ describe("sharePage — upstream bookkeeping", () => {
     });
     const res = await sharePage({ address: original, content: "# T\n\nx", canEdit: false });
     const metaWrite = written.map((w) => JSON.parse(w)).find((o) => o.viewKey);
-    expect(metaWrite).toEqual({ viewKey: res.viewKey });
+    expect(metaWrite).toEqual({ viewKey: res.viewKey, tags: [] });
   });
 
   it("edit-share marks the ORIGINAL doc with sharedAs (owner's doc)", async () => {
@@ -379,8 +395,8 @@ describe("sharePage — upstream bookkeeping", () => {
     const res = await sharePage({ address: original, content: "x", canEdit: true });
     const sharedAddress = `${PAGES_KINDS.document}:${pubkeyFromHex(res.editKey!)}:d1`;
     const parsed = written.map((w) => JSON.parse(w));
-    expect(parsed).toContainEqual({ viewKey: res.viewKey, editKey: res.editKey });
-    expect(parsed).toContainEqual({ sharedAs: sharedAddress });
+    expect(parsed).toContainEqual({ viewKey: res.viewKey, editKey: res.editKey, tags: [] });
+    expect(parsed).toContainEqual({ sharedAs: sharedAddress, tags: [] });
     expect(res.address).toBe(sharedAddress);
   });
 
