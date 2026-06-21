@@ -37,6 +37,7 @@ vi.mock("./viewKey", async (importOriginal) => {
 
 import {
   addEventToCalendarList,
+  createCalendarEvent,
   createCalendarList,
   deleteCalendarEvent,
   fetchCalendarEventByCoordinate,
@@ -465,6 +466,82 @@ describe("createCalendarList", () => {
     expect(list.title).toBe("My Calendar");
     expect(list.color).toBe("#ff0000");
     expect(list.eventId).toBe("eid");
+  });
+});
+
+describe("createCalendarEvent — list-linking so calendar.formstr.app can discover it", () => {
+  const draft = (over: Record<string, unknown> = {}) => ({
+    title: "Sync me",
+    description: "",
+    begin: new Date("2026-06-10T10:00:00Z"),
+    end: new Date("2026-06-10T11:00:00Z"),
+    isPrivate: true,
+    ...over,
+  });
+
+  const list = (over: Partial<CalendarList> = {}): CalendarList => ({
+    id: "c1",
+    eventId: "le1",
+    title: "Work",
+    description: "",
+    color: "#334155",
+    eventRefs: [],
+    createdAt: 0,
+    isVisible: true,
+    ...over,
+  });
+
+  it("private event links into the FIRST existing calendar with a viewKey-carrying ref", async () => {
+    const result = await createCalendarEvent(draft(), { calendars: [list({ id: "c1" })] });
+
+    expect(result.event.kind).toBe(CALENDAR_KINDS.privateEvent);
+    expect(result.calendar?.id).toBe("c1");
+    // The ref carries the per-event viewKey so the standalone can decrypt it.
+    expect(result.calendar?.eventRefs).toContainEqual([
+      `${result.event.kind}:${result.event.user}:${result.event.id}`,
+      result.event.relayHint ?? "",
+      result.event.viewKey ?? "",
+    ]);
+    expect(result.event.viewKey).toMatch(/^nsec1/);
+  });
+
+  it("private event uses the explicitly chosen calendarId over the first list", async () => {
+    const result = await createCalendarEvent(draft({ calendarId: "c2" }), {
+      calendars: [list({ id: "c1" }), list({ id: "c2", title: "Personal" })],
+    });
+    expect(result.calendar?.id).toBe("c2");
+  });
+
+  it("private event with NO calendars auto-creates a default 'My Calendar' and links it", async () => {
+    const result = await createCalendarEvent(draft(), { calendars: [] });
+    expect(result.calendar).toBeDefined();
+    expect(result.calendar?.title).toBe("My Calendar");
+    expect(result.calendar?.eventRefs).toHaveLength(1);
+  });
+
+  it("private event fetches calendar lists when none are passed in", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([]); // no existing lists
+    const result = await createCalendarEvent(draft());
+    // Fell through to auto-create since the fetch returned nothing.
+    expect(result.calendar?.title).toBe("My Calendar");
+  });
+
+  it("public event is NOT auto-listed (public refs can't sync to calendar.formstr.app)", async () => {
+    const result = await createCalendarEvent(draft({ isPrivate: false }), { calendars: [list()] });
+    expect(result.event.kind).toBe(CALENDAR_KINDS.publicEvent);
+    expect(result.calendar).toBeUndefined();
+  });
+
+  it("public event IS listed when a calendarId is explicitly chosen", async () => {
+    const result = await createCalendarEvent(draft({ isPrivate: false, calendarId: "c1" }), {
+      calendars: [list({ id: "c1" })],
+    });
+    expect(result.calendar?.id).toBe("c1");
+    expect(result.calendar?.eventRefs).toContainEqual([
+      `${result.event.kind}:${result.event.user}:${result.event.id}`,
+      result.event.relayHint ?? "",
+      "",
+    ]);
   });
 });
 

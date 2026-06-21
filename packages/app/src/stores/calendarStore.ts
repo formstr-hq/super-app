@@ -120,52 +120,28 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   async createEvent(draft) {
     set({ error: null });
     try {
-      // A private event is encrypted with a per-event viewKey that only survives
-      // a refresh if it is stored in a calendar list's eventRef (that is also how
-      // calendar.formstr.app discovers + decrypts it). So a private event MUST
-      // land in a calendar: use the chosen one, else the first existing calendar,
-      // else auto-create a default. Public events stay self-decryptable and only
-      // link when a calendar is explicitly chosen.
-      let targetCalendarId = draft.calendarId;
-      if (draft.isPrivate && !targetCalendarId) {
-        const existing = get().calendars[0];
-        targetCalendarId = existing
-          ? existing.id
-          : (await get().createCalendar("My Calendar", "#334155")).id;
-      }
-
-      const event = draft.isPrivate
-        ? await calendarService.publishPrivateCalendarEvent(
-            { ...draft, calendarId: targetCalendarId },
-            targetCalendarId ?? "default",
-          )
-        : await calendarService.publishPublicCalendarEvent(draft);
+      // Publish + calendar-list linking is owned by the shared agent service
+      // (createCalendarEvent) so the super-app and the MCP `create_calendar_event`
+      // tool behave identically: a private event lands in a calendar list (the
+      // only way calendar.formstr.app discovers + decrypts it). Busy-range
+      // publishing stays here — it is gated on an app-only user setting.
+      const { event, calendar } = await calendarService.createCalendarEvent(draft, {
+        calendars: get().calendars,
+      });
 
       publishBusyRangeFor(event);
 
-      // Add event ref to the resolved calendar list.
-      // The ref is the bare coordinate (the codec re-adds the "a" tag prefix);
-      // private events carry their shared viewKey so invitees can decrypt.
-      if (targetCalendarId) {
-        const calendar = get().calendars.find((c) => c.id === targetCalendarId);
-        if (calendar) {
-          const ref: string[] = [
-            `${event.kind}:${event.user}:${event.id}`,
-            event.relayHint ?? "",
-            event.viewKey ?? "",
-          ];
-          try {
-            const saved = await calendarService.addEventToCalendarList(calendar, ref);
-            set((state) => ({
-              calendars: state.calendars.map((c) => (c.id === saved.id ? saved : c)),
-            }));
-          } catch {
-            // Calendar list update failed — event is still created, just not linked
-          }
-        }
-      }
-
-      set((state) => ({ events: [...state.events, event] }));
+      set((state) => {
+        const events = [...state.events, event];
+        if (!calendar) return { events };
+        const exists = state.calendars.some((c) => c.id === calendar.id);
+        return {
+          events,
+          calendars: exists
+            ? state.calendars.map((c) => (c.id === calendar.id ? calendar : c))
+            : [...state.calendars, calendar],
+        };
+      });
       return event;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to create event" });
