@@ -32,8 +32,8 @@ npm registry for a newer release:
 
 ```text
 $ formstr-mcp version
-@formstr/mcp 0.3.2
-Update available: 0.4.0 (you have 0.3.2).
+@formstr/mcp 0.4.0
+Update available: 0.5.0 (you have 0.4.0).
 Upgrade: npm install -g @formstr/mcp@latest
 Or just re-run via: npx -y @formstr/mcp@latest
 ```
@@ -41,7 +41,7 @@ Or just re-run via: npx -y @formstr/mcp@latest
 The update check is best-effort — if you're offline or the registry is unreachable it
 prints the installed version and a note, never an error. If you run the server via
 `npx -y @formstr/mcp` you already get the latest published version on each launch; pin a
-version (`@formstr/mcp@0.3.2`) in your host config if you'd rather control upgrades.
+version (`@formstr/mcp@0.4.0`) in your host config if you'd rather control upgrades.
 
 ## Sign-in
 
