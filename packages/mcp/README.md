@@ -119,6 +119,52 @@ one is **active** (set it with `formstr-mcp switch <npub>`).
 > account instead — it reconnects from its stored session and needs **no** passphrase, so
 > the config can stay secret-free. Run `formstr-mcp switch <npub>` to a bunker account.
 
+## Using with Ollama (local models)
+
+Ollama isn't an MCP client — it just runs the model. To drive this server with a **local**
+model you need an MCP **host** that uses Ollama as its backend. A good, actively-maintained
+option is [**Goose**](https://block.github.io/goose/) (open-source agent by Block; CLI +
+desktop), which has both first-class Ollama support and native stdio MCP extensions.
+
+**1. Pull a tool-calling-capable model and start Ollama:**
+
+```bash
+ollama pull qwen2.5     # llama3.1 / 3.2, mistral, … also work — the model MUST support tools
+ollama serve            # serves the API on http://localhost:11434
+```
+
+A model **without** tool/function-calling support can chat but can't invoke this server's
+tools (`list_forms`, `create_form`, …), so don't pick one of those.
+
+**2. Sign in to formstr once** (stores your key in the keystore):
+
+```bash
+npx -y @formstr/mcp login
+```
+
+**3. Point Goose at Ollama** — `goose configure` → _Configure Providers_ → **Ollama**, then
+enter the host (`http://localhost:11434`) and pick your model.
+
+**4. Add this server as an extension** — `goose configure` → _Add Extension_ → **Command-line
+Extension**, then answer the prompts:
+
+| Prompt                | Value                                                         |
+| --------------------- | ------------------------------------------------------------- |
+| Name                  | `formstr`                                                     |
+| Command               | `npx -y @formstr/mcp` (add `--allow-writes` to enable writes) |
+| Timeout (secs)        | `300`                                                         |
+| Environment variables | `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE` = _your passphrase_        |
+
+Goose passes that env var to the server when it spawns it (so it unlocks headlessly), and
+saves the extension to `~/.config/goose/config.yaml`. Then just run `goose` (or `goose
+session`) and ask it to work with your forms.
+
+> **Bunker accounts need no passphrase** — skip the env-variable step and `formstr-mcp switch
+<npub>` to a NIP-46 account (see the tip above); the extension then stores no secret.
+
+The same approach works with any other Ollama-backed MCP host: point it at
+`npx -y @formstr/mcp` and supply the passphrase through that host's env mechanism.
+
 ## Headless / unattended
 
 Run `formstr-mcp login` once interactively to populate the keystore, then run the server
