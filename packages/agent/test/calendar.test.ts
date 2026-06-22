@@ -242,6 +242,33 @@ describe("calendar tools", () => {
     expect(hit.ok).toBeTruthy();
   });
 
+  it("get_calendar_event recovers a private event's viewKey so it decrypts", async () => {
+    // Without the viewKey a private event comes back "Untitled" with no
+    // times/participants — get must look it up like update/attach/rsvp do.
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    (calendar.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+      id: "d",
+      title: "Match",
+      kind: 32678,
+      user: "pk",
+      begin: 1,
+      end: 2,
+      location: [],
+      participants: [],
+      isPrivate: true,
+      repeat: { rrule: null },
+    });
+    const res = await tools.get("get_calendar_event")!.handler({ coordinate: "32678:pk:d" });
+    expect(calendar.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d");
+    expect(calendar.fetchCalendarEventByCoordinate).toHaveBeenCalledWith(
+      "32678:pk:d",
+      "nsec1fromlist",
+    );
+    expect(res.ok).toBeTruthy();
+  });
+
   it("list_calendars and create_calendar are available without writes", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });

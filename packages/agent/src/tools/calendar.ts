@@ -137,7 +137,10 @@ function buildCalendarTools(): ToolEntry[] {
       inputSchema: { coordinate: z.string() },
     },
     async ({ coordinate }) => {
-      const event = await calendar.fetchCalendarEventByCoordinate(coordinate);
+      // Recover the per-event viewKey from the user's lists so a private event
+      // decrypts (without it it comes back "Untitled" with no times/participants).
+      const viewKey = await calendar.lookupEventViewKey(coordinate);
+      const event = await calendar.fetchCalendarEventByCoordinate(coordinate, viewKey);
       if (!event) return fail(`No event found for ${coordinate}.`, "NOT_FOUND");
       return ok(`Event "${event.title}".`, {
         event: {
