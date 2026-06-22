@@ -515,8 +515,17 @@ async function appendToMyFormsList(
   if (existing?.content) {
     try {
       entries = await decryptListEntries(signer, userPubkey, existing.content);
-    } catch {
-      entries = [];
+    } catch (err) {
+      // The list exists but we couldn't read it (e.g. a transient nip46 bunker
+      // decrypt failure). Treating that as an empty list would republish a
+      // 14083 holding ONLY the new form — destroying every previously-saved
+      // form. Bail instead, exactly like deleteForm. The form's 30168 is
+      // already published, so the caller can retry the list-add.
+      throw new Error(
+        `Could not read your existing forms list to add this form, so it was left unchanged ` +
+          `to avoid losing your other forms. The form itself was published — retry to add it. ` +
+          `(${err instanceof Error ? err.message : String(err)})`,
+      );
     }
   }
 

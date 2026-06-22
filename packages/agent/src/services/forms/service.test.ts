@@ -101,6 +101,38 @@ describe("createForm — plain form", () => {
     );
   });
 
+  it("does NOT clobber the my-forms list when the existing one can't be decrypted", async () => {
+    // Regression: a transient decrypt failure (common with a flaky nip46 bunker)
+    // must never cause the 14083 list to be rewritten with only the new form —
+    // that destroys every previously-saved form. Match deleteForm: bail safely.
+    (nostrRuntime.querySync as any).mockResolvedValue([
+      {
+        id: "list",
+        pubkey: "aabbccdd",
+        kind: 14083,
+        created_at: 1000,
+        sig: "s",
+        content: "enc_list_unreadable",
+        tags: [],
+      },
+    ]);
+    (nip44SelfDecrypt as any).mockRejectedValue(new Error("bunker timeout"));
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
+
+    await expect(
+      createForm({
+        name: "Survey",
+        fields: [{ id: "f1", type: "shortText" as any, label: "Name" }],
+      }),
+    ).rejects.toThrow();
+
+    // The 30168 may have been published, but the 14083 list must NOT be rewritten.
+    const listPublishes = (nostrRuntime.publish as any).mock.calls.filter(
+      (c: any[]) => c[1]?.kind === 14083,
+    );
+    expect(listPublishes).toHaveLength(0);
+  });
+
   it("always tags plaintext forms public and writes per-relay relay tags (upstream parity)", async () => {
     (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
 
