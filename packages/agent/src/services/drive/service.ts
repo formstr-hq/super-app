@@ -69,7 +69,9 @@ export async function uploadFile(params: UploadFileParams): Promise<FileMetadata
     name: params.file.name,
     hash: result.sha256,
     size: params.file.size,
-    type: params.file.type,
+    // Browsers report "" for unknown MIME types; coalesce exactly as upstream
+    // formstr-drive's uploadPreparedFile does so the on-wire metadata matches.
+    type: params.file.type || "application/octet-stream",
     folder: params.folder ?? "/",
     uploadedAt: Date.now(),
     server,

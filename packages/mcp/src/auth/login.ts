@@ -101,7 +101,44 @@ async function loginImport(deps: LoginDeps): Promise<void> {
 
 async function loginBunker(deps: LoginDeps): Promise<void> {
   const uri = (await deps.prompt("Paste the bunker:// URI: ")).trim();
-  await deps.signer.loginWithBunkerUri(uri, { pool: deps.pool, perms: NIP46_PERMS });
+  try {
+    await deps.signer.loginWithBunkerUri(uri, { pool: deps.pool, perms: NIP46_PERMS });
+  } catch (err) {
+    throw new Error(describeBunkerError(uri, err));
+  }
+}
+
+/**
+ * Turn a raw bunker-login failure into an actionable message. The single most
+ * common cause is a URI with no `secret=` token (the remote signer then rejects
+ * the `connect` with "no secret"), so that case is called out explicitly.
+ */
+export function describeBunkerError(uri: string, err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const hasSecret = /[?&]secret=/.test(uri);
+  const expected = "`bunker://<pubkey>?relay=wss://…&secret=<token>`";
+
+  if (/no secret/i.test(raw) || !hasSecret) {
+    return (
+      "Could not pair with this bunker URI" +
+      (hasSecret ? "" : " — it has no `secret=` token") +
+      `, so the remote signer rejected the connection. A pairing URI must look like ${expected}. ` +
+      "Copy the FULL connection URI (including `&secret=…`) from your signer app (e.g. nsec.app → " +
+      "Connect app), and make sure nothing was truncated — the secret is often one-time, so " +
+      "generate a fresh connection if needed. Or use the QR flow: `formstr-mcp login` → `q`. " +
+      `(signer reported: ${raw})`
+    );
+  }
+  if (/invalid bunker uri/i.test(raw)) {
+    return `That doesn't look like a valid bunker URI. Expected ${expected}. (parser reported: ${raw})`;
+  }
+  if (/at least one relay/i.test(raw)) {
+    return `This bunker URI has no relays. Expected ${expected}. (reported: ${raw})`;
+  }
+  return (
+    `Bunker login failed: ${raw}. Check that the URI includes a \`secret=\` token and at least ` +
+    "one `relay=`, that the remote signer is online, or try the QR flow (`formstr-mcp login` → `q`)."
+  );
 }
 
 async function loginNostrConnect(deps: LoginDeps, log: (m: string) => void): Promise<void> {
@@ -128,4 +165,29 @@ export function whoami(signer: Signer): StoredAccount | null {
 /** Every persisted account. */
 export function listAccounts(signer: Signer): StoredAccount[] {
   return signer.listAccounts();
+}
+
+/**
+ * Resolve a stored account by either its `npub` or its hex `pubkey`. Returns
+ * null when nothing matches. `accounts` shows npubs, so users naturally pass an
+ * npub; the signer's switch/select APIs key on the hex pubkey — this bridges both.
+ */
+export function findAccount(accounts: StoredAccount[], target: string): StoredAccount | null {
+  return accounts.find((a) => a.npub === target || a.pubkey === target) ?? null;
+}
+
+/**
+ * Persist a new active account, selected by npub or hex pubkey. The MCP server
+ * (when not pinned with `--account`) boots whichever account is active, so this
+ * is how you point it at a different identity. Returns the now-active account.
+ */
+export async function doSwitch(signer: Signer, target: string): Promise<StoredAccount> {
+  const match = findAccount(listAccounts(signer), target);
+  if (!match) {
+    throw new Error(
+      `No stored account matching "${target}". Run \`formstr-mcp accounts\` to list them.`,
+    );
+  }
+  await signer.switchAccount(match.pubkey);
+  return match;
 }

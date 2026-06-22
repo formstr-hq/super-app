@@ -21,7 +21,9 @@ npx -y @formstr/mcp login
 ```
 
 Subcommands: `formstr-mcp login` · `formstr-mcp whoami` · `formstr-mcp accounts` ·
-`formstr-mcp logout` · `formstr-mcp` (run the stdio server, the default).
+`formstr-mcp switch <npub>` · `formstr-mcp logout` · `formstr-mcp help` ·
+`formstr-mcp` (run the stdio server, the default). Run `formstr-mcp help` (or `-h`) for
+the full usage.
 
 ## Sign-in
 
@@ -39,7 +41,11 @@ offers four methods:
 Linux Secret Service via `@napi-rs/keyring`). On hosts without a keychain (e.g. headless
 Linux), set `FORMSTR_MCP_PASSPHRASE` to use an AES-256-GCM encrypted file at
 `~/.config/formstr-mcp/keystore.enc` (mode `0600`). Multiple identities are supported
-(`formstr-mcp accounts` lists them); select one at boot with `--account <pubkey>`.
+(`formstr-mcp accounts` lists them). Change the persisted active account with
+`formstr-mcp switch <npub>`, or pick one for a single boot with `--account <npub>`; the
+server follows the active account when neither is given, so switching accounts just works.
+Both `switch` and `--account` accept either the `npub` (as shown by `accounts`) or the hex
+pubkey.
 
 **Defense in depth:** even on the encrypted-file fallback the stored key is _also_ NIP-49
 encrypted, so recovering it needs **both** the keystore **and** the unlock passphrase.
@@ -71,8 +77,13 @@ Run `formstr-mcp login` once interactively to populate the keystore, then run th
 unattended. At boot the active account is unlocked headlessly:
 
 - **ncryptsec accounts** decrypt using `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE` (the passphrase
-  you set during `login`). Required for the `run` command when the active account is local.
-- **NIP-46 accounts** reconnect from their stored session — no passphrase needed.
+  you set during `login`). On an **interactive terminal** the server instead **prompts**
+  for it (and re-prompts up to 3× on a typo) — so the env var is only _required_ when an
+  MCP host spawns the server, since then stdin is the JSON-RPC channel and there's nobody
+  to prompt. Each account has its own passphrase.
+- **NIP-46 accounts** reconnect from their stored session — no passphrase needed. This is
+  the simplest setup for a host: `formstr-mcp switch <npub>` to a bunker account and the
+  config needs no secret at all.
 
 | Variable                           | Meaning                                                           |
 | ---------------------------------- | ----------------------------------------------------------------- |
@@ -81,8 +92,9 @@ unattended. At boot the active account is unlocked headlessly:
 | `FORMSTR_MCP_KEYSTORE`             | force `file` or `keychain` backend (optional)                     |
 | `FORMSTR_MCP_CONFIG_DIR`           | keystore directory (default `~/.config/formstr-mcp`)              |
 | `FORMSTR_RELAYS`                   | comma-separated relay override (optional)                         |
+| `FORMSTR_MCP_DEBUG`                | print full stack traces on fatal errors (set to `1`)              |
 
-CLI flags: `--relays <wss://a,wss://b>`, `--allow-writes`, `--account <pubkey>`.
+CLI flags: `--relays <wss://a,wss://b>`, `--allow-writes`, `--account <npub|hex>`.
 There is no plaintext-nsec path — a raw key is never read from env, flags, or a config file.
 
 ## Forms tools

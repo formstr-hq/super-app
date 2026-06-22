@@ -213,6 +213,69 @@ export async function publishPrivateCalendarEvent(
   };
 }
 
+// ── Create event + ensure it is discoverable ────────────
+
+/**
+ * Publishes a calendar event AND links it into a calendar list (kind 32123) so
+ * calendar.formstr.app can discover it.
+ *
+ * The standalone's main view only renders events referenced (with their viewKey)
+ * in a *visible* calendar list — it no longer fetches standalone public events
+ * from relays, and it never queries events by author. So an event that is never
+ * listed is invisible there, even though the super-app (which also queries by
+ * author) shows it. This helper closes that gap and is the single source of
+ * truth shared by the app store and the MCP `create_calendar_event` tool.
+ *
+ * Calendar resolution:
+ *  - `draft.calendarId` set → use it (when present in the loaded lists)
+ *  - private, none given    → first existing list, else auto-create "My Calendar"
+ *  - public, none given     → not listed (public refs can't sync anyway)
+ *
+ * @param opts.calendars Already-loaded lists (avoids a refetch). Pass `[]` to
+ *   declare "no lists" without hitting the network; omit to fetch on demand.
+ */
+export async function createCalendarEvent(
+  draft: CalendarEventDraft,
+  opts: { calendars?: CalendarList[] } = {},
+): Promise<{ event: CalendarEvent; calendar?: CalendarList }> {
+  let calendars = opts.calendars ?? null;
+  const loadCalendars = async (): Promise<CalendarList[]> =>
+    calendars ?? (calendars = await fetchCalendarLists());
+
+  let targetCalendarId = draft.calendarId;
+  let targetCalendar: CalendarList | undefined;
+
+  if (targetCalendarId) {
+    targetCalendar = (await loadCalendars()).find((c) => c.id === targetCalendarId);
+  } else if (draft.isPrivate) {
+    // A private event's per-event viewKey only survives a refresh if it is
+    // stored in a list's eventRef (that is also how the standalone discovers +
+    // decrypts it), so a private event MUST land in a calendar.
+    targetCalendar = (await loadCalendars())[0];
+    if (!targetCalendar) targetCalendar = await createCalendarList("My Calendar", "#334155");
+    targetCalendarId = targetCalendar.id;
+  }
+
+  const event = draft.isPrivate
+    ? await publishPrivateCalendarEvent(
+        { ...draft, calendarId: targetCalendarId },
+        targetCalendarId ?? "default",
+      )
+    : await publishPublicCalendarEvent(draft);
+
+  let calendar: CalendarList | undefined;
+  if (targetCalendar) {
+    const ref: string[] = [
+      `${event.kind}:${event.user}:${event.id}`,
+      event.relayHint ?? "",
+      event.viewKey ?? "",
+    ];
+    calendar = await addEventToCalendarList(targetCalendar, ref);
+  }
+
+  return { event, calendar };
+}
+
 // ── Relay discovery (NIP-65) ────────────────────────────
 
 /**

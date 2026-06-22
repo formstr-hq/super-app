@@ -5,6 +5,7 @@ vi.mock("@formstr/agent/services/calendar/service", () => ({
   fetchCalendarLists: vi.fn(),
   publishPublicCalendarEvent: vi.fn(),
   publishPrivateCalendarEvent: vi.fn(),
+  createCalendarEvent: vi.fn(),
   createCalendarList: vi.fn(),
   updateCalendarList: vi.fn(),
   deleteCalendarList: vi.fn(),
@@ -96,16 +97,13 @@ describe("deleteCalendar", () => {
   });
 });
 
-describe("createEvent membership", () => {
-  it("adds the event coordinate (no 'a' prefix) via addEventToCalendarList", async () => {
+describe("createEvent — delegates to the shared createCalendarEvent service", () => {
+  it("passes the draft + loaded calendars and upserts the returned event + calendar", async () => {
     const cal = { id: "c1", title: "Work", eventRefs: [] };
     useCalendarStore.setState({ calendars: [cal as any] });
-    (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
-      evt({ id: "d9", kind: 31923, user: "pub" }),
-    );
-    (calendarService.addEventToCalendarList as any).mockResolvedValue({
-      ...cal,
-      eventRefs: [["31923:pub:d9", "", ""]],
+    (calendarService.createCalendarEvent as any).mockResolvedValue({
+      event: evt({ id: "d9", kind: 31923, user: "pub" }),
+      calendar: { ...cal, eventRefs: [["31923:pub:d9", "", ""]] },
     });
     await useCalendarStore.getState().createEvent({
       title: "X",
@@ -114,33 +112,27 @@ describe("createEvent membership", () => {
       end: new Date(0),
       calendarId: "c1",
     } as any);
-    expect(calendarService.addEventToCalendarList).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "c1" }),
-      ["31923:pub:d9", "", ""],
+    expect(calendarService.createCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ calendarId: "c1" }),
+      { calendars: [cal] },
     );
+    const state = useCalendarStore.getState();
+    expect(state.events.map((e) => e.id)).toContain("d9");
+    // The updated list returned by the service replaced the stale one in state.
+    expect(state.calendars.find((c) => c.id === "c1")?.eventRefs).toEqual([
+      ["31923:pub:d9", "", ""],
+    ]);
   });
 
-  it("auto-creates a default calendar for a private event with no calendar (viewKey must persist)", async () => {
+  it("upserts a newly auto-created calendar returned by the service", async () => {
     useCalendarStore.setState({ calendars: [] });
-    (calendarService.publishPrivateCalendarEvent as any).mockResolvedValue(
-      evt({
-        id: "p1",
-        kind: 32678,
-        user: "pub",
-        isPrivate: true,
-        viewKey: "nsec1xyz",
-        relayHint: "wss://r",
-      }),
-    );
-    (calendarService.createCalendarList as any).mockResolvedValue({
-      id: "auto1",
-      title: "My Calendar",
-      color: "#334155",
-      eventRefs: [],
-    });
-    (calendarService.addEventToCalendarList as any).mockResolvedValue({
-      id: "auto1",
-      eventRefs: [["32678:pub:p1", "wss://r", "nsec1xyz"]],
+    (calendarService.createCalendarEvent as any).mockResolvedValue({
+      event: evt({ id: "p1", kind: 32678, user: "pub", isPrivate: true }),
+      calendar: {
+        id: "auto1",
+        title: "My Calendar",
+        eventRefs: [["32678:pub:p1", "", "nsec1xyz"]],
+      },
     });
     await useCalendarStore.getState().createEvent({
       title: "Secret",
@@ -149,42 +141,24 @@ describe("createEvent membership", () => {
       end: new Date(0),
       isPrivate: true,
     } as any);
-    expect(calendarService.createCalendarList).toHaveBeenCalled();
-    expect(calendarService.addEventToCalendarList).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "auto1" }),
-      ["32678:pub:p1", "wss://r", "nsec1xyz"],
-    );
+    const state = useCalendarStore.getState();
+    expect(state.calendars.map((c) => c.id)).toContain("auto1");
+    expect(state.events.map((e) => e.id)).toContain("p1");
   });
 
-  it("links a private event with no chosen calendar to the first existing calendar", async () => {
-    const cal = { id: "c1", title: "Work", eventRefs: [] };
-    useCalendarStore.setState({ calendars: [cal as any] });
-    (calendarService.publishPrivateCalendarEvent as any).mockResolvedValue(
-      evt({
-        id: "p2",
-        kind: 32678,
-        user: "pub",
-        isPrivate: true,
-        viewKey: "nsec1abc",
-        relayHint: "",
-      }),
-    );
-    (calendarService.addEventToCalendarList as any).mockResolvedValue({
-      ...cal,
-      eventRefs: [["32678:pub:p2", "", "nsec1abc"]],
+  it("stores the event even when the service did not link a calendar", async () => {
+    (calendarService.createCalendarEvent as any).mockResolvedValue({
+      event: evt({ id: "d2", kind: 31923, user: "pub" }),
+      calendar: undefined,
     });
     await useCalendarStore.getState().createEvent({
-      title: "Secret2",
+      title: "Townhall",
       description: "",
       begin: new Date(0),
       end: new Date(0),
-      isPrivate: true,
+      isPrivate: false,
     } as any);
-    expect(calendarService.createCalendarList).not.toHaveBeenCalled();
-    expect(calendarService.addEventToCalendarList).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "c1" }),
-      ["32678:pub:p2", "", "nsec1abc"],
-    );
+    expect(useCalendarStore.getState().events.map((e) => e.id)).toContain("d2");
   });
 });
 
@@ -214,9 +188,9 @@ describe("public busy list (kind 31926) wiring", () => {
   const flush = () => new Promise((r) => setTimeout(r, 0));
 
   it("createEvent publishes a busy range for a non-recurring event", async () => {
-    (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
-      evt({ id: "d9", begin: 1000, end: 2000 }),
-    );
+    (calendarService.createCalendarEvent as any).mockResolvedValue({
+      event: evt({ id: "d9", begin: 1000, end: 2000 }),
+    });
     await useCalendarStore.getState().createEvent({
       title: "X",
       description: "",
@@ -228,9 +202,9 @@ describe("public busy list (kind 31926) wiring", () => {
   });
 
   it("createEvent skips the busy range for recurring events (raw ranges only)", async () => {
-    (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
-      evt({ id: "d9", begin: 1000, end: 2000, repeat: { rrule: "FREQ=DAILY" } }),
-    );
+    (calendarService.createCalendarEvent as any).mockResolvedValue({
+      event: evt({ id: "d9", begin: 1000, end: 2000, repeat: { rrule: "FREQ=DAILY" } }),
+    });
     await useCalendarStore.getState().createEvent({
       title: "X",
       description: "",
@@ -287,9 +261,9 @@ describe("public busy list (kind 31926) wiring", () => {
     const { useSettingsStore } = await import("./settingsStore");
     useSettingsStore.setState({ publishBusyTimes: false });
     try {
-      (calendarService.publishPublicCalendarEvent as any).mockResolvedValue(
-        evt({ id: "d9", begin: 1000, end: 2000 }),
-      );
+      (calendarService.createCalendarEvent as any).mockResolvedValue({
+        event: evt({ id: "d9", begin: 1000, end: 2000 }),
+      });
       await useCalendarStore.getState().createEvent({
         title: "X",
         description: "",

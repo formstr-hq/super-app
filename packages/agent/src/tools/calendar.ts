@@ -53,7 +53,14 @@ function buildCalendarTools(): ToolEntry[] {
     "create_calendar_event",
     {
       description:
-        "Schedule a calendar event. start/end are ISO 8601. Set isPrivate:true for an encrypted event; participants receive NIP-59 invitations.",
+        "Schedule a calendar event. start/end are ISO 8601. Events default to PRIVATE " +
+        "(encrypted) and are linked into a calendar list — that is the only way they show " +
+        "on calendar.formstr.app, which renders only events referenced in a calendar list. " +
+        "Pass calendarId to choose which calendar; if omitted and the user already has " +
+        "calendars, this tool returns the list so you can ASK the user which one (then " +
+        "re-run with calendarId). Set isPrivate:false for a public, unencrypted event — " +
+        "note public events do NOT sync to calendar.formstr.app. participants receive " +
+        "NIP-59 invitations.",
       inputSchema: {
         title: z.string(),
         description: z.string().optional(),
@@ -61,6 +68,7 @@ function buildCalendarTools(): ToolEntry[] {
         end: z.string().optional(),
         location: z.string().optional(),
         isPrivate: z.boolean().optional(),
+        calendarId: z.string().optional(),
         participants: z.array(z.string()).optional(),
         rrule: z.string().optional(),
         startTzid: z.string().optional(),
@@ -68,6 +76,30 @@ function buildCalendarTools(): ToolEntry[] {
       },
     },
     async (args) => {
+      // Default to private: only private events referenced (with their viewKey)
+      // in a calendar list are discoverable on calendar.formstr.app.
+      const isPrivate = args.isPrivate ?? true;
+      const calendars = await calendar.fetchCalendarLists();
+
+      // Ask which calendar when the event needs one but none was chosen. A
+      // private event with no calendars has nothing to ask about — the service
+      // auto-creates a default "My Calendar".
+      if (isPrivate && !args.calendarId && calendars.length > 0) {
+        const choices = calendars.map((c) => `${c.title} (${c.id})`).join("; ");
+        return fail(
+          `Which calendar should "${args.title}" go in? Re-run create_calendar_event with ` +
+            `calendarId set to one of: ${choices}.`,
+          "CALENDAR_REQUIRED",
+        );
+      }
+      if (args.calendarId && !calendars.some((c) => c.id === args.calendarId)) {
+        const available = calendars.map((c) => c.id).join(", ") || "(none)";
+        return fail(
+          `No calendar found for id ${args.calendarId}. Available: ${available}.`,
+          "NOT_FOUND",
+        );
+      }
+
       const begin = new Date(args.start);
       const end = args.end ? new Date(args.end) : new Date(begin.getTime() + 3_600_000);
       const draft = {
@@ -77,20 +109,24 @@ function buildCalendarTools(): ToolEntry[] {
         end,
         location: args.location,
         participants: args.participants,
-        isPrivate: Boolean(args.isPrivate),
+        isPrivate,
+        calendarId: args.calendarId,
         rrule: args.rrule,
         startTzid: args.startTzid,
         registrationFormRef: args.registrationFormRef,
       };
-      const event = args.isPrivate
-        ? await calendar.publishPrivateCalendarEvent(draft, "default")
-        : await calendar.publishPublicCalendarEvent(draft);
+      const { event, calendar: list } = await calendar.createCalendarEvent(draft, { calendars });
       const coordinate = `${event.kind}:${event.user}:${event.id}`;
-      return ok(`Created ${args.isPrivate ? "private" : "public"} event "${args.title}".`, {
-        id: event.id,
-        eventId: event.eventId,
-        coordinate,
-      });
+      return ok(
+        `Created ${isPrivate ? "private" : "public"} event "${args.title}"` +
+          `${list ? ` in calendar "${list.title}"` : ""}.`,
+        {
+          id: event.id,
+          eventId: event.eventId,
+          coordinate,
+          calendarId: list?.id,
+        },
+      );
     },
   );
 

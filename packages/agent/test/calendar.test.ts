@@ -6,6 +6,7 @@ vi.mock("../src/services", () => ({
     fetchCalendarEventByCoordinate: vi.fn(),
     publishPublicCalendarEvent: vi.fn(),
     publishPrivateCalendarEvent: vi.fn(),
+    createCalendarEvent: vi.fn(),
     deleteCalendarEvent: vi.fn(),
     fetchCalendarLists: vi.fn(),
     createCalendarList: vi.fn(),
@@ -131,38 +132,98 @@ describe("calendar tools", () => {
     );
   });
 
-  it("create_calendar_event publishes a public event with a coordinate", async () => {
-    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
-      id: "d1",
-      eventId: "ev1",
-      kind: 31923,
-      user: "pk",
+  it("create_calendar_event defaults to PRIVATE and auto-lists when no calendars exist", async () => {
+    // No calendars yet → nothing to ask; the service auto-creates a default list.
+    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
+    (calendar.createCalendarEvent as any).mockResolvedValue({
+      event: { id: "d1", eventId: "ev1", kind: 32678, user: "pk" },
+      calendar: { id: "auto", title: "My Calendar" },
     });
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
     const res = await tools
       .get("create_calendar_event")!
       .handler({ title: "Standup", start: "2026-06-10T10:00:00Z" });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledOnce();
-    expect(res.data.coordinate).toBe("31923:pk:d1");
+    // Defaulted to private (no isPrivate passed).
+    expect((calendar.createCalendarEvent as any).mock.calls[0][0]).toMatchObject({
+      isPrivate: true,
+    });
+    expect(res.ok).toBeTruthy();
+    expect(res.data.coordinate).toBe("32678:pk:d1");
   });
 
-  it("create_calendar_event routes to private publish when isPrivate", async () => {
-    (calendar.publishPrivateCalendarEvent as any).mockResolvedValue({
-      id: "d9",
-      eventId: "ev9",
-      kind: 32678,
-      user: "pk",
+  it("create_calendar_event ASKS which calendar when calendars exist and none was chosen", async () => {
+    (calendar.fetchCalendarLists as any).mockResolvedValue([
+      { id: "c1", title: "Work" },
+      { id: "c2", title: "Personal" },
+    ]);
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    const res = await tools
+      .get("create_calendar_event")!
+      .handler({ title: "Standup", start: "2026-06-10T10:00:00Z" });
+    expect(res.ok).toBe(false);
+    expect(res.errorCode).toBe("CALENDAR_REQUIRED");
+    // Lists the choices so the agent can ask the user.
+    expect(res.text).toContain("c1");
+    expect(res.text).toContain("c2");
+    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+  });
+
+  it("create_calendar_event uses the chosen calendarId without asking", async () => {
+    (calendar.fetchCalendarLists as any).mockResolvedValue([
+      { id: "c1", title: "Work" },
+      { id: "c2", title: "Personal" },
+    ]);
+    (calendar.createCalendarEvent as any).mockResolvedValue({
+      event: { id: "d9", eventId: "ev9", kind: 32678, user: "pk" },
+      calendar: { id: "c2", title: "Personal" },
     });
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
-    await tools.get("create_calendar_event")!.handler({
+    const res = await tools.get("create_calendar_event")!.handler({
       title: "Secret",
       start: "2026-06-10T10:00:00Z",
-      isPrivate: true,
+      calendarId: "c2",
       participants: ["pubA"],
     });
-    expect(calendar.publishPrivateCalendarEvent).toHaveBeenCalledOnce();
+    expect((calendar.createCalendarEvent as any).mock.calls[0][0]).toMatchObject({
+      calendarId: "c2",
+      isPrivate: true,
+    });
+    expect(res.data.coordinate).toBe("32678:pk:d9");
+  });
+
+  it("create_calendar_event returns NOT_FOUND for an unknown calendarId", async () => {
+    (calendar.fetchCalendarLists as any).mockResolvedValue([{ id: "c1", title: "Work" }]);
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    const res = await tools.get("create_calendar_event")!.handler({
+      title: "X",
+      start: "2026-06-10T10:00:00Z",
+      calendarId: "nope",
+    });
+    expect(res.ok).toBe(false);
+    expect(res.errorCode).toBe("NOT_FOUND");
+    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+  });
+
+  it("create_calendar_event allows an explicit public event without asking", async () => {
+    (calendar.fetchCalendarLists as any).mockResolvedValue([{ id: "c1", title: "Work" }]);
+    (calendar.createCalendarEvent as any).mockResolvedValue({
+      event: { id: "d2", eventId: "ev2", kind: 31923, user: "pk" },
+      calendar: undefined,
+    });
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    const res = await tools
+      .get("create_calendar_event")!
+      .handler({ title: "Townhall", start: "2026-06-10T10:00:00Z", isPrivate: false });
+    expect(res.ok).toBeTruthy();
+    expect(res.data.coordinate).toBe("31923:pk:d2");
+    expect((calendar.createCalendarEvent as any).mock.calls[0][0]).toMatchObject({
+      isPrivate: false,
+    });
   });
 
   it("get_calendar_event returns the event or NOT_FOUND", async () => {

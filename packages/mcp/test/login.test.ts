@@ -8,7 +8,16 @@ import {
 import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
 import { describe, it, expect, vi } from "vitest";
 
-import { doLogin, doLogout, listAccounts, whoami, type LoginDeps } from "../src/auth/login";
+import {
+  describeBunkerError,
+  doLogin,
+  doLogout,
+  doSwitch,
+  findAccount,
+  listAccounts,
+  whoami,
+  type LoginDeps,
+} from "../src/auth/login";
 
 /** A fake @formstr/signer Signer that records calls and returns a canned active account. */
 function fakeSigner(pubkey = "ab".repeat(32)) {
@@ -182,6 +191,88 @@ describe("whoami / listAccounts / doLogout", () => {
     const { signer, raw } = fakeSigner();
     await doLogout(signer, "cd".repeat(32));
     expect(raw.logout).toHaveBeenCalledWith("cd".repeat(32));
+  });
+});
+
+/** A signer holding several stored accounts, recording switchAccount calls. */
+function multiAccountSigner(accounts: StoredAccount[]) {
+  const calls: Record<string, unknown[]> = {};
+  let activePubkey = accounts[0]?.pubkey ?? null;
+  const signer = {
+    listAccounts: () => accounts,
+    getActiveAccount: () => accounts.find((a) => a.pubkey === activePubkey) ?? null,
+    switchAccount: async (pk: string) => {
+      (calls["switchAccount"] ??= []).push([pk]);
+      activePubkey = pk;
+    },
+  };
+  return { signer: signer as unknown as Signer, calls };
+}
+
+const acctA: StoredAccount = { npub: "npub1aaa", pubkey: "aa".repeat(32), method: "ncryptsec" };
+const acctB: StoredAccount = { npub: "npub1bbb", pubkey: "bb".repeat(32), method: "nip46" };
+
+describe("findAccount", () => {
+  it("matches by npub", () => {
+    expect(findAccount([acctA, acctB], "npub1bbb")).toEqual(acctB);
+  });
+
+  it("matches by hex pubkey", () => {
+    expect(findAccount([acctA, acctB], "bb".repeat(32))).toEqual(acctB);
+  });
+
+  it("returns null when nothing matches", () => {
+    expect(findAccount([acctA, acctB], "npub1zzz")).toBeNull();
+  });
+});
+
+describe("doSwitch", () => {
+  it("switches to an account matched by its npub and returns it", async () => {
+    const { signer, calls } = multiAccountSigner([acctA, acctB]);
+    const result = await doSwitch(signer, "npub1bbb");
+    expect(calls.switchAccount).toEqual([["bb".repeat(32)]]);
+    expect(result).toEqual(acctB);
+  });
+
+  it("also accepts a hex pubkey", async () => {
+    const { signer, calls } = multiAccountSigner([acctA, acctB]);
+    await doSwitch(signer, "bb".repeat(32));
+    expect(calls.switchAccount).toEqual([["bb".repeat(32)]]);
+  });
+
+  it("throws (without calling switchAccount) when no account matches", async () => {
+    const { signer, calls } = multiAccountSigner([acctA, acctB]);
+    await expect(doSwitch(signer, "npub1nope")).rejects.toThrow(/no stored account/i);
+    expect(calls.switchAccount).toBeUndefined();
+  });
+});
+
+describe("describeBunkerError", () => {
+  it("explains a missing secret when the remote signer says 'no secret'", () => {
+    const msg = describeBunkerError("bunker://abc?relay=wss://r.example", new Error("no secret"));
+    expect(msg).toMatch(/secret/i);
+    expect(msg).toMatch(/nsec\.app|QR/i);
+  });
+
+  it("flags a secret-less URI even when the raw error is generic", () => {
+    const msg = describeBunkerError(
+      "bunker://abc?relay=wss://r.example",
+      new Error("connect timed out"),
+    );
+    expect(msg).toMatch(/secret/i);
+  });
+
+  it("explains an invalid bunker URI with the expected shape", () => {
+    const msg = describeBunkerError("garbage", new Error("@formstr/signer: invalid bunker URI"));
+    expect(msg).toMatch(/bunker:\/\/<pubkey>/);
+  });
+
+  it("preserves the raw signer error for context when the secret is present", () => {
+    const msg = describeBunkerError(
+      "bunker://abc?relay=wss://r.example&secret=tok",
+      new Error("weird relay failure"),
+    );
+    expect(msg).toMatch(/weird relay failure/);
   });
 });
 

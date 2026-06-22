@@ -486,6 +486,10 @@ export async function saveDocMetadata(
 ): Promise<DocMetadata> {
   const existing = (await fetchDocMetadata(address)) ?? {};
   const merged: DocMetadata = { ...existing, ...patch };
+  // Upstream nostr-docs types `tags` as a required field and reads `meta.tags.length`
+  // unguarded (DocMetadataContext): a metadata object with no `tags` key makes
+  // pages.formstr.app throw and drop ALL doc titles/tags/sharedAs. Always emit one.
+  if (!Array.isArray(merged.tags)) merged.tags = [];
 
   const signer = await signerManager.getSigner();
   const content = await nip44SelfEncrypt(signer, JSON.stringify(merged));

@@ -52,9 +52,24 @@ function buildSpecRows(formId: string, name: string, fields: FormField[], settin
 }
 
 /**
- * Outer tags for an **encrypted** template: only d/name/relay plus the access-control
- * tags upstream reads — `["allowed", pk]` (submit gate) and `["p", pk]`
- * (allowed ∪ collaborators). No settings, no `encryption` marker: formstr.app detects
+ * Access-control tags upstream reads off the kind-30168 event — `["allowed", pk]`
+ * (the submit gate) and `["p", pk]` (allowed ∪ collaborators). Upstream's
+ * `createForm` tags **every** form this way (public and encrypted alike), and
+ * formstr.app's FormRenderer enforces the gate from these tags, not from settings —
+ * so both our paths must emit them or a gated form is open-submit cross-app.
+ */
+function buildParticipantTags(settings?: FormSettings): string[][] {
+  const tags: string[][] = [];
+  const allowed = settings?.allowedResponders ?? [];
+  const pTags = new Set([...allowed, ...(settings?.collaborators ?? [])]);
+  for (const pk of allowed) tags.push(["allowed", pk]);
+  for (const pk of pTags) tags.push(["p", pk]);
+  return tags;
+}
+
+/**
+ * Outer tags for an **encrypted** template: only d/name/relay plus the participant
+ * access-control tags. No settings, no `encryption` marker: formstr.app detects
  * encryption purely via `content !== ""`.
  */
 function buildEncryptedOuterTags(
@@ -63,12 +78,12 @@ function buildEncryptedOuterTags(
   relays: string[],
   settings?: FormSettings,
 ): string[][] {
-  const tags: string[][] = [["d", formId], ["name", name], ...relays.map((r) => ["relay", r])];
-  const allowed = settings?.allowedResponders ?? [];
-  const pTags = new Set([...allowed, ...(settings?.collaborators ?? [])]);
-  for (const pk of allowed) tags.push(["allowed", pk]);
-  for (const pk of pTags) tags.push(["p", pk]);
-  return tags;
+  return [
+    ["d", formId],
+    ["name", name],
+    ...relays.map((r) => ["relay", r]),
+    ...buildParticipantTags(settings),
+  ];
 }
 
 // ── Create Form ─────────────────────────────────────────
@@ -127,8 +142,14 @@ export async function createForm(params: CreateFormParams): Promise<CreateFormRe
   }
 
   // Plaintext form. Upstream tags EVERY plaintext form ["t","public"] (its public
-  // browse filter), not just publicForm ones.
-  const tags: string[][] = [...specRows, ["t", "public"], ...relays.map((r) => ["relay", r])];
+  // browse filter), not just publicForm ones — and emits the same allowed/p access
+  // tags as encrypted forms so a gated public form stays gated on formstr.app.
+  const tags: string[][] = [
+    ...specRows,
+    ["t", "public"],
+    ...relays.map((r) => ["relay", r]),
+    ...buildParticipantTags(params.settings),
+  ];
   const event: EventTemplate = {
     kind: FORM_KINDS.template,
     created_at: Math.floor(Date.now() / 1000),
@@ -649,7 +670,12 @@ export async function updateForm(params: UpdateFormParams): Promise<void> {
   // Public form — sign with the form's signing key when we hold it (upstream model;
   // keeps the address 30168:signingPub:formId stable across apps). Fall back to the
   // user signer for legacy forms authored under the identity key.
-  const tags: string[][] = [...specRows, ["t", "public"], ...relays.map((r) => ["relay", r])];
+  const tags: string[][] = [
+    ...specRows,
+    ["t", "public"],
+    ...relays.map((r) => ["relay", r]),
+    ...buildParticipantTags(settings),
+  ];
   const event: EventTemplate = {
     kind: FORM_KINDS.template,
     created_at: Math.floor(Date.now() / 1000),
