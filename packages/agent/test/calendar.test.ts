@@ -1,3 +1,4 @@
+import { nip19 } from "nostr-tools";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../src/services", () => ({
@@ -150,6 +151,30 @@ describe("calendar tools", () => {
     });
     expect(res.ok).toBeTruthy();
     expect(res.data.coordinate).toBe("32678:pk:d1");
+  });
+
+  it("create_calendar_event accepts npub participants and normalizes them to hex", async () => {
+    // The agent should be able to pass an npub directly — the wire (["p"] tags,
+    // NIP-59 wraps, relay-list query) needs hex, so the tool converts it.
+    const hexA = "a".repeat(64);
+    const npubA = nip19.npubEncode(hexA);
+    const hexB = "b".repeat(64);
+    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
+    (calendar.createCalendarEvent as any).mockResolvedValue({
+      event: { id: "d1", eventId: "ev1", kind: 32678, user: "pk" },
+      calendar: { id: "auto", title: "My Calendar" },
+    });
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    await tools.get("create_calendar_event")!.handler({
+      title: "Portugal match",
+      start: "2026-06-10T10:00:00Z",
+      participants: [npubA, hexB],
+    });
+    expect((calendar.createCalendarEvent as any).mock.calls[0][0].participants).toEqual([
+      hexA,
+      hexB,
+    ]);
   });
 
   it("create_calendar_event ASKS which calendar when calendars exist and none was chosen", async () => {

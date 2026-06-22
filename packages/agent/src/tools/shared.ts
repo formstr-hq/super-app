@@ -1,5 +1,3 @@
-import { nip19 } from "nostr-tools";
-
 import {
   AnswerType,
   type FormField,
@@ -8,27 +6,9 @@ import {
   type FormOption,
 } from "../services";
 
-export function normalizePubkey(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (/^[0-9a-f]{64}$/i.test(trimmed)) return trimmed.toLowerCase();
-  if (trimmed.startsWith("npub1")) {
-    try {
-      const decoded = nip19.decode(trimmed);
-      if (decoded.type === "npub") return decoded.data;
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
-
-export function normalizePubkeyList(values: unknown): string[] {
-  if (!Array.isArray(values)) return [];
-  return values
-    .map((v) => (typeof v === "string" ? normalizePubkey(v) : null))
-    .filter((p): p is string => !!p);
-}
+// Re-exported for existing callers; defined in a services-free module so tools
+// (e.g. calendar) can import the pubkey helpers without dragging in `../services`.
+export { normalizePubkey, normalizePubkeyList } from "./pubkey";
 
 interface AiField {
   label?: string;

@@ -5,6 +5,7 @@ import { ok, fail } from "../result";
 import { requireConfirm } from "../safety";
 import { calendar, calendarBooking, calendarRsvp } from "../services";
 
+import { normalizePubkeyList } from "./pubkey";
 import type { ToolEntry } from "./types";
 
 export const calendarTools: ToolEntry[] = buildCalendarTools();
@@ -59,8 +60,8 @@ function buildCalendarTools(): ToolEntry[] {
         "Pass calendarId to choose which calendar; if omitted and the user already has " +
         "calendars, this tool returns the list so you can ASK the user which one (then " +
         "re-run with calendarId). Set isPrivate:false for a public, unencrypted event — " +
-        "note public events do NOT sync to calendar.formstr.app. participants receive " +
-        "NIP-59 invitations.",
+        "note public events do NOT sync to calendar.formstr.app. participants (npub or hex) " +
+        "receive NIP-59 invitations.",
       inputSchema: {
         title: z.string(),
         description: z.string().optional(),
@@ -108,7 +109,9 @@ function buildCalendarTools(): ToolEntry[] {
         begin,
         end,
         location: args.location,
-        participants: args.participants,
+        // Accept npub OR hex for each participant — the wire (["p"] tags, NIP-59
+        // invitation wraps, relay-list query) needs hex, so convert here.
+        participants: normalizePubkeyList(args.participants),
         isPrivate,
         calendarId: args.calendarId,
         rrule: args.rrule,
