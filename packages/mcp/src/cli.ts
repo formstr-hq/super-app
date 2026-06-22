@@ -1,4 +1,12 @@
-export type Command = "run" | "login" | "logout" | "whoami" | "accounts" | "switch" | "help";
+export type Command =
+  | "run"
+  | "login"
+  | "logout"
+  | "whoami"
+  | "accounts"
+  | "switch"
+  | "help"
+  | "version";
 
 export interface Cli {
   command: Command;
@@ -10,7 +18,15 @@ export interface Cli {
   target?: string;
 }
 
-const SUBCOMMANDS = new Set<Command>(["login", "logout", "whoami", "accounts", "switch", "help"]);
+const SUBCOMMANDS = new Set<Command>([
+  "login",
+  "logout",
+  "whoami",
+  "accounts",
+  "switch",
+  "help",
+  "version",
+]);
 
 /** Parse `process.argv.slice(2)` into a subcommand + flags. */
 export function parseCli(argv: string[]): Cli {
@@ -18,6 +34,10 @@ export function parseCli(argv: string[]): Cli {
   // `-h`/`--help` anywhere is a help request, regardless of any subcommand.
   if (rest.includes("-h") || rest.includes("--help")) {
     return { command: "help", allowWrites: false };
+  }
+  // `-v`/`--version` anywhere prints the version, regardless of any subcommand.
+  if (rest.includes("-v") || rest.includes("--version")) {
+    return { command: "version", allowWrites: false };
   }
 
   let command: Command = "run";
@@ -75,6 +95,7 @@ export function helpText(): string {
     "  accounts          List stored accounts ('*' marks the active one).",
     "  switch <npub>     Set the active account (accepts an npub or hex pubkey).",
     "  help              Show this help (also -h, --help).",
+    "  version           Print the installed version and check for an update (also -v, --version).",
     "",
     "Flags:",
     "  --allow-writes         Enable gated write tools (update / delete / share / submit).",
@@ -84,5 +105,26 @@ export function helpText(): string {
     "Env:",
     "  FORMSTR_MCP_NCRYPTSEC_PASSPHRASE   Unlock the active ncryptsec account at boot.",
     "  FORMSTR_MCP_PASSPHRASE             Encrypt the keystore file (keychain-less hosts).",
+    "",
+    "Setting the passphrase in your MCP host config:",
+    "  When an MCP host (Claude Desktop/Code, Cursor, …) spawns the server, stdin is the",
+    "  JSON-RPC channel, so it can't prompt for your ncryptsec passphrase. Pass it via an",
+    '  "env" block in the server entry of your MCP config (e.g. mcp_config.json /',
+    "  claude_desktop_config.json) so the host hands it to the server at startup:",
+    "",
+    "    {",
+    '      "mcpServers": {',
+    '        "formstr": {',
+    '          "command": "npx",',
+    '          "args": ["-y", "@formstr/mcp"],',
+    '          "env": {',
+    '            "FORMSTR_MCP_NCRYPTSEC_PASSPHRASE": "your-passphrase-here"',
+    "          }",
+    "        }",
+    "      }",
+    "    }",
+    "",
+    "  Tip: a NIP-46 (bunker) account needs no passphrase — `switch` to one and the config",
+    '  can stay secret-free. Add "--allow-writes" to args to enable gated write tools.',
   ].join("\n");
 }

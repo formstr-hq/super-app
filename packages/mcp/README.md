@@ -21,9 +21,27 @@ npx -y @formstr/mcp login
 ```
 
 Subcommands: `formstr-mcp login` · `formstr-mcp whoami` · `formstr-mcp accounts` ·
-`formstr-mcp switch <npub>` · `formstr-mcp logout` · `formstr-mcp help` ·
-`formstr-mcp` (run the stdio server, the default). Run `formstr-mcp help` (or `-h`) for
-the full usage.
+`formstr-mcp switch <npub>` · `formstr-mcp logout` · `formstr-mcp version` ·
+`formstr-mcp help` · `formstr-mcp` (run the stdio server, the default). Run
+`formstr-mcp help` (or `-h`) for the full usage.
+
+## Version & updates
+
+`formstr-mcp version` (or `-v` / `--version`) prints the installed version and checks the
+npm registry for a newer release:
+
+```text
+$ formstr-mcp version
+@formstr/mcp 0.3.2
+Update available: 0.4.0 (you have 0.3.2).
+Upgrade: npm install -g @formstr/mcp@latest
+Or just re-run via: npx -y @formstr/mcp@latest
+```
+
+The update check is best-effort — if you're offline or the registry is unreachable it
+prints the installed version and a note, never an error. If you run the server via
+`npx -y @formstr/mcp` you already get the latest published version on each launch; pin a
+version (`@formstr/mcp@0.3.2`) in your host config if you'd rather control upgrades.
 
 ## Sign-in
 
@@ -70,6 +88,36 @@ After `login`, no key belongs in the config:
 
 Add `"--allow-writes"` to `args` to enable the gated (destructive/outward) tools, and
 `"--relays", "wss://a,wss://b"` to override relays.
+
+### Passing the ncryptsec passphrase
+
+If your active account is an `ncryptsec` key (Create / Import login), the server needs its
+passphrase to unlock at boot. An MCP host spawns the server with stdin wired to the
+JSON-RPC channel, so it **can't prompt** — supply the passphrase through an `"env"` block in
+the server entry of your MCP config (`mcp_config.json`, `claude_desktop_config.json`, Cursor's
+`~/.cursor/mcp.json`, etc.):
+
+```json
+{
+  "mcpServers": {
+    "formstr": {
+      "command": "npx",
+      "args": ["-y", "@formstr/mcp"],
+      "env": {
+        "FORMSTR_MCP_NCRYPTSEC_PASSPHRASE": "your-passphrase-here"
+      }
+    }
+  }
+}
+```
+
+The host hands that value to the server as an environment variable at startup — it never
+enters the chat transcript. Each account has its own passphrase, so this unlocks whichever
+one is **active** (set it with `formstr-mcp switch <npub>`).
+
+> **Tip:** prefer not to keep a passphrase in a config file? Use a **NIP-46 (bunker)**
+> account instead — it reconnects from its stored session and needs **no** passphrase, so
+> the config can stay secret-free. Run `formstr-mcp switch <npub>` to a bunker account.
 
 ## Headless / unattended
 

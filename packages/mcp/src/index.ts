@@ -6,6 +6,12 @@ import { bootstrap } from "./bootstrap";
 import { parseCli, helpText, formatFatal, type Command } from "./cli";
 import { resolveConfig } from "./config";
 import { startStdio } from "./server";
+import {
+  PACKAGE_NAME,
+  readInstalledVersion,
+  fetchLatestVersion,
+  formatVersionReport,
+} from "./version";
 
 async function runServer(cli: ReturnType<typeof parseCli>): Promise<void> {
   const cfg = resolveConfig(cli, process.env);
@@ -118,6 +124,14 @@ async function main(): Promise<Command> {
     case "help":
       console.error(helpText());
       return cli.command;
+    case "version": {
+      const installed = readInstalledVersion();
+      const latest = await fetchLatestVersion(PACKAGE_NAME);
+      // A one-shot command that exits — no MCP transport on stdout — so print the
+      // report to stdout (the canonical place for `--version` output).
+      console.log(formatVersionReport(installed, latest));
+      return cli.command;
+    }
     case "run":
     default:
       await runServer(cli);

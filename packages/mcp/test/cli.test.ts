@@ -29,6 +29,14 @@ describe("parseCli", () => {
     expect(parseCli(["accounts", "--help"]).command).toBe("help");
   });
 
+  it("recognizes the version command and -v/--version", () => {
+    expect(parseCli(["version"]).command).toBe("version");
+    expect(parseCli(["-v"]).command).toBe("version");
+    expect(parseCli(["--version"]).command).toBe("version");
+    // --version anywhere wins, even after another subcommand
+    expect(parseCli(["accounts", "--version"]).command).toBe("version");
+  });
+
   it("parses --relays, --allow-writes, --account", () => {
     const cli = parseCli([
       "run",
@@ -59,12 +67,29 @@ describe("parseCli", () => {
 describe("helpText", () => {
   it("lists every command and the main flags", () => {
     const text = helpText();
-    for (const cmd of ["run", "login", "logout", "whoami", "accounts", "switch", "help"]) {
+    for (const cmd of [
+      "run",
+      "login",
+      "logout",
+      "whoami",
+      "accounts",
+      "switch",
+      "help",
+      "version",
+    ]) {
       expect(text).toContain(cmd);
     }
     expect(text).toContain("--allow-writes");
     expect(text).toContain("--account");
     expect(text).toContain("FORMSTR_MCP_NCRYPTSEC_PASSPHRASE");
+  });
+
+  it("shows how to set the passphrase in an MCP host config", () => {
+    const text = helpText();
+    // A copy-pasteable mcp config block with an env entry for the passphrase.
+    expect(text).toContain('"mcpServers"');
+    expect(text).toContain('"env"');
+    expect(text).toContain('"FORMSTR_MCP_NCRYPTSEC_PASSPHRASE"');
   });
 });
 
