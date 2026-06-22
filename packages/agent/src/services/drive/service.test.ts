@@ -191,6 +191,25 @@ describe("uploadFile", () => {
     expect(result.hash).toBe("filehash");
     expect(result.previewHash).toBeUndefined();
   });
+
+  it("falls back to application/octet-stream when the file has no MIME type (upstream parity)", async () => {
+    const uploadMock = vi.fn().mockResolvedValue({ sha256: "serverhash", url: "u", size: 1 });
+    (BlossomClient as any).mockImplementation(() => ({ upload: uploadMock }));
+
+    const bytes = new Uint8Array([1]);
+    const file = {
+      name: "noext",
+      type: "", // browsers report "" for unknown MIME types
+      size: 1,
+      arrayBuffer: () => Promise.resolve(bytes.buffer),
+    } as unknown as File;
+    const result = await uploadFile({ file, blossomServer: "https://srv" });
+
+    // upstream uploadPreparedFile: `type: file.type || "application/octet-stream"`
+    expect(result.type).toBe("application/octet-stream");
+    const [, event] = (nostrRuntime.publish as any).mock.calls[0];
+    expect(JSON.parse(event.content).type).toBe("application/octet-stream");
+  });
 });
 
 describe("saveFileMetadata — algorithm backfill", () => {
