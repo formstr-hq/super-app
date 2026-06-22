@@ -70,7 +70,7 @@ export function helpText(): string {
     "Commands:",
     "  run               Run the stdio MCP server (default when no command is given).",
     "  login             Sign in (create / import / bunker URI / QR) and store the key.",
-    "  logout [npub]     Remove a stored account (defaults to the active one).",
+    "  logout [npub|hex] Permanently remove a stored account from the keystore (defaults to active).",
     "  whoami            Print the active account.",
     "  accounts          List stored accounts ('*' marks the active one).",
     "  switch <npub>     Set the active account (accepts an npub or hex pubkey).",

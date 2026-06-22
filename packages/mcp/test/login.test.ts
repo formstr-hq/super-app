@@ -186,24 +186,26 @@ describe("whoami / listAccounts / doLogout", () => {
     const { signer, account } = fakeSigner();
     expect(listAccounts(signer)).toEqual([account]);
   });
-
-  it("doLogout removes the given pubkey", async () => {
-    const { signer, raw } = fakeSigner();
-    await doLogout(signer, "cd".repeat(32));
-    expect(raw.logout).toHaveBeenCalledWith("cd".repeat(32));
-  });
 });
 
-/** A signer holding several stored accounts, recording switchAccount calls. */
+/** A signer holding several stored accounts, recording switchAccount/logout calls
+ *  and actually mutating its account list so removal is observable. */
 function multiAccountSigner(accounts: StoredAccount[]) {
   const calls: Record<string, unknown[]> = {};
-  let activePubkey = accounts[0]?.pubkey ?? null;
+  let list = [...accounts];
+  let activePubkey: string | null = accounts[0]?.pubkey ?? null;
   const signer = {
-    listAccounts: () => accounts,
-    getActiveAccount: () => accounts.find((a) => a.pubkey === activePubkey) ?? null,
+    listAccounts: () => list,
+    getActiveAccount: () => list.find((a) => a.pubkey === activePubkey) ?? null,
     switchAccount: async (pk: string) => {
       (calls["switchAccount"] ??= []).push([pk]);
       activePubkey = pk;
+    },
+    logout: async (pk?: string) => {
+      (calls["logout"] ??= []).push([pk]);
+      const target = pk ?? activePubkey;
+      list = list.filter((a) => a.pubkey !== target);
+      if (target === activePubkey) activePubkey = null;
     },
   };
   return { signer: signer as unknown as Signer, calls };
@@ -244,6 +246,43 @@ describe("doSwitch", () => {
     const { signer, calls } = multiAccountSigner([acctA, acctB]);
     await expect(doSwitch(signer, "npub1nope")).rejects.toThrow(/no stored account/i);
     expect(calls.switchAccount).toBeUndefined();
+  });
+});
+
+describe("doLogout", () => {
+  it("resolves a target npub to its hex pubkey and removes that account", async () => {
+    const { signer, calls } = multiAccountSigner([acctA, acctB]);
+    const removed = await doLogout(signer, "npub1bbb");
+    expect(calls.logout).toEqual([["bb".repeat(32)]]);
+    expect(removed).toEqual(acctB);
+    expect(listAccounts(signer)).toEqual([acctA]);
+  });
+
+  it("also accepts a hex pubkey target", async () => {
+    const { signer, calls } = multiAccountSigner([acctA, acctB]);
+    await doLogout(signer, "bb".repeat(32));
+    expect(calls.logout).toEqual([["bb".repeat(32)]]);
+  });
+
+  it("throws (without calling logout) when the target matches nothing", async () => {
+    const { signer, calls } = multiAccountSigner([acctA, acctB]);
+    await expect(doLogout(signer, "npub1nope")).rejects.toThrow(/no stored account/i);
+    expect(calls.logout).toBeUndefined();
+  });
+
+  it("removes the active account and returns it when no target is given", async () => {
+    const { signer, calls } = multiAccountSigner([acctA, acctB]); // active = acctA
+    const removed = await doLogout(signer);
+    expect(removed).toEqual(acctA);
+    expect(calls.logout).toEqual([["aa".repeat(32)]]);
+    expect(listAccounts(signer)).toEqual([acctB]);
+  });
+
+  it("returns null without calling logout when there is nothing to remove", async () => {
+    const { signer, calls } = multiAccountSigner([]);
+    const removed = await doLogout(signer);
+    expect(removed).toBeNull();
+    expect(calls.logout).toBeUndefined();
   });
 });
 

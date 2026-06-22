@@ -152,9 +152,30 @@ async function loginNostrConnect(deps: LoginDeps, log: (m: string) => void): Pro
   });
 }
 
-/** Remove a stored account (the given pubkey, or the active one). */
-export async function doLogout(signer: Signer, pubkey?: string): Promise<void> {
-  await signer.logout(pubkey);
+/**
+ * Remove a stored account from the keystore. `target` is an npub OR hex pubkey
+ * (resolved against the stored accounts, since `signer.logout` keys on the hex
+ * pubkey and a raw npub would silently no-op); omit it to remove the active
+ * account. Returns the account that was removed, or null when there was nothing
+ * to remove — so callers can report accurately instead of always saying "done".
+ *
+ * @throws when `target` is given but matches no stored account.
+ */
+export async function doLogout(signer: Signer, target?: string): Promise<StoredAccount | null> {
+  if (target) {
+    const match = findAccount(listAccounts(signer), target);
+    if (!match) {
+      throw new Error(
+        `No stored account matching "${target}". Run \`formstr-mcp accounts\` to list them.`,
+      );
+    }
+    await signer.logout(match.pubkey);
+    return match;
+  }
+  const active = signer.getActiveAccount();
+  if (!active) return null;
+  await signer.logout(active.pubkey);
+  return active;
 }
 
 /** The active identity, if any. */

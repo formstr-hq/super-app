@@ -73,8 +73,15 @@ async function main(): Promise<Command> {
       await runLogin(cli);
       return cli.command;
     case "logout": {
-      await doLogout(await buildMcpSigner(), cli.account);
-      console.error("formstr-mcp: signed out.");
+      // The account to remove comes from the positional arg (`logout <npub>`),
+      // falling back to `--account`; both accept an npub or hex. Omit to remove
+      // the active account.
+      const removed = await doLogout(await buildMcpSigner(), cli.target ?? cli.account);
+      console.error(
+        removed
+          ? `formstr-mcp: removed ${removed.npub} (${removed.method}).`
+          : "formstr-mcp: no account to remove.",
+      );
       return cli.command;
     }
     case "whoami": {
