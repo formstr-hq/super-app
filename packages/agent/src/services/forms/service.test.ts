@@ -128,6 +128,27 @@ describe("createForm — plain form", () => {
     expect(fieldTag[2]).toBe("text"); // primitive, not the AnswerType
     expect(JSON.parse(fieldTag[5]).renderElement).toBe("shortText");
   });
+
+  it("writes allowed/p outer tags on plaintext forms too (upstream tags EVERY form)", async () => {
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
+
+    // A public (plaintext) form may still gate submissions to specific npubs.
+    // formstr.app's FormRenderer enforces that gate from the ["allowed"] *tags*,
+    // not from settings — so the plaintext path must emit them like the encrypted one.
+    await createForm({
+      name: "Gated public",
+      fields: [{ id: "f1", type: "shortText" as any, label: "Name" }],
+      settings: { allowedResponders: ["pubA"], collaborators: ["pubB"] },
+    });
+
+    const formEvent = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(formEvent.content).toBe(""); // still a plaintext form
+    expect(formEvent.tags).toContainEqual(["t", "public"]);
+    expect(formEvent.tags).toContainEqual(["allowed", "pubA"]);
+    // p = allowed ∪ collaborators
+    expect(formEvent.tags).toContainEqual(["p", "pubA"]);
+    expect(formEvent.tags).toContainEqual(["p", "pubB"]);
+  });
 });
 
 describe("createForm — encrypted form", () => {
