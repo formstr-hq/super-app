@@ -360,6 +360,98 @@ describe("calendar tools", () => {
     );
   });
 
+  it("update_calendar_event recovers a private event's viewKey and reuses it on republish", async () => {
+    // Without the viewKey, fetchCalendarEventByCoordinate can't decrypt the
+    // event (fields lost) and existing.viewKey is undefined → the republish
+    // mints a NEW viewKey, orphaning the calendar-list ref's old one → the
+    // event becomes un-decryptable (invalid MAC) on calendar.formstr.app.
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendar.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+      id: "d",
+      title: "Match",
+      description: "",
+      begin: 1700000000000,
+      end: 1700003600000,
+      kind: 32678,
+      user: "pk",
+      location: [],
+      participants: ["pubA"],
+      isPrivate: true,
+      calendarId: "c1",
+      viewKey: "nsec1fromlist",
+      repeat: { rrule: null },
+    });
+    (calendar.publishPrivateCalendarEvent as any).mockResolvedValue({
+      id: "d",
+      eventId: "ev",
+      kind: 32678,
+      user: "pk",
+      title: "Match",
+    });
+
+    await tools
+      .get("update_calendar_event")!
+      .handler({ coordinate: "32678:pk:d", title: "Match", confirm: true });
+
+    expect(calendar.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d");
+    expect(calendar.fetchCalendarEventByCoordinate).toHaveBeenCalledWith(
+      "32678:pk:d",
+      "nsec1fromlist",
+    );
+    expect(calendar.publishPrivateCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ existingId: "d", viewKey: "nsec1fromlist" }),
+      "c1",
+    );
+  });
+
+  it("attach_form_to_event recovers a private event's viewKey and reuses it on republish", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (calendar.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+      id: "d",
+      title: "Match",
+      description: "",
+      begin: 1,
+      end: 2,
+      kind: 32678,
+      user: "pk",
+      location: [],
+      participants: [],
+      isPrivate: true,
+      calendarId: "c1",
+      viewKey: "nsec1fromlist",
+      repeat: { rrule: null },
+    });
+    (calendar.publishPrivateCalendarEvent as any).mockResolvedValue({
+      id: "d",
+      eventId: "ev",
+      kind: 32678,
+      user: "pk",
+      title: "Match",
+    });
+
+    await tools
+      .get("attach_form_to_event")!
+      .handler({ coordinate: "32678:pk:d", formRef: "naddr1abc", confirm: true });
+
+    expect(calendar.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d");
+    expect(calendar.fetchCalendarEventByCoordinate).toHaveBeenCalledWith(
+      "32678:pk:d",
+      "nsec1fromlist",
+    );
+    expect(calendar.publishPrivateCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        existingId: "d",
+        viewKey: "nsec1fromlist",
+        registrationFormRef: "naddr1abc",
+      }),
+      "c1",
+    );
+  });
+
   // ── Task 18: update_calendar / delete_calendar ─────────────
 
   it("update_calendar and delete_calendar are gated behind allowWrites", () => {

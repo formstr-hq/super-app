@@ -412,7 +412,12 @@ function buildCalendarTools(): ToolEntry[] {
         `updates event ${args.coordinate}`,
       );
       if (blocked) return blocked;
-      const existing = await calendar.fetchCalendarEventByCoordinate(args.coordinate);
+      // Recover the per-event viewKey from the user's calendar lists so the
+      // private event decrypts (without it the fields are lost) AND the republish
+      // reuses the SAME key — minting a fresh one would orphan the calendar-list
+      // ref's viewKey, making the event un-decryptable (invalid MAC) everywhere.
+      const viewKey = await calendar.lookupEventViewKey(args.coordinate);
+      const existing = await calendar.fetchCalendarEventByCoordinate(args.coordinate, viewKey);
       if (!existing) return fail(`No event found for ${args.coordinate}.`, "NOT_FOUND");
       const draft = {
         title: args.title ?? existing.title,
@@ -458,7 +463,10 @@ function buildCalendarTools(): ToolEntry[] {
         `attaches a form to ${coordinate}`,
       );
       if (blocked) return blocked;
-      const existing = await calendar.fetchCalendarEventByCoordinate(coordinate);
+      // See update_calendar_event: recover the viewKey first so the private
+      // event decrypts and the republish keeps the calendar-list ref valid.
+      const viewKey = await calendar.lookupEventViewKey(coordinate);
+      const existing = await calendar.fetchCalendarEventByCoordinate(coordinate, viewKey);
       if (!existing) return fail(`No event found for ${coordinate}.`, "NOT_FOUND");
       const draft = {
         title: existing.title,
