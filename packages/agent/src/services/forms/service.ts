@@ -492,6 +492,51 @@ export async function fetchMyForms(): Promise<FormSummary[]> {
 }
 
 /**
+ * How many times to read the my-forms list before treating an empty result as
+ * authoritative for a *destructive* republish. The forms default relays are not
+ * uniformly replicated (some serve nothing for a given list, others lag), so a single
+ * empty `querySync` is often a false negative — rereading (each call is a fresh query
+ * over warm connections) recovers the real list before we'd overwrite it.
+ */
+const MY_FORMS_LIST_READ_ATTEMPTS = 3;
+
+/**
+ * Read the user's current kind-14083 entries for a *destructive* republish
+ * (create/import — both rewrite the whole list).
+ *
+ * Two ways a naive single read loses data, both guarded here:
+ *  - **False-empty read.** Treating a transient empty result as "no list" would
+ *    republish a 14083 holding only the new entry, wiping every previously-saved
+ *    form. Reread up to MY_FORMS_LIST_READ_ATTEMPTS times before concluding the list
+ *    is genuinely empty (a brand-new user legitimately reads empty every time).
+ *  - **Unreadable list.** If the list exists but can't be decrypted (e.g. a flaky
+ *    nip46 bunker), throw — never overwrite a list we can't read (matches deleteForm).
+ */
+async function readMyFormsEntriesForWrite(
+  signer: NostrSigner,
+  userPubkey: string,
+  relays: string[],
+): Promise<string[][]> {
+  let listEvent: Event | null = null;
+  for (let attempt = 0; attempt < MY_FORMS_LIST_READ_ATTEMPTS; attempt++) {
+    // Newest across relays (not first-responder) so we never append to a stale copy.
+    listEvent = await fetchLatestMyFormsEvent(relays, userPubkey);
+    if (listEvent?.content) break;
+  }
+  if (!listEvent?.content) return []; // genuinely empty after rereads → new user
+
+  try {
+    return await decryptListEntries(signer, userPubkey, listEvent.content);
+  } catch (err) {
+    throw new Error(
+      `Could not read your existing forms list to add this form, so it was left unchanged ` +
+        `to avoid losing your other forms. The form itself was published — retry to add it. ` +
+        `(${err instanceof Error ? err.message : String(err)})`,
+    );
+  }
+}
+
+/**
  * Internal: read-modify-write the user's kind-14083 list, appending one new entry.
  * Format per entry: ["f", "formPubkey:formId", relay, "signingKeyHex:viewKeyHex"]
  * Public forms omit the key segment.
@@ -507,27 +552,7 @@ async function appendToMyFormsList(
   const userPubkey = await signer.getPublicKey();
   const relays = relayManager.getRelaysForModule("forms");
 
-  // Read the newest list across relays (not first-responder) so we never append to a
-  // stale copy and accidentally drop entries when republishing.
-  const existing = await fetchLatestMyFormsEvent(relays, userPubkey);
-
-  let entries: string[][] = [];
-  if (existing?.content) {
-    try {
-      entries = await decryptListEntries(signer, userPubkey, existing.content);
-    } catch (err) {
-      // The list exists but we couldn't read it (e.g. a transient nip46 bunker
-      // decrypt failure). Treating that as an empty list would republish a
-      // 14083 holding ONLY the new form — destroying every previously-saved
-      // form. Bail instead, exactly like deleteForm. The form's 30168 is
-      // already published, so the caller can retry the list-add.
-      throw new Error(
-        `Could not read your existing forms list to add this form, so it was left unchanged ` +
-          `to avoid losing your other forms. The form itself was published — retry to add it. ` +
-          `(${err instanceof Error ? err.message : String(err)})`,
-      );
-    }
-  }
+  let entries = await readMyFormsEntriesForWrite(signer, userPubkey, relays);
 
   // Normalise any legacy 3-element entries to the canonical 4-element shape.
   // formstr.app's loader does `secretData.split(":")` on entry[3] with no guard,
@@ -811,9 +836,17 @@ export async function fetchFormSummaryFromRef(
 
 /** Append an externally-discovered form to the user's kind-14083 list (idempotent). */
 export async function importForm(summary: FormSummary): Promise<void> {
-  const current = await fetchMyForms();
-  if (current.some((f) => f.id === summary.id && f.pubkey === summary.pubkey)) return;
-  await saveToMyForms([...current, summary]);
+  // Delegate to the same clobber-safe append used by createForm: it rereads the list
+  // before rewriting (so a transient empty read can't wipe the user's other forms) and
+  // operates on the raw 14083 entries (so it can't drop entries that the summary
+  // round-trip in saveToMyForms would lose). The append is itself idempotent.
+  await appendToMyFormsList(
+    summary.pubkey,
+    summary.id,
+    summary.relay ?? "",
+    summary.signingKey,
+    summary.viewKey,
+  );
 }
 
 // ── Helpers ─────────────────────────────────────────────

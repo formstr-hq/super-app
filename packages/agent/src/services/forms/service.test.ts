@@ -133,6 +133,44 @@ describe("createForm — plain form", () => {
     expect(listPublishes).toHaveLength(0);
   });
 
+  it("does NOT clobber the my-forms list when the first read transiently misses (rereads first)", async () => {
+    // Regression: the forms default relays are not uniformly replicated, so a single
+    // read of the 14083 list can come back empty even though it exists on a slower
+    // relay. Treating that false-empty as "new user" would republish a list holding
+    // ONLY the new form, wiping every previously-saved form. The read must reread
+    // before concluding the list is empty. Fires for ANY signer (incl. ncryptsec —
+    // local decrypt never fails, so the decrypt-guard above can't catch this one).
+    const existingList = {
+      id: "list",
+      pubkey: "aabbccdd",
+      kind: 14083,
+      created_at: 1000,
+      sig: "s",
+      content: "enc_existing",
+      tags: [],
+    };
+    (nostrRuntime.querySync as any)
+      .mockResolvedValueOnce([]) // attempt 1: transient miss
+      .mockResolvedValueOnce([existingList]); // attempt 2: the list shows up
+    (nip44SelfDecrypt as any).mockResolvedValue(
+      JSON.stringify([["f", "oldPub:old1", "wss://r", "sk:vk"]]),
+    );
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
+
+    await createForm({
+      name: "Survey",
+      fields: [{ id: "f1", type: "shortText" as any, label: "Name" }],
+    });
+
+    // The republished list must include BOTH the prior form and the new one.
+    const listJson = (nip44SelfEncrypt as any).mock.calls.at(-1)[1];
+    expect(listJson).toContain("oldPub:old1"); // prior form preserved, not clobbered
+    const listPublishes = (nostrRuntime.publish as any).mock.calls.filter(
+      (c: any[]) => c[1]?.kind === 14083,
+    );
+    expect(listPublishes).toHaveLength(1);
+  });
+
   it("always tags plaintext forms public and writes per-relay relay tags (upstream parity)", async () => {
     (nip44SelfEncrypt as any).mockResolvedValue("enc_list");
 
