@@ -14,6 +14,7 @@ vi.mock("@formstr/core", () => ({
 }));
 
 import {
+  createPoll,
   fetchDeletions,
   isPollDeleted,
   fetchMyPolls,
@@ -305,6 +306,41 @@ describe("parsePollEvent — label fallback", () => {
     );
     const poll = await fetchPoll("p");
     expect(poll?.content).toBe("Real Q");
+  });
+});
+
+describe("createPoll — endsAt guard", () => {
+  it("omits the endsAt tag (and poll.endsAt) for an unparseable date", async () => {
+    // An LLM-supplied endsAt like "next friday" becomes `new Date(...)` = Invalid
+    // Date (getTime() === NaN). Upstream never emits a non-numeric endsAt, and the
+    // standalone's results filter does `until: Number(endsAt)` → NaN, so we must drop it.
+    const poll = await createPoll({
+      question: "Q?",
+      options: [{ label: "A" }, { label: "B" }],
+      pollType: "singlechoice",
+      endsAt: new Date("not a date"),
+    });
+
+    const event = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(event.tags.some((t: string[]) => t[0] === "endsAt")).toBe(false);
+    expect(poll.endsAt).toBeUndefined();
+  });
+
+  it("writes a numeric endsAt tag for a valid date", async () => {
+    const when = new Date("2030-01-01T00:00:00Z");
+    const expected = Math.floor(when.getTime() / 1000);
+
+    const poll = await createPoll({
+      question: "Q?",
+      options: [{ label: "A" }, { label: "B" }],
+      pollType: "singlechoice",
+      endsAt: when,
+    });
+
+    const event = (nostrRuntime.publish as any).mock.calls[0][1];
+    const tag = event.tags.find((t: string[]) => t[0] === "endsAt");
+    expect(tag?.[1]).toBe(String(expected));
+    expect(poll.endsAt).toBe(expected);
   });
 });
 

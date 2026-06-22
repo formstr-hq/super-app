@@ -37,8 +37,15 @@ export async function createPoll(draft: PollDraft): Promise<Poll> {
     tags.push(["t", tag]);
   }
 
-  if (draft.endsAt) {
-    tags.push(["endsAt", String(Math.floor(draft.endsAt.getTime() / 1000))]);
+  // Drop a non-finite expiry (e.g. an Invalid Date from `new Date("next friday")`):
+  // upstream only ever writes a numeric endsAt, and the standalone's results filter
+  // does `until: Number(endsAt)` — a "NaN" tag would break the tally.
+  const endsAtSec =
+    draft.endsAt && Number.isFinite(draft.endsAt.getTime())
+      ? Math.floor(draft.endsAt.getTime() / 1000)
+      : undefined;
+  if (endsAtSec !== undefined) {
+    tags.push(["endsAt", String(endsAtSec)]);
   }
 
   const event: EventTemplate = {
@@ -58,7 +65,7 @@ export async function createPoll(draft: PollDraft): Promise<Poll> {
     pollType: draft.pollType,
     pubkey,
     createdAt: signed.created_at,
-    endsAt: draft.endsAt ? Math.floor(draft.endsAt.getTime() / 1000) : undefined,
+    endsAt: endsAtSec,
     relays,
     hashtags: draft.hashtags ?? [],
     event: signed,
