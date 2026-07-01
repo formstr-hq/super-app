@@ -14,7 +14,7 @@ Conventions: `pnpm` is not installed globally — use `corepack pnpm …` (repos
 
 ## Migration status (mcp/core/agent → common-packages, as of 2026-07-02)
 
-Plan: [docs/superpowers/plans/2026-07-01-mcp-to-common-packages-migration.md](docs/superpowers/plans/2026-07-01-mcp-to-common-packages-migration.md) (checkboxes are current).
+Plan: [docs/plans/2026-07-01-mcp-to-common-packages-migration.md](docs/plans/2026-07-01-mcp-to-common-packages-migration.md) (checkboxes are current).
 
 **Done (Tasks 1–5), verified green:** branch `migrate-mcp-core-agent` holds core (0.1.0), agent (0.1.0, tsup build), mcp (0.4.0); pushed to origin, **no PR yet**. Gates: `pnpm -r build` → `typecheck` → `test:coverage` all green (build before typecheck on a fresh clone — agent resolves core types from `dist`).
 
@@ -47,6 +47,6 @@ Plan: [docs/superpowers/plans/2026-07-01-mcp-to-common-packages-migration.md](do
 
 **Interop invariants the SDK enforces (don't regress):** private events must be linked into a calendar list (only discovery channel upstream renders; ref holds the viewKey); reuse `existingId` + `viewKey` on edit; inner `["d", id]` row inside encrypted payloads; deterministic RSVP d-tags; fetch own events window-free (`since`/`until` filter publish time, not event start).
 
-## Uncommitted in this repo
+## Docs layout (after 2026-07-02 cleanup, branch `docs-cleanup`)
 
-`CLAUDE.md` (this file), the migration plan doc updates, and the `docs/sdk/calendar.md` rewrite — all docs-only, commit when convenient (suggested: `docs: calendar-sdk reference verified against code; migration + SDK status`).
+Current docs: `docs/ARCHITECTURE.md` (whole app), `docs/MCP.md` (MCP server), `docs/sdk/calendar.md` (calendar-sdk reference), `docs/plans/` (active implementation plans only). The historical `docs/superpowers/` specs/plans, the stale root `ARCHITECTURE.md`, and the vendored `.github/prompts/ui-ux-pro-max` pack were removed on `docs-cleanup` — implementation repeatedly diverged from those specs; the code-grounded docs above supersede them.
