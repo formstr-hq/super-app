@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm 9 workspace, TypeScript 5, tsup (esbuild), Vitest, `@modelcontextprotocol/sdk`, `@napi-rs/keyring`, nostr-tools.
 
-**Companion design doc:** `docs/superpowers/specs/2026-07-01-mcp-to-common-packages-migration-design.md` (read for rationale + rejected alternatives).
+**Companion design doc:** removed in the 2026-07-02 docs cleanup; available in git history at `docs/superpowers/specs/2026-07-01-mcp-to-common-packages-migration-design.md` (rationale + rejected alternatives).
 
 ## Global Constraints
 
