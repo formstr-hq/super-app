@@ -443,6 +443,75 @@ describe("calendar tools", () => {
     );
   });
 
+  it("attach_form_to_event carries formViewKey so attendees can read an encrypted form", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    const existing = {
+      id: "d",
+      title: "T",
+      description: "",
+      begin: 1,
+      end: 2,
+      kind: 31923,
+      user: "pk",
+      location: [],
+      participants: [],
+      isPrivate: false,
+      repeat: { rrule: null },
+      registrationFormRef: "naddr1old",
+      registrationFormViewKey: "vk-old",
+    };
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue(existing);
+    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
+      id: "d",
+      eventId: "ev",
+      kind: 31923,
+      user: "pk",
+      title: "T",
+    });
+
+    await tools.get("attach_form_to_event")!.handler({
+      coordinate: "31923:pk:d",
+      formRef: "naddr1enc",
+      formViewKey: "vk-new",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1enc",
+        registrationFormViewKey: "vk-new",
+      }),
+    );
+
+    // Attaching a DIFFERENT form without a key must not carry the old form's key.
+    (calendar.publishPublicCalendarEvent as any).mockClear();
+    await tools.get("attach_form_to_event")!.handler({
+      coordinate: "31923:pk:d",
+      formRef: "naddr1other",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1other",
+        registrationFormViewKey: undefined,
+      }),
+    );
+
+    // Re-attaching the SAME form without a key keeps its existing key.
+    (calendar.publishPublicCalendarEvent as any).mockClear();
+    await tools.get("attach_form_to_event")!.handler({
+      coordinate: "31923:pk:d",
+      formRef: "naddr1old",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1old",
+        registrationFormViewKey: "vk-old",
+      }),
+    );
+  });
+
   it("update_calendar_event recovers a private event's viewKey and reuses it on republish", async () => {
     // Without the viewKey, fetchCalendarEventByCoordinate can't decrypt the
     // event (fields lost) and existing.viewKey is undefined → the republish

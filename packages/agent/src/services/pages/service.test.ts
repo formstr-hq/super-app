@@ -276,6 +276,18 @@ describe("doc metadata (kind 34579) — upstream read-merge-write", () => {
     expect(obj).toEqual({ tags: [], viewKey: "vk" });
   });
 
+  it("saveDocMetadata strictly supersedes the version it merged from (same-second tie)", async () => {
+    // Two saves in the same second tie on created_at and NIP-01 tie-breaking
+    // (lowest id wins) can resurrect the stale copy — the republish must be
+    // strictly newer than the event the merge was read from.
+    const future = Math.floor(Date.now() / 1000) + 50;
+    routeQuerySync({ metadata: () => [metaEvent(addr, "ct-meta", future)] });
+    (nip44SelfDecrypt as any).mockResolvedValue(JSON.stringify({ tags: [] }));
+    await saveDocMetadata(addr, { viewKey: "vk" });
+    const e = (nostrRuntime.publish as any).mock.calls[0][1];
+    expect(e.created_at).toBe(future + 1);
+  });
+
   it("saveDocMetadata preserves UNKNOWN upstream keys on rewrite", async () => {
     routeQuerySync({ metadata: () => [metaEvent(addr, "ct-meta")] });
     (nip44SelfDecrypt as any).mockResolvedValue(JSON.stringify({ futureField: 42 }));

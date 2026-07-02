@@ -413,16 +413,26 @@ async function decryptListEntries(
   return Array.isArray(parsed) ? parsed : [];
 }
 
-/** Self-encrypt and publish the kind-14083 list (formstr.app reads NIP-44 only). */
+/**
+ * Self-encrypt and publish the kind-14083 list (formstr.app reads NIP-44 only).
+ *
+ * `prevCreatedAt` is the created_at of the list event this write was derived from
+ * (0 when there was none). Strictly supersede it: two writes inside the same second
+ * otherwise tie on created_at, and both relay replaceable-event tie-breaking
+ * (NIP-01: lowest id wins) and client newest-wins dedupe can then resurrect the
+ * stale copy — dropping a just-created form. Happens in practice when two forms
+ * are created back-to-back (same fix as calendar-sdk's updateCalendarList).
+ */
 async function publishMyFormsList(
   signer: NostrSigner,
   relays: string[],
   entries: string[][],
+  prevCreatedAt: number,
 ): Promise<void> {
   const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(entries));
   const event: EventTemplate = {
     kind: FORM_KINDS.myFormsList,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: Math.max(Math.floor(Date.now() / 1000), prevCreatedAt + 1),
     tags: [],
     content: encrypted,
   };
@@ -516,17 +526,18 @@ async function readMyFormsEntriesForWrite(
   signer: NostrSigner,
   userPubkey: string,
   relays: string[],
-): Promise<string[][]> {
+): Promise<{ entries: string[][]; prevCreatedAt: number }> {
   let listEvent: Event | null = null;
   for (let attempt = 0; attempt < MY_FORMS_LIST_READ_ATTEMPTS; attempt++) {
     // Newest across relays (not first-responder) so we never append to a stale copy.
     listEvent = await fetchLatestMyFormsEvent(relays, userPubkey);
     if (listEvent?.content) break;
   }
-  if (!listEvent?.content) return []; // genuinely empty after rereads → new user
+  if (!listEvent?.content) return { entries: [], prevCreatedAt: 0 }; // genuinely empty after rereads → new user
 
   try {
-    return await decryptListEntries(signer, userPubkey, listEvent.content);
+    const entries = await decryptListEntries(signer, userPubkey, listEvent.content);
+    return { entries, prevCreatedAt: listEvent.created_at };
   } catch (err) {
     throw new Error(
       `Could not read your existing forms list to add this form, so it was left unchanged ` +
@@ -552,12 +563,16 @@ async function appendToMyFormsList(
   const userPubkey = await signer.getPublicKey();
   const relays = relayManager.getRelaysForModule("forms");
 
-  let entries = await readMyFormsEntriesForWrite(signer, userPubkey, relays);
+  const { entries: existing, prevCreatedAt } = await readMyFormsEntriesForWrite(
+    signer,
+    userPubkey,
+    relays,
+  );
 
   // Normalise any legacy 3-element entries to the canonical 4-element shape.
   // formstr.app's loader does `secretData.split(":")` on entry[3] with no guard,
   // so a missing 4th element crashes its entire My-Forms load.
-  entries = entries.map((e) =>
+  const entries = existing.map((e) =>
     e[0] === "f" && e.length < 4 ? ["f", e[1] ?? "", e[2] ?? "", ""] : e,
   );
 
@@ -570,12 +585,13 @@ async function appendToMyFormsList(
 
   // kind-14083 uses NIP-44 self-encryption — formstr.app decrypts the list with
   // signer.nip44Decrypt(userPub, content); NIP-04 here breaks its loader.
-  await publishMyFormsList(signer, relays, entries);
+  await publishMyFormsList(signer, relays, entries, prevCreatedAt);
 }
 
 /** Public API: overwrite the user's kind-14083 list with the given summaries. */
 export async function saveToMyForms(summaries: FormSummary[]): Promise<void> {
   const signer = await signerManager.getSigner();
+  const userPubkey = await signer.getPublicKey();
   const relays = relayManager.getRelaysForModule("forms");
 
   // Canonical 4-element entry: ["f", "pubkey:formId", relay, "signingKey:viewKey"|""].
@@ -588,7 +604,8 @@ export async function saveToMyForms(summaries: FormSummary[]): Promise<void> {
   ]);
 
   // kind-14083 uses NIP-44 self-encryption — matches formstr.app's loader.
-  await publishMyFormsList(signer, relays, entries);
+  const prev = await fetchLatestMyFormsEvent(relays, userPubkey);
+  await publishMyFormsList(signer, relays, entries, prev?.created_at ?? 0);
 }
 
 // ── Fallback: discover forms by author ──────────────────
@@ -646,7 +663,7 @@ export async function deleteForm(formId: string, formPubkey: string): Promise<vo
   const coordKey = `${formPubkey}:${formId}`;
   const trimmed = entries.filter((e) => e[1] !== coordKey);
   if (trimmed.length === entries.length) return; // form wasn't in the list
-  await publishMyFormsList(signer, relays, trimmed);
+  await publishMyFormsList(signer, relays, trimmed, listEvent.created_at);
 }
 
 // ── Update Form ─────────────────────────────────────────

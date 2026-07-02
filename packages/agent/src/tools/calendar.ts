@@ -82,7 +82,8 @@ function buildCalendarTools(): ToolEntry[] {
         "calendars, this tool returns the list so you can ASK the user which one (then " +
         "re-run with calendarId). Set isPrivate:false for a public, unencrypted event — " +
         "note public events do NOT sync to calendar.formstr.app. participants (npub or hex) " +
-        "receive NIP-59 invitations.",
+        "receive NIP-59 invitations. registrationFormRef attaches a Formstr form; for an " +
+        "ENCRYPTED form also pass registrationFormViewKey or attendees cannot read it.",
       inputSchema: {
         title: z.string(),
         description: z.string().optional(),
@@ -95,6 +96,7 @@ function buildCalendarTools(): ToolEntry[] {
         rrule: z.string().optional(),
         startTzid: z.string().optional(),
         registrationFormRef: z.string().optional(),
+        registrationFormViewKey: z.string().optional(),
       },
     },
     async (args) => {
@@ -140,6 +142,7 @@ function buildCalendarTools(): ToolEntry[] {
         rrule: args.rrule,
         startTzid: args.startTzid,
         registrationFormRef: args.registrationFormRef,
+        registrationFormViewKey: args.registrationFormViewKey,
       };
       const { event, calendar: list } = await calendar.createCalendarEvent(draft, { calendars });
       const coordinate = `${event.kind}:${event.user}:${event.id}`;
@@ -482,14 +485,17 @@ function buildCalendarTools(): ToolEntry[] {
     "attach_form_to_event",
     {
       description:
-        "Attach a Formstr form (naddr or coordinate) as an event's registration form. Requires confirm:true.",
+        "Attach a Formstr form (naddr or coordinate) as an event's registration form. " +
+        "For an ENCRYPTED form, also pass formViewKey (the form's view key) — without it " +
+        "attendees cannot read the attached form. Requires confirm:true.",
       inputSchema: {
         coordinate: z.string(),
         formRef: z.string(),
+        formViewKey: z.string().optional(),
         confirm: z.boolean().optional(),
       },
     },
-    async ({ coordinate, formRef, confirm }) => {
+    async ({ coordinate, formRef, formViewKey, confirm }) => {
       const blocked = requireConfirm(
         "attach_form_to_event",
         { confirm },
@@ -501,6 +507,11 @@ function buildCalendarTools(): ToolEntry[] {
       const viewKey = await calendar.lookupEventViewKey(coordinate);
       const existing = await calendar.fetchCalendarEventByCoordinate(coordinate, viewKey);
       if (!existing) return fail(`No event found for ${coordinate}.`, "NOT_FOUND");
+      // Keep the old form's viewKey only when re-attaching the SAME form —
+      // carried over to a different form it would be the wrong key.
+      const registrationFormViewKey =
+        formViewKey ??
+        (formRef === existing.registrationFormRef ? existing.registrationFormViewKey : undefined);
       const draft = {
         title: existing.title,
         description: existing.description,
@@ -512,6 +523,7 @@ function buildCalendarTools(): ToolEntry[] {
         rrule: existing.repeat.rrule ?? undefined,
         startTzid: existing.startTzid,
         registrationFormRef: formRef,
+        registrationFormViewKey,
         notificationPreference: existing.notificationPreference,
         viewKey: existing.viewKey,
         existingId: existing.id,
