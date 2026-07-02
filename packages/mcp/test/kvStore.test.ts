@@ -49,4 +49,16 @@ describe("createKeystoreStorage (encrypted-file backend)", () => {
     const kv = await createKeystoreStorage();
     expect(() => kv.set("k", "v")).toThrow(/passphrase|FORMSTR_MCP_PASSPHRASE/i);
   });
+
+  it("reports a wrong passphrase with an actionable message, not a raw GCM error", async () => {
+    const first = await createKeystoreStorage();
+    first.set("active-pubkey", "deadbeef");
+
+    process.env.FORMSTR_MCP_PASSPHRASE = "not-the-passphrase";
+    // Raw AES-GCM auth failure reads "Unsupported state or unable to authenticate
+    // data" — the user-facing error must name FORMSTR_MCP_PASSPHRASE and a way out.
+    await expect(createKeystoreStorage()).rejects.toThrow(
+      /FORMSTR_MCP_PASSPHRASE does not match .* delete the file/s,
+    );
+  });
 });

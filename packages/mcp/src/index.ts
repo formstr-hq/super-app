@@ -36,7 +36,7 @@ async function runServer(cli: ReturnType<typeof parseCli>): Promise<void> {
   const account = await bootstrap({ account: cfg.account, relays: cfg.relays }, deps);
   console.error(
     `formstr-mcp: signed in as ${account.npub} (${account.method}), ` +
-      `writes ${cfg.allowWrites ? "ENABLED" : "disabled"}`,
+      `gated writes ${cfg.allowWrites ? "ENABLED" : "disabled (creates always on)"}`,
   );
   await startStdio({ allowWrites: cfg.allowWrites });
   console.error("formstr-mcp: server running on stdio");

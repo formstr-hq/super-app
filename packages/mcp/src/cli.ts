@@ -99,6 +99,8 @@ export function helpText(): string {
     "",
     "Flags:",
     "  --allow-writes         Enable gated write tools (update / delete / share / submit).",
+    "                         Note: create/import tools (create_form, create_calendar_event, …)",
+    "                         are ALWAYS enabled and publish to relays even without this flag.",
     "  --account <npub|hex>   Boot a specific account instead of the active one.",
     "  --relays <a,b,…>       Override relays (comma-separated).",
     "",
@@ -125,6 +127,7 @@ export function helpText(): string {
     "    }",
     "",
     "  Tip: a NIP-46 (bunker) account needs no passphrase — `switch` to one and the config",
-    '  can stay secret-free. Add "--allow-writes" to args to enable gated write tools.',
+    '  can stay secret-free. Add "--allow-writes" to args to enable gated write tools',
+    "  (creates are always on).",
   ].join("\n");
 }

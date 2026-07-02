@@ -89,6 +89,12 @@ After `login`, no key belongs in the config:
 Add `"--allow-writes"` to `args` to enable the gated (destructive/outward) tools, and
 `"--relays", "wss://a,wss://b"` to override relays.
 
+> **Note:** the default (no `--allow-writes`) is _not_ read-only. Create/import tools
+> (`create_form`, `create_calendar_event`, `create_calendar`, `create_poll`, `create_page`,
+> `import_form_from_naddr`) are always enabled and publish events on your identity. The
+> flag gates the tools that modify or delete existing data or act toward other people
+> (update / delete / share / submit / RSVP).
+
 ### Passing the ncryptsec passphrase
 
 If your active account is an `ncryptsec` key (Create / Import login), the server needs its
@@ -224,9 +230,16 @@ actions; see the source under `src/tools/`.
 Destructive / outward tools are **not registered** unless `--allow-writes` (or
 `FORMSTR_ALLOW_WRITES=true`) is set, AND each such call additionally requires
 `"confirm": true`. Without `confirm`, the tool returns a structured "confirmation
-required" message naming the irreversible effect instead of executing. `share_form`
-distributes only the view key (read access) — never the signing key. Logging goes to
-stderr (stdout is the MCP transport).
+required" message naming the irreversible effect instead of executing.
+
+**Create tools are always on.** `--allow-writes` gates updates, deletions, shares,
+submissions, and RSVPs — not creation. Creating a new form/event/calendar/poll/page
+(and importing a form) publishes to relays on your identity even without the flag,
+because a fresh entity can't clobber existing data. If you need a strictly read-only
+server, don't connect an identity that matters.
+
+`share_form` distributes only the view key (read access) — never the signing key.
+Logging goes to stderr (stdout is the MCP transport).
 
 ## Tests
 

@@ -144,7 +144,17 @@ function fileBackend(): Backend {
       if (!passphrase) {
         throw new Error("Encrypted keystore file exists but FORMSTR_MCP_PASSPHRASE is not set.");
       }
-      return parseMap(decryptBlob(readFileSync(path, "utf8"), passphrase));
+      try {
+        return parseMap(decryptBlob(readFileSync(path, "utf8"), passphrase));
+      } catch {
+        // AES-GCM reports a wrong passphrase as an opaque auth failure
+        // ("Unsupported state or unable to authenticate data") — translate it.
+        throw new Error(
+          `Could not decrypt the keystore file (${path}): FORMSTR_MCP_PASSPHRASE does not ` +
+            `match the passphrase it was encrypted with (or the file is corrupt). Fix the ` +
+            `passphrase, or delete the file and run \`formstr-mcp login\` to sign in again.`,
+        );
+      }
     },
     save(map) {
       const passphrase = process.env.FORMSTR_MCP_PASSPHRASE;
