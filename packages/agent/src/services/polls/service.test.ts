@@ -365,6 +365,15 @@ describe("PoW polls (NIP-13) — upstream parity", () => {
     expect(tmpl.tags.find((t: string[]) => t[0] === "W")).toBeUndefined();
   });
 
+  it("refuses to mine above MAX_MINED_POW_DIFFICULTY (difficulty is poll-controlled)", async () => {
+    const { MAX_MINED_POW_DIFFICULTY } = await import("./pow");
+    await expect(
+      submitPollResponse("poll1", AUTHOR, ["o1"], [], MAX_MINED_POW_DIFFICULTY + 1),
+    ).rejects.toThrow(/proof-of-work/i);
+    expect(mockSigner.signEvent).not.toHaveBeenCalled();
+    expect(nostrRuntime.publish).not.toHaveBeenCalled();
+  });
+
   it("fetchPollResults filters by #W and drops under-target votes", async () => {
     const minedId = "00" + "f".repeat(62); // pow = 8
     const weakId = "f".repeat(64); // pow = 0

@@ -3,6 +3,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
+import { readInstalledVersion } from "./version";
+
 /**
  * Map a neutral `ToolResult` to the SDK's `CallToolResult`. The error code is folded
  * back into the text (`"message (CODE)"`) to preserve the exact body external MCP
@@ -18,7 +20,7 @@ function adapt(r: ToolResult): CallToolResult {
 }
 
 export function buildServer(ctx: ToolCtx): McpServer {
-  const server = new McpServer({ name: "formstr", version: "0.1.0" });
+  const server = new McpServer({ name: "formstr", version: readInstalledVersion() });
   for (const t of toolRegistry) {
     if (t.write && !ctx.allowWrites) continue;
     server.registerTool(

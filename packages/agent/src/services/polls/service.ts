@@ -1,7 +1,7 @@
 import { signerManager, nostrRuntime, relayManager } from "@formstr/core";
 import type { EventTemplate, Event, Filter, UnsignedEvent } from "nostr-tools";
 
-import { minePollEvent, hasValidPow } from "./pow";
+import { minePollEvent, hasValidPow, MAX_MINED_POW_DIFFICULTY } from "./pow";
 import {
   POLLS_KINDS,
   type Poll,
@@ -107,6 +107,14 @@ export async function submitPollResponse(
 
   // PoW-gated polls: mine the unsigned event to the poll's difficulty (nonce +
   // ["W", difficulty] query tag) — upstream rejects/never sees unmined votes.
+  // The difficulty is read off the poll event itself, so cap it before handing
+  // it to the synchronous miner (see MAX_MINED_POW_DIFFICULTY).
+  if (powDifficulty && powDifficulty > MAX_MINED_POW_DIFFICULTY) {
+    throw new Error(
+      `This poll demands proof-of-work difficulty ${powDifficulty}, above the supported ` +
+        `maximum of ${MAX_MINED_POW_DIFFICULTY} — refusing to mine (it could take hours).`,
+    );
+  }
   if (powDifficulty && powDifficulty > 0) {
     const unsigned: UnsignedEvent = { ...event, pubkey: await signer.getPublicKey() };
     const mined = minePollEvent(unsigned, powDifficulty);

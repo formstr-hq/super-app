@@ -46,12 +46,12 @@ describe("pages tools", () => {
       "get_page_tags",
       "create_page",
       "save_private_note",
-      "update_page",
       "set_page_tags",
     ]) {
       expect(tools.has(t)).toBe(true);
     }
     // Gated tools are hidden without --allow-writes.
+    expect(tools.has("update_page")).toBe(false);
     expect(tools.has("delete_page")).toBe(false);
     expect(tools.has("share_page")).toBe(false);
   });
@@ -59,8 +59,25 @@ describe("pages tools", () => {
   it("exposes gated tools when writes are allowed", () => {
     const { server, tools } = fakeServer();
     registerPages(server, { allowWrites: true });
+    expect(tools.has("update_page")).toBe(true);
     expect(tools.has("delete_page")).toBe(true);
     expect(tools.has("share_page")).toBe(true);
+  });
+
+  it("update_page requires confirm before overwriting the doc", async () => {
+    (pages.savePage as any).mockResolvedValue({ address: "33457:pk:abc" });
+    const { server, tools } = fakeServer();
+    registerPages(server, { allowWrites: true });
+    const blocked = await tools.get("update_page")!.handler({ docId: "abc", content: "New" });
+    expect(blocked.ok).toBe(false);
+    expect(pages.savePage).not.toHaveBeenCalled();
+    const res = await tools
+      .get("update_page")!
+      .handler({ docId: "abc", content: "New", confirm: true });
+    expect(pages.savePage).toHaveBeenCalledWith(
+      expect.objectContaining({ existingId: "abc", content: "New" }),
+    );
+    expect(res.ok).toBe(true);
   });
 
   it("create_page folds the title into the markdown and returns the address", async () => {

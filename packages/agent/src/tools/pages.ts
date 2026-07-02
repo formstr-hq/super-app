@@ -138,41 +138,6 @@ function buildPagesTools(): ToolEntry[] {
   );
 
   server.registerTool(
-    "update_page",
-    {
-      description: "Update an existing document. Pass its docId (d-tag) and the new Markdown.",
-      inputSchema: {
-        docId: z.string(),
-        content: z.string(),
-        title: z.string().optional(),
-        viewKey: z.string().optional(),
-        editKey: z.string().optional(),
-      },
-    },
-    async ({
-      docId,
-      content,
-      title,
-      viewKey,
-      editKey,
-    }: {
-      docId: string;
-      content: string;
-      title?: string;
-      viewKey?: string;
-      editKey?: string;
-    }) => {
-      const page = await pages.savePage({
-        existingId: docId,
-        content: withTitle(title, content),
-        viewKey,
-        editKey,
-      });
-      return ok(`Updated page ${docId}.`, { address: page.address });
-    },
-  );
-
-  server.registerTool(
     "set_page_tags",
     {
       description: "Set the private labels/tags for a document address.",
@@ -186,6 +151,51 @@ function buildPagesTools(): ToolEntry[] {
 
   // ── Gated (destructive / outward) ─────────────────────
   write = true;
+
+  server.registerTool(
+    "update_page",
+    {
+      description:
+        "Update an existing document, replacing its content. Pass its docId (d-tag) and the new Markdown. Requires confirm:true.",
+      inputSchema: {
+        docId: z.string(),
+        content: z.string(),
+        title: z.string().optional(),
+        viewKey: z.string().optional(),
+        editKey: z.string().optional(),
+        confirm: z.boolean().optional(),
+      },
+    },
+    async ({
+      docId,
+      content,
+      title,
+      viewKey,
+      editKey,
+      confirm,
+    }: {
+      docId: string;
+      content: string;
+      title?: string;
+      viewKey?: string;
+      editKey?: string;
+      confirm?: boolean;
+    }) => {
+      const blocked = requireConfirm(
+        "update_page",
+        { confirm },
+        `overwrites document ${docId} with new content`,
+      );
+      if (blocked) return blocked;
+      const page = await pages.savePage({
+        existingId: docId,
+        content: withTitle(title, content),
+        viewKey,
+        editKey,
+      });
+      return ok(`Updated page ${docId}.`, { address: page.address });
+    },
+  );
 
   server.registerTool(
     "delete_page",

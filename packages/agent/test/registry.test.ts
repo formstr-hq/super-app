@@ -17,10 +17,15 @@ describe("toolRegistry", () => {
     }
   });
 
-  it("every gated tool is also marked write", () => {
-    const byName = new Map(toolRegistry.map((t) => [t.name, t]));
-    for (const name of GATED_TOOLS) {
-      expect(byName.get(name)?.write, `${name} should be a write tool`).toBe(true);
-    }
+  it("gated tools and write tools are the same set", () => {
+    // Every tool that enforces requireConfirm is marked `write`, so write ⟺ gated.
+    // This is the drift catcher: a write tool missing from GATED_TOOLS bypasses the
+    // in-app agent's human-confirmation UI (isGated decides whether to show it),
+    // letting the model self-approve with confirm:true.
+    const writeTools = toolRegistry
+      .filter((t) => t.write)
+      .map((t) => t.name)
+      .sort();
+    expect(writeTools).toEqual([...GATED_TOOLS].sort());
   });
 });

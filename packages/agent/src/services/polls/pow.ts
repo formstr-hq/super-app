@@ -2,14 +2,23 @@ import { getEventHash, nip13 } from "nostr-tools";
 import type { Event, UnsignedEvent } from "nostr-tools";
 
 /**
+ * Highest PoW difficulty we are willing to mine. The difficulty comes from the
+ * poll's own ["PoW"] tag — attacker-controlled data — and the miner below is a
+ * synchronous loop, so an unbounded target (e.g. a poll claiming 60) would spin
+ * this thread effectively forever. 20 (~1M hashes) keeps worst-case mining in
+ * the seconds range and covers the difficulties real polls use.
+ */
+export const MAX_MINED_POW_DIFFICULTY = 20;
+
+/**
  * NIP-13 proof-of-work miner for poll responses — a port of upstream
  * nostr-polls `utils/mining-worker.ts` (minePow): appends a
  * `["nonce", count, difficulty]` tag plus the `["W", difficulty]` query tag
  * (upstream filters vote queries by `#W` and rejects under-target ids), then
  * increments the nonce until the event id reaches the target difficulty.
  *
- * Synchronous CPU-bound loop — poll difficulties are small; callers needing a
- * responsive UI should run it off the main thread.
+ * Synchronous CPU-bound loop — callers must reject difficulties above
+ * MAX_MINED_POW_DIFFICULTY before mining; UIs should run it off the main thread.
  */
 export function minePollEvent(unsigned: UnsignedEvent, difficulty: number): Omit<Event, "sig"> {
   const event = unsigned as Omit<Event, "sig">;

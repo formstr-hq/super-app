@@ -68,6 +68,37 @@ describe("calendar tools", () => {
     expect(rw.tools.has("rsvp_event")).toBe(true);
   });
 
+  it("rejects unparseable dates instead of publishing NaN timestamps", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+
+    const created = await tools
+      .get("create_calendar_event")!
+      .handler({ title: "T", start: "next friday" });
+    expect(created.ok).toBe(false);
+    expect(created.errorCode).toBe("BAD_INPUT");
+    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+
+    const badEnd = await tools
+      .get("create_calendar_event")!
+      .handler({ title: "T", start: "2026-07-02T15:00:00Z", end: "later" });
+    expect(badEnd.ok).toBe(false);
+    expect(badEnd.errorCode).toBe("BAD_INPUT");
+    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+
+    const listed = await tools.get("list_calendar_events")!.handler({ since: "garbage" });
+    expect(listed.ok).toBe(false);
+    expect(listed.errorCode).toBe("BAD_INPUT");
+    expect(calendar.fetchCalendarEventsSync).not.toHaveBeenCalled();
+
+    const updated = await tools
+      .get("update_calendar_event")!
+      .handler({ coordinate: "31923:pk:d1", start: "whenever", confirm: true });
+    expect(updated.ok).toBe(false);
+    expect(updated.errorCode).toBe("BAD_INPUT");
+    expect(calendar.lookupEventViewKey).not.toHaveBeenCalled();
+  });
+
   it("rsvp_event requires confirm then calls rsvpToEvent", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });

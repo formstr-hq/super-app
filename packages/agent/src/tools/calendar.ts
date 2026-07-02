@@ -8,6 +8,23 @@ import { calendar, calendarBooking, calendarRsvp } from "../services";
 import { normalizePubkeyList } from "./pubkey";
 import type { ToolEntry } from "./types";
 
+/**
+ * Parse an ISO 8601 string to a Date, or null when unparseable. LLM callers
+ * routinely pass junk ("next friday"); unchecked, an Invalid Date flows into
+ * the service and publishes literal "NaN" start/end tags to relays.
+ */
+function parseIsoDate(value: string): Date | null {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function badDate(field: string, value: string) {
+  return fail(
+    `Could not parse ${field} "${value}" — pass an ISO 8601 date-time (e.g. 2026-07-02T15:00:00Z).`,
+    "BAD_INPUT",
+  );
+}
+
 export const calendarTools: ToolEntry[] = buildCalendarTools();
 
 function buildCalendarTools(): ToolEntry[] {
@@ -30,11 +47,15 @@ function buildCalendarTools(): ToolEntry[] {
       inputSchema: { since: z.string().optional(), until: z.string().optional() },
     },
     async ({ since, until }) => {
+      const sinceDate = since ? parseIsoDate(since) : undefined;
+      if (since && !sinceDate) return badDate("since", since);
+      const untilDate = until ? parseIsoDate(until) : undefined;
+      if (until && !untilDate) return badDate("until", until);
       const pubkey = signerManager.getPublicKey();
       const events = await calendar.fetchCalendarEventsSync({
         authors: pubkey ? [pubkey] : undefined,
-        since: since ? Math.floor(new Date(since).getTime() / 1000) : undefined,
-        until: until ? Math.floor(new Date(until).getTime() / 1000) : undefined,
+        since: sinceDate ? Math.floor(sinceDate.getTime() / 1000) : undefined,
+        until: untilDate ? Math.floor(untilDate.getTime() / 1000) : undefined,
       });
       return ok(`Found ${events.length} event(s).`, {
         events: events.map((e) => ({
@@ -77,6 +98,10 @@ function buildCalendarTools(): ToolEntry[] {
       },
     },
     async (args) => {
+      const begin = parseIsoDate(args.start);
+      if (!begin) return badDate("start", args.start);
+      const end = args.end ? parseIsoDate(args.end) : new Date(begin.getTime() + 3_600_000);
+      if (!end) return badDate("end", args.end!);
       // Default to private: only private events referenced (with their viewKey)
       // in a calendar list are discoverable on calendar.formstr.app.
       const isPrivate = args.isPrivate ?? true;
@@ -101,8 +126,6 @@ function buildCalendarTools(): ToolEntry[] {
         );
       }
 
-      const begin = new Date(args.start);
-      const end = args.end ? new Date(args.end) : new Date(begin.getTime() + 3_600_000);
       const draft = {
         title: args.title,
         description: args.description ?? "",
@@ -418,6 +441,10 @@ function buildCalendarTools(): ToolEntry[] {
         `updates event ${args.coordinate}`,
       );
       if (blocked) return blocked;
+      const newBegin = args.start ? parseIsoDate(args.start) : undefined;
+      if (args.start && !newBegin) return badDate("start", args.start);
+      const newEnd = args.end ? parseIsoDate(args.end) : undefined;
+      if (args.end && !newEnd) return badDate("end", args.end);
       // Recover the per-event viewKey from the user's calendar lists so the
       // private event decrypts (without it the fields are lost) AND the republish
       // reuses the SAME key — minting a fresh one would orphan the calendar-list
@@ -428,8 +455,8 @@ function buildCalendarTools(): ToolEntry[] {
       const draft = {
         title: args.title ?? existing.title,
         description: args.description ?? existing.description,
-        begin: args.start ? new Date(args.start) : new Date(existing.begin),
-        end: args.end ? new Date(args.end) : new Date(existing.end),
+        begin: newBegin ?? new Date(existing.begin),
+        end: newEnd ?? new Date(existing.end),
         location: args.location ?? existing.location[0],
         participants: existing.participants,
         isPrivate: existing.isPrivate,
