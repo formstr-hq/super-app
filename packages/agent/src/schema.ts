@@ -21,7 +21,9 @@ let cached: ToolSchema[] | null = null;
 export function getToolSchemas(): ToolSchema[] {
   if (cached) return cached;
   cached = toolRegistry.map((t) => {
-    const json = zodToJsonSchema(z.object(t.inputSchema), {
+    // .strict() so the advertised schema (additionalProperties: false) matches
+    // the runtime contract — handlers hard-reject unknown keys (see tools/validate.ts).
+    const json = zodToJsonSchema(z.object(t.inputSchema).strict(), {
       $refStrategy: "none",
     }) as Record<string, unknown>;
     delete json.$schema;

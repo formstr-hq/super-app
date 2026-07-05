@@ -146,14 +146,20 @@ function buildCalendarTools(): ToolEntry[] {
       };
       const { event, calendar: list } = await calendar.createCalendarEvent(draft, { calendars });
       const coordinate = `${event.kind}:${event.user}:${event.id}`;
+      // Private events gift-wrap one NIP-59 invitation per participant (published
+      // to that participant's NIP-65 relays) — echo the count so callers can
+      // verify the invites went out instead of guessing.
+      const invitationsSent = isPrivate ? (draft.participants?.length ?? 0) : 0;
       return ok(
         `Created ${isPrivate ? "private" : "public"} event "${args.title}"` +
-          `${list ? ` in calendar "${list.title}"` : ""}.`,
+          `${list ? ` in calendar "${list.title}"` : ""}` +
+          `${invitationsSent ? ` — sent ${invitationsSent} invitation(s)` : ""}.`,
         {
           id: event.id,
           eventId: event.eventId,
           coordinate,
           calendarId: list?.id,
+          invitationsSent,
         },
       );
     },
@@ -175,12 +181,19 @@ function buildCalendarTools(): ToolEntry[] {
         event: {
           id: event.id,
           title: event.title,
+          description: event.description,
           begin: event.begin,
           end: event.end,
           location: event.location,
           isPrivate: event.isPrivate,
           rrule: event.repeat?.rrule ?? null,
+          startTzid: event.startTzid ?? null,
           participants: event.participants,
+          calendarId: event.calendarId ?? null,
+          // The attached form ref is surfaced so a write can be verified; the
+          // form's viewKey itself is never returned (no key material in results).
+          registrationFormRef: event.registrationFormRef ?? null,
+          registrationFormHasViewKey: Boolean(event.registrationFormViewKey),
         },
       });
     },
@@ -192,7 +205,12 @@ function buildCalendarTools(): ToolEntry[] {
     async () => {
       const lists = await calendar.fetchCalendarLists();
       return ok(`Found ${lists.length} calendar(s).`, {
-        calendars: lists.map((c) => ({ id: c.id, title: c.title, color: c.color })),
+        calendars: lists.map((c) => ({
+          id: c.id,
+          title: c.title,
+          color: c.color,
+          description: c.description,
+        })),
       });
     },
   );
@@ -424,7 +442,9 @@ function buildCalendarTools(): ToolEntry[] {
     "update_calendar_event",
     {
       description:
-        "Update a calendar event by its coordinate kind:pubkey:d. Only changed fields need be sent. Requires confirm:true.",
+        "Update a calendar event by its coordinate kind:pubkey:d. Only changed fields need be sent. " +
+        "registrationFormRef attaches/replaces the event's registration form (empty string detaches it); " +
+        "for an ENCRYPTED form also pass registrationFormViewKey or attendees cannot read it. Requires confirm:true.",
       inputSchema: {
         coordinate: z.string(),
         title: z.string().optional(),
@@ -434,6 +454,8 @@ function buildCalendarTools(): ToolEntry[] {
         location: z.string().optional(),
         rrule: z.string().optional(),
         startTzid: z.string().optional(),
+        registrationFormRef: z.string().optional(),
+        registrationFormViewKey: z.string().optional(),
         confirm: z.boolean().optional(),
       },
     },
@@ -455,6 +477,19 @@ function buildCalendarTools(): ToolEntry[] {
       const viewKey = await calendar.lookupEventViewKey(args.coordinate);
       const existing = await calendar.fetchCalendarEventByCoordinate(args.coordinate, viewKey);
       if (!existing) return fail(`No event found for ${args.coordinate}.`, "NOT_FOUND");
+      // Registration form: undefined keeps the current one, "" detaches it.
+      // The old form's viewKey is kept only when the ref is unchanged — carried
+      // over to a different form it would be the wrong key (see attach_form_to_event).
+      const formRef =
+        args.registrationFormRef === undefined
+          ? existing.registrationFormRef
+          : args.registrationFormRef || undefined;
+      const formViewKey = !formRef
+        ? undefined
+        : (args.registrationFormViewKey ??
+          (formRef === existing.registrationFormRef
+            ? existing.registrationFormViewKey
+            : undefined));
       const draft = {
         title: args.title ?? existing.title,
         description: args.description ?? existing.description,
@@ -465,8 +500,8 @@ function buildCalendarTools(): ToolEntry[] {
         isPrivate: existing.isPrivate,
         rrule: args.rrule ?? existing.repeat.rrule ?? undefined,
         startTzid: args.startTzid ?? existing.startTzid,
-        registrationFormRef: existing.registrationFormRef,
-        registrationFormViewKey: existing.registrationFormViewKey,
+        registrationFormRef: formRef,
+        registrationFormViewKey: formViewKey,
         notificationPreference: existing.notificationPreference,
         viewKey: existing.viewKey,
         existingId: existing.id,

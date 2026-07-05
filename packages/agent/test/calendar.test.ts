@@ -512,6 +512,150 @@ describe("calendar tools", () => {
     );
   });
 
+  it("get_calendar_event surfaces the attached registration form (but never its key)", async () => {
+    // A successful attach_form_to_event was previously unverifiable — the read
+    // tool omitted the form field entirely, so callers couldn't confirm the write.
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+      id: "d",
+      title: "Conf",
+      description: "Annual meetup",
+      begin: 1,
+      end: 2,
+      kind: 32678,
+      user: "pk",
+      location: [],
+      participants: [],
+      isPrivate: true,
+      repeat: { rrule: null },
+      calendarId: "c1",
+      registrationFormRef: "naddr1form",
+      registrationFormViewKey: "vk-secret",
+    });
+    const res = await tools.get("get_calendar_event")!.handler({ coordinate: "32678:pk:d" });
+    expect(res.ok).toBeTruthy();
+    expect(res.data.event.registrationFormRef).toBe("naddr1form");
+    expect(res.data.event.registrationFormHasViewKey).toBe(true);
+    expect(res.data.event.description).toBe("Annual meetup");
+    expect(res.data.event.calendarId).toBe("c1");
+    // Key material must never appear anywhere in a tool result.
+    expect(JSON.stringify(res.data)).not.toContain("vk-secret");
+  });
+
+  it("update_calendar_event attaches/replaces/detaches the registration form", async () => {
+    // The model naturally passes registrationFormRef to update_calendar_event
+    // (it accepts it on create) — it used to be silently stripped, so nothing
+    // attached while the call reported success.
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    const existing = {
+      id: "d",
+      title: "T",
+      description: "",
+      begin: 1,
+      end: 2,
+      kind: 31923,
+      user: "pk",
+      location: [],
+      participants: [],
+      isPrivate: false,
+      repeat: { rrule: null },
+      registrationFormRef: "naddr1old",
+      registrationFormViewKey: "vk-old",
+    };
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue(existing);
+    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
+      id: "d",
+      eventId: "ev",
+      kind: 31923,
+      user: "pk",
+      title: "T",
+    });
+
+    // Replace with a different form + its key.
+    await tools.get("update_calendar_event")!.handler({
+      coordinate: "31923:pk:d",
+      registrationFormRef: "naddr1new",
+      registrationFormViewKey: "vk-new",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1new",
+        registrationFormViewKey: "vk-new",
+      }),
+    );
+
+    // A different form WITHOUT a key must not inherit the old form's key.
+    await tools.get("update_calendar_event")!.handler({
+      coordinate: "31923:pk:d",
+      registrationFormRef: "naddr1other",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1other",
+        registrationFormViewKey: undefined,
+      }),
+    );
+
+    // Re-sending the SAME ref keeps its existing key.
+    await tools.get("update_calendar_event")!.handler({
+      coordinate: "31923:pk:d",
+      registrationFormRef: "naddr1old",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1old",
+        registrationFormViewKey: "vk-old",
+      }),
+    );
+
+    // Omitting the field keeps the current form untouched.
+    await tools
+      .get("update_calendar_event")!
+      .handler({ coordinate: "31923:pk:d", title: "T2", confirm: true });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1old",
+        registrationFormViewKey: "vk-old",
+      }),
+    );
+
+    // Empty string detaches the form (and drops its key).
+    await tools.get("update_calendar_event")!.handler({
+      coordinate: "31923:pk:d",
+      registrationFormRef: "",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        registrationFormRef: undefined,
+        registrationFormViewKey: undefined,
+      }),
+    );
+  });
+
+  it("create_calendar_event echoes how many invitations were sent", async () => {
+    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
+    (calendar.createCalendarEvent as any).mockResolvedValue({
+      event: { id: "d1", eventId: "ev1", kind: 32678, user: "pk" },
+      calendar: { id: "auto", title: "My Calendar" },
+    });
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: false });
+    const res = await tools.get("create_calendar_event")!.handler({
+      title: "Party",
+      start: "2026-06-10T10:00:00Z",
+      participants: ["a".repeat(64), "b".repeat(64)],
+    });
+    expect(res.ok).toBeTruthy();
+    expect(res.data.invitationsSent).toBe(2);
+    expect(res.text).toContain("2 invitation(s)");
+  });
+
   it("update_calendar_event recovers a private event's viewKey and reuses it on republish", async () => {
     // Without the viewKey, fetchCalendarEventByCoordinate can't decrypt the
     // event (fields lost) and existing.viewKey is undefined → the republish

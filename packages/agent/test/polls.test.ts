@@ -96,6 +96,38 @@ describe("polls tools", () => {
     expect(okRes.ok).toBeTruthy();
   });
 
+  it("get_poll surfaces the PoW difficulty gate", async () => {
+    (polls.fetchPoll as any).mockResolvedValue({ ...POLL, powDifficulty: 15 });
+    const { server, tools } = fakeServer();
+    registerPolls(server, { allowWrites: false });
+    const res = await tools.get("get_poll")!.handler({ pollEventId: "p1" });
+    expect(res.data.poll.powDifficulty).toBe(15);
+
+    (polls.fetchPoll as any).mockResolvedValue(POLL);
+    const none = await tools.get("get_poll")!.handler({ pollEventId: "p1" });
+    expect(none.data.poll.powDifficulty).toBeNull();
+  });
+
+  it("create_poll rejects an unparseable endsAt instead of silently dropping it", async () => {
+    // The service guards NaN by omitting the tag — but then the poll would
+    // never expire and the caller was never told. Fail fast like calendar.
+    const { server, tools } = fakeServer();
+    registerPolls(server, { allowWrites: false });
+    const res = await tools
+      .get("create_poll")!
+      .handler({ question: "Q", options: ["a", "b"], endsAt: "next friday" });
+    expect(res.ok).toBe(false);
+    expect(res.errorCode).toBe("BAD_INPUT");
+    expect(polls.createPoll).not.toHaveBeenCalled();
+
+    (polls.createPoll as any).mockResolvedValue({ id: "p9" });
+    const good = await tools
+      .get("create_poll")!
+      .handler({ question: "Q", options: ["a", "b"], endsAt: "2026-07-02T15:00:00Z" });
+    expect(good.ok).toBeTruthy();
+    expect((polls.createPoll as any).mock.calls[0][0].endsAt).toBeInstanceOf(Date);
+  });
+
   it("fetch_poll_results fetches the poll then serializes the option map", async () => {
     (polls.fetchPollResults as any).mockResolvedValue({
       results: new Map([["o1", { count: 3, percentage: 75, responders: [] }]]),
