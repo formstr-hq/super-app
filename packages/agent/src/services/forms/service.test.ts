@@ -743,6 +743,58 @@ describe("deleteForm", () => {
   });
 });
 
+// ── kind-14083 same-second supersede ──────────────────────────
+
+describe("kind-14083 republish — same-second supersede", () => {
+  // Two list writes inside the same second tie on created_at; NIP-01 replaceable
+  // tie-breaking (lowest id wins) can then resurrect the stale copy and drop a
+  // just-created form. Every republish must be strictly newer than the version
+  // it was derived from (same fix as calendar-sdk's updateCalendarList).
+  const future = Math.floor(Date.now() / 1000) + 50;
+  const listEvent = {
+    id: "list",
+    pubkey: "aabbccdd",
+    kind: 14083,
+    created_at: future,
+    sig: "s",
+    content: "enc_list",
+    tags: [],
+  };
+
+  it("createForm's list append is strictly newer than the list it read", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([listEvent]);
+    (nip44SelfDecrypt as any).mockResolvedValue(
+      JSON.stringify([["f", "otherpub:form9", "wss://b.relay", "sk9:vk9"]]),
+    );
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_new");
+
+    await createForm({
+      name: "Second",
+      fields: [{ id: "f1", type: "shortText" as any, label: "Name" }],
+    });
+
+    const listPublish = (nostrRuntime.publish as any).mock.calls.find(
+      (c: any[]) => c[1]?.kind === 14083,
+    );
+    expect(listPublish[1].created_at).toBe(future + 1);
+  });
+
+  it("deleteForm's trimmed republish is strictly newer than the list it read", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([listEvent]);
+    (nip44SelfDecrypt as any).mockResolvedValue(
+      JSON.stringify([["f", "formpub:form1", "wss://a.relay", "sk1:vk1"]]),
+    );
+    (nip44SelfEncrypt as any).mockResolvedValue("enc_trimmed");
+
+    await deleteForm("form1", "formpub");
+
+    const listPublish = (nostrRuntime.publish as any).mock.calls.find(
+      (c: any[]) => c[1]?.kind === 14083,
+    );
+    expect(listPublish[1].created_at).toBe(future + 1);
+  });
+});
+
 // ── saveToMyForms ─────────────────────────────────────────────
 
 describe("saveToMyForms", () => {

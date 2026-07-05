@@ -224,7 +224,10 @@ export class Agent {
 
     // Preview: requireConfirm short-circuits before any side effect and returns
     // the effect text. A non-confirm failure here is a real validation error.
-    const preview = await entry.handler(tc.arguments, this.ctx);
+    // `confirm` is forced off — the model is told "re-call with confirm:true",
+    // so left as-is its own confirm would execute the side effect right here,
+    // skipping the human approval below.
+    const preview = await entry.handler({ ...tc.arguments, confirm: false }, this.ctx);
     if (preview.ok || !preview.text.startsWith(CONFIRM_REQUIRED_PREFIX)) return preview;
 
     const approved = cb.onConfirmRequired

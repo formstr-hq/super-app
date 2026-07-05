@@ -116,7 +116,10 @@ function buildDriveTools(): ToolEntry[] {
   server.registerTool(
     "delete_file",
     {
-      description: "Delete a file from your drive by name. Requires confirm:true.",
+      description:
+        "Remove a file from your drive index by name. This is a soft delete: the encrypted " +
+        "blob stays on the Blossom server (unreadable without your key) — only the drive " +
+        "listing forgets it. Requires confirm:true.",
       inputSchema: {
         name: z.string(),
         folder: z.string().optional(),
@@ -129,7 +132,10 @@ function buildDriveTools(): ToolEntry[] {
       const resolved = await resolveFile(name, folder);
       if ("error" in resolved) return resolved.error;
       await drive.deleteFile(resolved.file);
-      return ok(`Deleted "${name}".`);
+      return ok(
+        `Removed "${name}" from your drive index. The encrypted blob remains on the ` +
+          `Blossom server; it is unreadable without your key.`,
+      );
     },
   );
 

@@ -68,6 +68,37 @@ describe("calendar tools", () => {
     expect(rw.tools.has("rsvp_event")).toBe(true);
   });
 
+  it("rejects unparseable dates instead of publishing NaN timestamps", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+
+    const created = await tools
+      .get("create_calendar_event")!
+      .handler({ title: "T", start: "next friday" });
+    expect(created.ok).toBe(false);
+    expect(created.errorCode).toBe("BAD_INPUT");
+    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+
+    const badEnd = await tools
+      .get("create_calendar_event")!
+      .handler({ title: "T", start: "2026-07-02T15:00:00Z", end: "later" });
+    expect(badEnd.ok).toBe(false);
+    expect(badEnd.errorCode).toBe("BAD_INPUT");
+    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+
+    const listed = await tools.get("list_calendar_events")!.handler({ since: "garbage" });
+    expect(listed.ok).toBe(false);
+    expect(listed.errorCode).toBe("BAD_INPUT");
+    expect(calendar.fetchCalendarEventsSync).not.toHaveBeenCalled();
+
+    const updated = await tools
+      .get("update_calendar_event")!
+      .handler({ coordinate: "31923:pk:d1", start: "whenever", confirm: true });
+    expect(updated.ok).toBe(false);
+    expect(updated.errorCode).toBe("BAD_INPUT");
+    expect(calendar.lookupEventViewKey).not.toHaveBeenCalled();
+  });
+
   it("rsvp_event requires confirm then calls rsvpToEvent", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
@@ -409,6 +440,75 @@ describe("calendar tools", () => {
       .handler({ coordinate: "31923:pk:d", formRef: "naddr1abc", confirm: true });
     expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
       expect.objectContaining({ registrationFormRef: "naddr1abc", existingId: "d" }),
+    );
+  });
+
+  it("attach_form_to_event carries formViewKey so attendees can read an encrypted form", async () => {
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    const existing = {
+      id: "d",
+      title: "T",
+      description: "",
+      begin: 1,
+      end: 2,
+      kind: 31923,
+      user: "pk",
+      location: [],
+      participants: [],
+      isPrivate: false,
+      repeat: { rrule: null },
+      registrationFormRef: "naddr1old",
+      registrationFormViewKey: "vk-old",
+    };
+    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue(existing);
+    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
+      id: "d",
+      eventId: "ev",
+      kind: 31923,
+      user: "pk",
+      title: "T",
+    });
+
+    await tools.get("attach_form_to_event")!.handler({
+      coordinate: "31923:pk:d",
+      formRef: "naddr1enc",
+      formViewKey: "vk-new",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1enc",
+        registrationFormViewKey: "vk-new",
+      }),
+    );
+
+    // Attaching a DIFFERENT form without a key must not carry the old form's key.
+    (calendar.publishPublicCalendarEvent as any).mockClear();
+    await tools.get("attach_form_to_event")!.handler({
+      coordinate: "31923:pk:d",
+      formRef: "naddr1other",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1other",
+        registrationFormViewKey: undefined,
+      }),
+    );
+
+    // Re-attaching the SAME form without a key keeps its existing key.
+    (calendar.publishPublicCalendarEvent as any).mockClear();
+    await tools.get("attach_form_to_event")!.handler({
+      coordinate: "31923:pk:d",
+      formRef: "naddr1old",
+      confirm: true,
+    });
+    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registrationFormRef: "naddr1old",
+        registrationFormViewKey: "vk-old",
+      }),
     );
   });
 

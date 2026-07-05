@@ -457,8 +457,8 @@ export async function fetchAllDocMetadata(): Promise<Map<string, DocMetadata>> {
   return result;
 }
 
-/** Newest decrypted metadata for one doc address. */
-export async function fetchDocMetadata(address: string): Promise<DocMetadata | undefined> {
+/** Newest kind-30169 metadata event for one doc address (newest across relays). */
+async function fetchNewestDocMetadataEvent(address: string): Promise<Event | undefined> {
   const signer = await signerManager.getSigner();
   const pubkey = await signer.getPublicKey();
   const events = await nostrRuntime.querySync(RELAYS(), {
@@ -467,7 +467,14 @@ export async function fetchDocMetadata(address: string): Promise<DocMetadata | u
     "#d": [address],
   } as Filter);
   if (events.length === 0) return undefined;
-  const newest = events.reduce((a, b) => (b.created_at > a.created_at ? b : a));
+  return events.reduce((a, b) => (b.created_at > a.created_at ? b : a));
+}
+
+/** Newest decrypted metadata for one doc address. */
+export async function fetchDocMetadata(address: string): Promise<DocMetadata | undefined> {
+  const signer = await signerManager.getSigner();
+  const newest = await fetchNewestDocMetadataEvent(address);
+  if (!newest) return undefined;
   try {
     return parseMetadataJson(await nip44SelfDecrypt(signer, newest.content));
   } catch {
@@ -484,18 +491,29 @@ export async function saveDocMetadata(
   address: string,
   patch: Partial<DocMetadata>,
 ): Promise<DocMetadata> {
-  const existing = (await fetchDocMetadata(address)) ?? {};
+  const signer = await signerManager.getSigner();
+  const prevEvent = await fetchNewestDocMetadataEvent(address);
+  let existing: DocMetadata = {};
+  if (prevEvent) {
+    try {
+      existing = parseMetadataJson(await nip44SelfDecrypt(signer, prevEvent.content)) ?? {};
+    } catch {
+      /* undecryptable prior metadata — merge onto empty, but still supersede it below */
+    }
+  }
   const merged: DocMetadata = { ...existing, ...patch };
   // Upstream nostr-docs types `tags` as a required field and reads `meta.tags.length`
   // unguarded (DocMetadataContext): a metadata object with no `tags` key makes
   // pages.formstr.app throw and drop ALL doc titles/tags/sharedAs. Always emit one.
   if (!Array.isArray(merged.tags)) merged.tags = [];
 
-  const signer = await signerManager.getSigner();
   const content = await nip44SelfEncrypt(signer, JSON.stringify(merged));
   const signed = await signer.signEvent({
     kind: PAGES_KINDS.docMetadata,
-    created_at: Math.floor(Date.now() / 1000),
+    // Strictly supersede the event this merge was read from: two saves in the
+    // same second otherwise tie on created_at and NIP-01 tie-breaking (lowest
+    // id wins) can resurrect the stale copy — losing a just-saved viewKey/title.
+    created_at: Math.max(Math.floor(Date.now() / 1000), (prevEvent?.created_at ?? 0) + 1),
     tags: [["d", address]],
     content,
   });

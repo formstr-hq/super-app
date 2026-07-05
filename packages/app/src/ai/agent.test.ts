@@ -274,6 +274,24 @@ describe("Agent (gated confirm gate)", () => {
     await agent.run("delete it", "pk", c.cb);
     expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "declined")).toBe(true);
   });
+
+  it("ignores the model's own confirm:true — the human still decides", async () => {
+    // Tool descriptions tell the model to re-call with confirm:true, so it may
+    // send it unprompted. The preview must strip it or the side effect runs
+    // before onConfirmRequired ever fires.
+    const selfConfirming = new FakeProvider([
+      { toolCalls: [{ name: "delete_poll", arguments: { pollId: "p1", confirm: true } }] },
+      { text: "Okay." },
+    ]);
+    const agent = new Agent(selfConfirming, new ConversationContext());
+    const c = collectCallbacks({ onConfirmRequired: async () => false });
+    await agent.run("delete it", "pk", c.cb);
+    expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "declined")).toBe(true);
+    expect(handlerSpies.delete_poll).not.toHaveBeenCalledWith(
+      expect.objectContaining({ confirm: true }),
+      expect.anything(),
+    );
+  });
 });
 
 describe("Agent (text-JSON tool-call fallback)", () => {

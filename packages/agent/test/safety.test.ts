@@ -5,8 +5,17 @@ import { requireConfirm, isGated, GATED_TOOLS, CONFIRM_REQUIRED_PREFIX } from ".
 describe("safety", () => {
   it("lists the destructive/outward tools", () => {
     expect(GATED_TOOLS).toContain("delete_form");
+    expect(GATED_TOOLS).toContain("update_form");
+    expect(GATED_TOOLS).toContain("share_form");
     expect(GATED_TOOLS).toContain("submit_form_response");
     expect(GATED_TOOLS).toContain("rsvp_event");
+    expect(GATED_TOOLS).toContain("update_calendar");
+    expect(GATED_TOOLS).toContain("delete_calendar");
+    expect(GATED_TOOLS).toContain("add_event_to_calendar");
+    expect(GATED_TOOLS).toContain("remove_event_from_calendar");
+    expect(GATED_TOOLS).toContain("approve_booking");
+    expect(GATED_TOOLS).toContain("decline_booking");
+    expect(GATED_TOOLS).toContain("update_page");
     expect(GATED_TOOLS).toContain("delete_file");
     expect(GATED_TOOLS).toContain("rename_file");
     expect(GATED_TOOLS).toContain("move_file");

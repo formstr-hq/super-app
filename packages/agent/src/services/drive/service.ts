@@ -162,6 +162,7 @@ export async function fetchFileIndex(): Promise<FileMetadata[]> {
 
 export async function saveFileMetadata(metadata: FileMetadata): Promise<void> {
   const signer = await signerManager.getSigner();
+  const relays = relayManager.getRelaysForModule("drive");
   // Backfill the algorithm field on rewrite — every blob ever written used AES-GCM,
   // and upstream's FileMetadata always carries it.
   const full: FileMetadata = {
@@ -170,9 +171,21 @@ export async function saveFileMetadata(metadata: FileMetadata): Promise<void> {
   };
   const encrypted = await nip44SelfEncrypt(signer, JSON.stringify(full));
 
+  // Strictly supersede the current version of this file's addressable event: two
+  // writes in the same second (e.g. upload → rename) otherwise tie on created_at,
+  // and NIP-01 tie-breaking (lowest id wins) can resurrect the stale copy —
+  // un-deleting or un-renaming the file.
+  const pubkey = await signer.getPublicKey();
+  const existing = await nostrRuntime.querySync(relays, {
+    kinds: [DRIVE_KINDS.fileMetadata],
+    authors: [pubkey],
+    "#d": [metadata.hash],
+  } as Filter);
+  const prevCreatedAt = existing.reduce((max, e) => Math.max(max, e.created_at), 0);
+
   const event: EventTemplate = {
     kind: DRIVE_KINDS.fileMetadata,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: Math.max(Math.floor(Date.now() / 1000), prevCreatedAt + 1),
     tags: [
       ["d", metadata.hash],
       ["client", "formstr-drive"],
@@ -182,7 +195,6 @@ export async function saveFileMetadata(metadata: FileMetadata): Promise<void> {
   };
 
   const signed = await signer.signEvent(event);
-  const relays = relayManager.getRelaysForModule("drive");
   await nostrRuntime.publish(relays, signed);
 }
 

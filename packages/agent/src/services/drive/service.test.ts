@@ -275,6 +275,16 @@ describe("deleteFile", () => {
     expect(event.tags).toContainEqual(["d", "h5"]);
     expect(JSON.parse(event.content).deleted).toBe(true);
   });
+
+  it("strictly supersedes a same-second prior version (created_at bump)", async () => {
+    // Upload → delete inside one second ties on created_at, and NIP-01
+    // tie-breaking (lowest id wins) can resurrect the non-deleted copy.
+    const future = Math.floor(Date.now() / 1000) + 50;
+    (nostrRuntime.querySync as any).mockResolvedValue([metaEvent(meta({ hash: "h7" }), future)]);
+    await deleteFile(meta({ hash: "h7" }));
+    const [, event] = (nostrRuntime.publish as any).mock.calls[0];
+    expect(event.created_at).toBe(future + 1);
+  });
 });
 
 describe("extractFolders", () => {
