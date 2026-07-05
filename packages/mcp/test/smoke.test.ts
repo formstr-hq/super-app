@@ -67,6 +67,33 @@ describe("smoke: stdio handshake", () => {
     expect(names.has("rsvp_event")).toBe(true);
     expect(names.has("submit_poll_response")).toBe(true);
   }, 30_000);
+
+  it("rejects unknown tool parameters instead of silently stripping them", async () => {
+    // Regression: update_calendar_event once silently ignored a
+    // registrationFormRef argument (the SDK's default parse strips unknown
+    // keys), so the call "succeeded" without attaching anything. The server
+    // now registers strict schemas — an unknown key must be an InvalidParams
+    // error that names it, and it must fail BEFORE the handler runs (no
+    // relay traffic, hence no network needed for this call).
+    const transport = new StdioClientTransport({
+      command: "node",
+      args: ["dist/index.js", "--allow-writes"],
+      env: spawnEnv(),
+    });
+    const client = new Client({ name: "test", version: "0.0.1" });
+    await client.connect(transport);
+    try {
+      const res = (await client.callTool({
+        name: "update_calendar_event",
+        arguments: { coordinate: "31923:pk:d", notARealParameter: "x", confirm: true },
+      })) as { isError?: boolean; content: Array<{ type: string; text: string }> };
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("notARealParameter");
+      expect(res.content[0].text).toMatch(/Unrecognized|Invalid/);
+    } finally {
+      await client.close();
+    }
+  }, 30_000);
 });
 
 describe("buildServer", () => {
