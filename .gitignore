@@ -15,3 +15,6 @@ coverage/
 
 # Brainstorming visual-companion mockups (local only)
 .superpowers/
+
+# Personal working notes for AI-assisted sessions (local only)
+CLAUDE.md

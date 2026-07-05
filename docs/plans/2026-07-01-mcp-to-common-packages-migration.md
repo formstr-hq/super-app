@@ -8,12 +8,12 @@
 
 **Tech Stack:** pnpm 9 workspace, TypeScript 5, tsup (esbuild), Vitest, `@modelcontextprotocol/sdk`, `@napi-rs/keyring`, nostr-tools.
 
-**Companion design doc:** `docs/superpowers/specs/2026-07-01-mcp-to-common-packages-migration-design.md` (read for rationale + rejected alternatives).
+**Companion design doc:** removed in the 2026-07-02 docs cleanup; available in git history at `docs/superpowers/specs/2026-07-01-mcp-to-common-packages-migration-design.md` (rationale + rejected alternatives).
 
 ## Global Constraints
 
-- **Working clone of common-packages:** `/extra/formstr/common-packages` (fresh clone of `https://github.com/formstr-hq/common-packages`, branch `migrate-mcp-core-agent`). This is NOT the stale gitignored reference clone at `super-app/upstream/common-packages` (pinned at `507322e`, signer-only) — do not use that one.
-- **super-app rewiring** happens on a super-app branch `consume-core-agent-from-npm` (super-app root: `/extra/formstr/super-app-upstream/super-app`).
+- **Working clone of common-packages:** `/Users/skywalker/Coding/FOSS/formstr/common-packages` (sibling of super-app; branch `migrate-mcp-core-agent`). _(Plan originally referenced `/extra/formstr/…` paths from a different environment — those do not exist on this machine; all paths below were rewritten 2026-07-02.)_ This is NOT the stale gitignored reference clone at `super-app/upstream/common-packages` (pinned at `507322e`, signer-only) — do not use that one.
+- **super-app rewiring** happens on a super-app branch `consume-core-agent-from-npm` (super-app root: `/Users/skywalker/Coding/FOSS/formstr/super-app`).
 - **Versions:** `@formstr/mcp` stays `0.4.0`. `@formstr/core` and `@formstr/agent` become **public** at `0.1.0` (drop `private: true`).
 - **Preserve agent `exports` keys EXACTLY:** `".", "./services", "./services/forms", "./services/calendar", "./services/pages", "./services/drive", "./services/polls", "./services/profile", "./services/*", "./tools"` — only retarget `./src/*.ts` → `./dist/*.js`/`.d.ts`. super-app import sites must not change.
 - **Test/build gates that must stay green:** in common-packages — core **95**, agent **331**, mcp **81** tests + `pnpm -r typecheck` + `pnpm -r build`. In super-app after rewiring — app **243** tests + `tsc -b && vite build`.
@@ -29,32 +29,32 @@
 
 **Files:**
 
-- Create: `/extra/formstr/common-packages/` (clone)
+- Create: `/Users/skywalker/Coding/FOSS/formstr/common-packages/` (clone)
 
 **Interfaces:**
 
 - Produces: a clean working clone on branch `migrate-mcp-core-agent`, with a documented answer to "does `pnpm install` block build scripts here?" (drives Task 5).
 
-- [ ] **Step 1: Clone and branch**
+- [x] **Step 1: Clone and branch**
 
 ```bash
-cd /extra/formstr
+cd /Users/skywalker/Coding/FOSS/formstr
 git clone https://github.com/formstr-hq/common-packages.git
 cd common-packages
 git checkout -b migrate-mcp-core-agent
 git log --oneline -1   # expect the current origin/main tip (e.g. 84defa0)
 ```
 
-- [ ] **Step 2: Install and capture build-script behavior**
+- [x] **Step 2: Install and capture build-script behavior**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 pnpm install 2>&1 | tee /tmp/cp-install.log
 ```
 
 Expected: install completes. **Note whether pnpm prints an "Ignored build scripts" / "packages have build scripts that were not run" warning** (naming esbuild and/or a native addon). Record the answer — it determines whether Task 5 must add `onlyBuiltDependencies`.
 
-- [ ] **Step 3: Verify existing packages are green (baseline)**
+- [x] **Step 3: Verify existing packages are green (baseline)**
 
 ```bash
 pnpm -r typecheck
@@ -64,7 +64,7 @@ pnpm -r build
 
 Expected: all pass (signer + local-relay). If any fail on a clean clone, STOP and report — the target repo is not green and must be fixed first.
 
-- [ ] **Step 4: No commit** (setup only; nothing changed).
+- [x] **Step 4: No commit** (setup only; nothing changed).
 
 ---
 
@@ -72,22 +72,22 @@ Expected: all pass (signer + local-relay). If any fail on a clean clone, STOP an
 
 **Files:**
 
-- Create: `/extra/formstr/common-packages/packages/core/**` (copied from super-app `packages/core`)
+- Create: `/Users/skywalker/Coding/FOSS/formstr/common-packages/packages/core/**` (copied from super-app `packages/core`)
 - Modify: `packages/core/package.json`, `packages/core/tsconfig.json`
 
 **Interfaces:**
 
 - Produces: `@formstr/core@0.1.0` (public), building to `dist` with its existing `exports` map intact; consumed by agent + mcp as `workspace:*`.
 
-- [ ] **Step 1: Copy core into the clone (exclude build/deps artifacts)**
+- [x] **Step 1: Copy core into the clone (exclude build/deps artifacts)**
 
 ```bash
 rsync -a --exclude node_modules --exclude dist --exclude '*.tsbuildinfo' \
-  /extra/formstr/super-app-upstream/super-app/packages/core/ \
-  /extra/formstr/common-packages/packages/core/
+  /Users/skywalker/Coding/FOSS/formstr/super-app/packages/core/ \
+  /Users/skywalker/Coding/FOSS/formstr/common-packages/packages/core/
 ```
 
-- [ ] **Step 2: Edit `packages/core/package.json`** — remove `"private": true`; set version and publish metadata. Result (only the changed/added fields shown; keep `type`, `main`, `types`, `exports`, `scripts`, `dependencies`, `devDependencies` exactly as they are today):
+- [x] **Step 2: Edit `packages/core/package.json`** — remove `"private": true`; set version and publish metadata. Result (only the changed/added fields shown; keep `type`, `main`, `types`, `exports`, `scripts`, `dependencies`, `devDependencies` exactly as they are today):
 
 ```jsonc
 {
@@ -108,7 +108,7 @@ rsync -a --exclude node_modules --exclude dist --exclude '*.tsbuildinfo' \
 }
 ```
 
-- [ ] **Step 3: Preserve strictness in `packages/core/tsconfig.json`** — add the two flags common-packages' base omits, keeping the rest:
+- [x] **Step 3: Preserve strictness in `packages/core/tsconfig.json`** — add the two flags common-packages' base omits, keeping the rest:
 
 ```jsonc
 {
@@ -125,10 +125,10 @@ rsync -a --exclude node_modules --exclude dist --exclude '*.tsbuildinfo' \
 }
 ```
 
-- [ ] **Step 4: Install, typecheck, test, build**
+- [x] **Step 4: Install, typecheck, test, build**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 pnpm install
 pnpm --filter @formstr/core typecheck
 pnpm --filter @formstr/core test        # expect 95 passed
@@ -138,10 +138,10 @@ ls packages/core/dist/index.js packages/core/dist/index.d.ts   # exist
 
 Expected: typecheck clean, **95 tests pass**, `dist/` populated with `.js` + `.d.ts` matching the `exports` map (`signer`, `runtime`, `relay`, `blossom`, `crypto`, `linking`). If Vitest trips the wrapper, run `cd packages/core && node ../../node_modules/vitest/vitest.mjs run`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 git add packages/core pnpm-lock.yaml
 git commit -m "feat: add @formstr/core (0.1.0) from super-app"
 ```
@@ -152,7 +152,7 @@ git commit -m "feat: add @formstr/core (0.1.0) from super-app"
 
 **Files:**
 
-- Create: `/extra/formstr/common-packages/packages/agent/**` (copied)
+- Create: `/Users/skywalker/Coding/FOSS/formstr/common-packages/packages/agent/**` (copied)
 - Create: `packages/agent/tsup.config.ts`
 - Modify: `packages/agent/package.json`, `packages/agent/tsconfig.json`
 - Create: `packages/agent/scripts/verify-exports.mjs` (subpath resolution smoke test)
@@ -162,15 +162,15 @@ git commit -m "feat: add @formstr/core (0.1.0) from super-app"
 - Consumes: `@formstr/core` (`workspace:*`) from Task 2.
 - Produces: `@formstr/agent@0.1.0` (public) building to `dist` with ESM+CJS+`.d.ts`; `exports` keys unchanged (see Global Constraints); root exposes `toolRegistry`, `ToolCtx`, `ToolResult` (what mcp imports).
 
-- [ ] **Step 1: Copy agent into the clone**
+- [x] **Step 1: Copy agent into the clone**
 
 ```bash
 rsync -a --exclude node_modules --exclude dist --exclude '*.tsbuildinfo' \
-  /extra/formstr/super-app-upstream/super-app/packages/agent/ \
-  /extra/formstr/common-packages/packages/agent/
+  /Users/skywalker/Coding/FOSS/formstr/super-app/packages/agent/ \
+  /Users/skywalker/Coding/FOSS/formstr/common-packages/packages/agent/
 ```
 
-- [ ] **Step 2: Create `packages/agent/tsup.config.ts`** (multi-entry, one per `exports` target; models signer/local-relay):
+- [x] **Step 2: Create `packages/agent/tsup.config.ts`** (multi-entry, one per `exports` target; models signer/local-relay):
 
 ```ts
 import { defineConfig } from "tsup";
@@ -197,7 +197,7 @@ export default defineConfig({
 
 > Note: the only direct file under `src/services/` is `index.ts`, so the `./services/*` catch-all export needs no extra entry today; it is retargeted to `./dist/services/*.js` for forward-compat.
 
-- [ ] **Step 3: Edit `packages/agent/package.json`** — make public, add build + coverage scripts + tsup dep, link core, retarget `exports` to `dist`. Full file:
+- [x] **Step 3: Edit `packages/agent/package.json`** — make public, add build + coverage scripts + tsup dep, link core, retarget `exports` to `dist`. Full file:
 
 ```jsonc
 {
@@ -294,7 +294,7 @@ export default defineConfig({
 }
 ```
 
-- [ ] **Step 4: Update `packages/agent/tsconfig.json`** — keep `noEmit` (tsup owns emit); the `../core` project reference still resolves as a sibling; re-add strictness flags:
+- [x] **Step 4: Update `packages/agent/tsconfig.json`** — keep `noEmit` (tsup owns emit); the `../core` project reference still resolves as a sibling; re-add strictness flags:
 
 ```jsonc
 {
@@ -311,7 +311,7 @@ export default defineConfig({
 }
 ```
 
-- [ ] **Step 5: Create `packages/agent/scripts/verify-exports.mjs`** — proves every `exports` subpath resolves post-build:
+- [x] **Step 5: Create `packages/agent/scripts/verify-exports.mjs`** — proves every `exports` subpath resolves post-build:
 
 ```js
 // Resolve every published subpath against the built dist. Exits non-zero on any miss.
@@ -341,10 +341,10 @@ for (const s of subpaths) {
 process.exit(failed ? 1 : 0);
 ```
 
-- [ ] **Step 6: Install, build, verify exports, typecheck, test**
+- [x] **Step 6: Install, build, verify exports, typecheck, test**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 pnpm install
 pnpm --filter @formstr/agent build
 node packages/agent/scripts/verify-exports.mjs    # all OK, exit 0
@@ -354,10 +354,10 @@ pnpm --filter @formstr/agent test                 # expect 331 passed
 
 Expected: build emits `dist/index.{js,cjs,d.ts}` plus every `services/*` and `tools` entry; verify-exports prints all `OK`; typecheck clean; **331 tests pass**.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 git add packages/agent pnpm-lock.yaml
 git commit -m "feat: add @formstr/agent (0.1.0) with a tsup build"
 ```
@@ -368,7 +368,7 @@ git commit -m "feat: add @formstr/agent (0.1.0) with a tsup build"
 
 **Files:**
 
-- Create: `/extra/formstr/common-packages/packages/mcp/**` (copied, incl. `docs/MCP.md`, `test-create-form.mjs`, `tsup.config.ts`, `vitest.config.ts`)
+- Create: `/Users/skywalker/Coding/FOSS/formstr/common-packages/packages/mcp/**` (copied, incl. `docs/MCP.md`, `test-create-form.mjs`, `tsup.config.ts`, `vitest.config.ts`)
 - Modify: `packages/mcp/package.json`
 
 **Interfaces:**
@@ -376,15 +376,15 @@ git commit -m "feat: add @formstr/agent (0.1.0) with a tsup build"
 - Consumes: `@formstr/agent`, `@formstr/core`, `@formstr/signer` (all `workspace:*`).
 - Produces: `@formstr/mcp@0.4.0` single-file CJS bundle with agent+core inlined, `@napi-rs/keyring` external (unchanged behavior).
 
-- [ ] **Step 1: Copy mcp into the clone**
+- [x] **Step 1: Copy mcp into the clone**
 
 ```bash
 rsync -a --exclude node_modules --exclude dist --exclude '*.tsbuildinfo' \
-  /extra/formstr/super-app-upstream/super-app/packages/mcp/ \
-  /extra/formstr/common-packages/packages/mcp/
+  /Users/skywalker/Coding/FOSS/formstr/super-app/packages/mcp/ \
+  /Users/skywalker/Coding/FOSS/formstr/common-packages/packages/mcp/
 ```
 
-- [ ] **Step 2: Edit `packages/mcp/package.json`** — move the three `@formstr/*` from devDeps to `workspace:*`, add `test:coverage` + coverage dep, retarget metadata. Changed fields:
+- [x] **Step 2: Edit `packages/mcp/package.json`** — move the three `@formstr/*` from devDeps to `workspace:*`, add `test:coverage` + coverage dep, retarget metadata. Changed fields:
 
 ```jsonc
 {
@@ -428,7 +428,7 @@ rsync -a --exclude node_modules --exclude dist --exclude '*.tsbuildinfo' \
 
 > `@formstr/signer` moves from npm `^0.2.2` to `workspace:*` — mcp now bundles the local signer (0.2.2 in this repo). tsup config (`noExternal: [/^(?!@napi-rs\/keyring)/]`, keyring external) is unchanged.
 
-- [ ] **Step 3: Add strictness flags to `packages/mcp/tsconfig.json`**
+- [x] **Step 3: Add strictness flags to `packages/mcp/tsconfig.json`**
 
 ```jsonc
 {
@@ -443,10 +443,10 @@ rsync -a --exclude node_modules --exclude dist --exclude '*.tsbuildinfo' \
 }
 ```
 
-- [ ] **Step 4: Install, typecheck, test, build, smoke**
+- [x] **Step 4: Install, typecheck, test, build, smoke**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 pnpm install
 pnpm --filter @formstr/mcp typecheck
 pnpm --filter @formstr/mcp test            # expect 81 passed
@@ -456,10 +456,10 @@ node packages/mcp/dist/index.js version    # prints "@formstr/mcp 0.4.0" (+ upda
 
 Expected: typecheck clean, **81 tests pass**, build produces a single `dist/index.js`, `version` prints `@formstr/mcp 0.4.0`.
 
-- [ ] **Step 5: Verify the bundle is self-contained** (agent+core inlined; only keyring external):
+- [x] **Step 5: Verify the bundle is self-contained** (agent+core inlined; only keyring external):
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 grep -oE "require\(['\"][^'\"]+['\"]\)" packages/mcp/dist/index.js \
   | grep -E "@formstr|@modelcontextprotocol|nostr-tools" || echo "NONE (good: bundled)"
 grep -c "@napi-rs/keyring" packages/mcp/dist/index.js   # > 0 (external, required at runtime)
@@ -467,10 +467,10 @@ grep -c "@napi-rs/keyring" packages/mcp/dist/index.js   # > 0 (external, require
 
 Expected: **NONE** of `@formstr/*`, `@modelcontextprotocol/*`, `nostr-tools` are `require`d at runtime (all bundled); `@napi-rs/keyring` IS referenced (stays external).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 git add packages/mcp pnpm-lock.yaml
 git commit -m "feat: relocate @formstr/mcp (0.4.0) into common-packages"
 ```
@@ -481,15 +481,15 @@ git commit -m "feat: relocate @formstr/mcp (0.4.0) into common-packages"
 
 **Files:**
 
-- Modify (conditional): `/extra/formstr/common-packages/package.json` (add `pnpm.onlyBuiltDependencies`)
-- Modify: `/extra/formstr/common-packages/README.md`
+- Modify (conditional): `/Users/skywalker/Coding/FOSS/formstr/common-packages/package.json` (add `pnpm.onlyBuiltDependencies`)
+- Modify: `/Users/skywalker/Coding/FOSS/formstr/common-packages/README.md`
 - Verify: `.github/workflows/ci.yml` (no change expected)
 
 **Interfaces:**
 
 - Produces: green `pnpm -r` gates for the whole workspace; CI that actually runs all three new test suites.
 
-- [ ] **Step 1: (Conditional) add build allowances** — ONLY if Task 1 Step 2 showed pnpm ignoring build scripts, or if a later `pnpm install` warned about esbuild/keyring. Add to root `package.json`:
+- [x] **Step 1: (Conditional) add build allowances** — ONLY if Task 1 Step 2 showed pnpm ignoring build scripts, or if a later `pnpm install` warned about esbuild/keyring. Add to root `package.json`:
 
 ```jsonc
 {
@@ -501,14 +501,14 @@ git commit -m "feat: relocate @formstr/mcp (0.4.0) into common-packages"
 
 Then `pnpm install` and re-run the keyring path check: `node packages/mcp/dist/index.js whoami` must not throw a native-module load error. If Task 1 showed no build-script warning, SKIP this step and note "not needed on pnpm 9.0.0".
 
-- [ ] **Step 2: Verify CI already covers the new packages** — `.github/workflows/ci.yml` runs `pnpm -r --if-present test:coverage`; core/agent/mcp now all have `test:coverage`, so no CI edit is required. Confirm by reading the workflow. (If it were missing coverage on mcp, Task 4 Step 2 already added it.)
+- [x] **Step 2: Verify CI already covers the new packages** — `.github/workflows/ci.yml` runs `pnpm -r --if-present test:coverage`; core/agent/mcp now all have `test:coverage`, so no CI edit is required. Confirm by reading the workflow. (If it were missing coverage on mcp, Task 4 Step 2 already added it.)
 
-- [ ] **Step 3: Update `README.md`** to list the three new packages alongside signer/local-relay (one line each: name + one-sentence purpose).
+- [x] **Step 3: Update `README.md`** to list the three new packages alongside signer/local-relay (one line each: name + one-sentence purpose).
 
-- [ ] **Step 4: Full-workspace gate**
+- [x] **Step 4: Full-workspace gate**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 pnpm -r typecheck
 pnpm -r --if-present test:coverage    # core 95 + agent 331 + mcp 81 + signer + local-relay
 pnpm -r build
@@ -516,18 +516,18 @@ pnpm -r build
 
 Expected: everything green; total new tests visible = 95 + 331 + 81.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 git add -A
 git commit -m "chore: workspace config + README for core/agent/mcp"
 ```
 
-- [ ] **Step 6: [USER STEP] Push branch + open PR** — outward-facing; do not run without the user's go-ahead:
+- [ ] **Step 6: [USER STEP] Push branch + open PR** — outward-facing; do not run without the user's go-ahead. _Status 2026-07-02: branch pushed to origin; PR NOT yet opened (`gh` not installed — open via https://github.com/formstr-hq/common-packages/pull/new/migrate-mcp-core-agent)._
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 git push -u origin migrate-mcp-core-agent
 gh pr create --repo formstr-hq/common-packages --fill
 ```
@@ -541,7 +541,7 @@ Irreversible + 2FA/OTP-gated. Runs only after the PR is merged to common-package
 - [ ] **Step 1: Build fresh from a clean tree**
 
 ```bash
-cd /extra/formstr/common-packages
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages
 pnpm install --frozen-lockfile
 pnpm --filter @formstr/core build
 pnpm --filter @formstr/agent build
@@ -556,11 +556,11 @@ pnpm --filter @formstr/agent exec npm pack --dry-run
 
 Expected: each tarball lists only `dist/**` + `package.json` (+ README/LICENSE if present); no `src`, no workspace refs.
 
-- [ ] **Step 3: Publish (user runs; OTP expires ~30s)**
+- [ ] **Step 3: Publish (user runs; OTP expires ~30s)** — MUST use `pnpm publish`, NOT `npm publish`: agent depends on `@formstr/core` via `workspace:*`, which only pnpm rewrites to the real version (`0.1.0`) at pack time. Verified 2026-07-02: `pnpm pack` produces `"@formstr/core": "0.1.0"`; a bare `npm publish` would ship the literal `workspace:*` and break every install.
 
 ```bash
-cd /extra/formstr/common-packages/packages/core  && npm publish --access public --otp=<code>
-cd /extra/formstr/common-packages/packages/agent && npm publish --access public --otp=<code>
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages/packages/core  && corepack pnpm publish --access public --otp=<code>
+cd /Users/skywalker/Coding/FOSS/formstr/common-packages/packages/agent && corepack pnpm publish --access public --otp=<code>
 ```
 
 - [ ] **Step 4: Verify on npm**
@@ -578,7 +578,7 @@ npm view @formstr/agent version   # 0.1.0
 
 **Files:**
 
-- Modify: `/extra/formstr/super-app-upstream/super-app/packages/app/package.json`
+- Modify: `/Users/skywalker/Coding/FOSS/formstr/super-app/packages/app/package.json`
 - Delete: `super-app/packages/core`, `super-app/packages/agent`, `super-app/packages/mcp`
 - Modify (if referenced): `super-app/pnpm-workspace.yaml`, root scripts
 
@@ -589,7 +589,7 @@ npm view @formstr/agent version   # 0.1.0
 - [ ] **Step 1: Branch**
 
 ```bash
-cd /extra/formstr/super-app-upstream/super-app
+cd /Users/skywalker/Coding/FOSS/formstr/super-app
 git checkout -b consume-core-agent-from-npm
 ```
 
@@ -598,14 +598,14 @@ git checkout -b consume-core-agent-from-npm
 - [ ] **Step 3: Delete the moved packages**
 
 ```bash
-cd /extra/formstr/super-app-upstream/super-app
+cd /Users/skywalker/Coding/FOSS/formstr/super-app
 git rm -r packages/core packages/agent packages/mcp
 ```
 
 - [ ] **Step 4: Reinstall + full app gate**
 
 ```bash
-cd /extra/formstr/super-app-upstream/super-app
+cd /Users/skywalker/Coding/FOSS/formstr/super-app
 CI=true pnpm install --no-frozen-lockfile
 pnpm --filter @formstr/app typecheck
 ( cd packages/app && node ../../node_modules/vitest/vitest.mjs run )   # expect 243 passed
@@ -617,7 +617,7 @@ Expected: install resolves core/agent from npm; app typechecks; **243 tests pass
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /extra/formstr/super-app-upstream/super-app
+cd /Users/skywalker/Coding/FOSS/formstr/super-app
 git add -A
 git commit -m "chore: consume @formstr/core and @formstr/agent from npm; drop moved packages"
 ```
@@ -642,7 +642,7 @@ git commit -m "chore: consume @formstr/core and @formstr/agent from npm; drop mo
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /extra/formstr/super-app-upstream/super-app
+cd /Users/skywalker/Coding/FOSS/formstr/super-app
 git add docs/ARCHITECTURE.md docs/MCP.md CLAUDE.md
 git commit -m "docs: reflect core/agent/mcp move to common-packages"
 ```
@@ -651,8 +651,8 @@ git commit -m "docs: reflect core/agent/mcp move to common-packages"
 
 ## Final verification checklist
 
-- [ ] common-packages: `pnpm -r typecheck` + `pnpm -r --if-present test:coverage` (core 95 / agent 331 / mcp 81 + signer + local-relay) + `pnpm -r build` all green.
-- [ ] mcp `dist/index.js` self-contained (agent+core bundled; keyring external); `node dist/index.js version` → `@formstr/mcp 0.4.0`.
+- [x] common-packages: `pnpm -r typecheck` + `pnpm -r --if-present test:coverage` (core 95 / agent 337 / mcp 81 + signer 144 + local-relay 210) + `pnpm -r build` all green. _(Verified 2026-07-02; agent grew 331→337 tests since the plan was written.)_
+- [x] mcp `dist/index.js` self-contained (agent+core bundled; keyring external); `node dist/index.js version` → `@formstr/mcp 0.4.0`. _(Verified 2026-07-02; agent verify-exports all OK.)_
 - [ ] npm: `@formstr/core@0.1.0` + `@formstr/agent@0.1.0` published; tarballs = `dist` only.
 - [ ] super-app: app 243 tests pass + `tsc -b && vite build` green against npm core/agent; deep imports resolve.
 - [ ] mcp e2e still works from the bundle: `FORMSTR_MCP_NCRYPTSEC_PASSPHRASE=… node packages/mcp/test-create-form.mjs` round-trips create/get/delete.
