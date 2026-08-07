@@ -28,24 +28,19 @@ describe("entityFromTool", () => {
     });
   });
 
-  it("maps create_page / save_private_note to a pages entity via address", () => {
+  it("returns null for pages and polls tools, which the app no longer routes to", () => {
+    // They stay in the agent registry for the MCP server, but this app filters
+    // them out before the model ever sees them — so an entity here would point
+    // at a route that redirects away.
     expect(
       entityFromTool("save_private_note", { title: "Note" }, { address: "30023:pk:n1" }),
-    ).toEqual({ module: "pages", ref: "30023:pk:n1", label: "Note", route: "/pages" });
-  });
-
-  it("maps create_poll to a polls entity via id", () => {
-    expect(entityFromTool("create_poll", { question: "Lunch?" }, { id: "p1" })).toEqual({
-      module: "polls",
-      ref: "p1",
-      label: "Lunch?",
-      route: "/polls",
-    });
+    ).toBeNull();
+    expect(entityFromTool("create_poll", { question: "Lunch?" }, { id: "p1" })).toBeNull();
   });
 
   it("returns null for reads and deletes", () => {
     expect(entityFromTool("list_forms", {}, { forms: [] })).toBeNull();
-    expect(entityFromTool("delete_poll", { pollId: "p1" }, undefined)).toBeNull();
+    expect(entityFromTool("delete_form", { formId: "f1" }, undefined)).toBeNull();
   });
 
   it("returns null when the data lacks a usable ref", () => {

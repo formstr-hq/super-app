@@ -19,15 +19,6 @@
     "@formstr/core": "workspace:*",
     "@formstr/signer": "^0.2.2",
     "@mui/material": "^6.4.0",
-    "@tiptap/core": "^3.22.4",
-    "@tiptap/extension-link": "^3.22.4",
-    "@tiptap/extension-placeholder": "^3.22.4",
-    "@tiptap/extension-task-item": "^3.22.4",
-    "@tiptap/extension-task-list": "^3.22.4",
-    "@tiptap/pm": "^3.22.4",
-    "@tiptap/react": "^3.22.4",
-    "@tiptap/starter-kit": "^3.22.4",
-    "@tiptap/suggestion": "^3.22.4",
     "lucide-react": "^1.8.0",
     "nostr-tools": "^2.23.3",
     "notistack": "^3.0.1",
@@ -37,7 +28,6 @@
     "react-router-dom": "^7.1.0",
     "recharts": "^3.8.1",
     "rrule": "^2.8.1",
-    "tiptap-markdown": "^0.9.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

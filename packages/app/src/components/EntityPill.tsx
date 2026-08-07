@@ -1,18 +1,17 @@
 import { parseRef, resolveRef, type ModuleType } from "@formstr/core";
 import { Box, Chip, CircularProgress, Tooltip, Typography } from "@mui/material";
-import { Calendar, ClipboardList, FileText, FolderOpen, Vote, X } from "lucide-react";
+import { Calendar, ClipboardList, FolderOpen, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useCalendarStore } from "../stores/calendarStore";
 import { useFormsStore } from "../stores/formsStore";
-import { usePagesStore } from "../stores/pagesStore";
-import { usePollsStore } from "../stores/pollsStore";
 
 const MODULE_META: Record<
   ModuleType,
   {
-    icon: typeof FileText;
+    icon: LucideIcon;
     label: string;
     color: "primary" | "secondary" | "info" | "success" | "warning";
   }
@@ -27,20 +26,10 @@ const MODULE_META: Record<
     label: "Event",
     color: "warning",
   },
-  pages: {
-    icon: FileText,
-    label: "Page",
-    color: "success",
-  },
   drive: {
     icon: FolderOpen,
     label: "File",
     color: "secondary",
-  },
-  polls: {
-    icon: Vote,
-    label: "Poll",
-    color: "primary",
   },
 };
 
@@ -118,8 +107,6 @@ function useResolveLabel(
 ): [string | null, boolean] {
   const formsStore = useFormsStore();
   const calendarStore = useCalendarStore();
-  const pagesStore = usePagesStore();
-  const pollsStore = usePollsStore();
 
   const [label, setLabel] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
@@ -150,24 +137,6 @@ function useResolveLabel(
         found = match?.title ?? null;
         break;
       }
-      case "pages": {
-        const match = pagesStore.pages.find(
-          (p) => p.id === identifier && (!pubkey || p.pubkey === pubkey),
-        );
-        found = match?.title ?? null;
-        break;
-      }
-      case "polls": {
-        const match = pollsStore.myPolls.find(
-          (p) => p.id === identifier && (!pubkey || p.pubkey === pubkey),
-        );
-        // Show first line of question as label
-        if (match?.content) {
-          const firstLine = match.content.split("\n")[0]?.trim() ?? "";
-          found = firstLine.slice(0, 60) || null;
-        }
-        break;
-      }
       case "drive":
         // Drive files are addressed differently; just leave label null for now
         found = null;
@@ -175,14 +144,7 @@ function useResolveLabel(
     }
     setLabel(found);
     setResolving(false);
-  }, [
-    module,
-    params,
-    formsStore.myForms,
-    calendarStore.events,
-    pagesStore.pages,
-    pollsStore.myPolls,
-  ]);
+  }, [module, params, formsStore.myForms, calendarStore.events]);
 
   return [label, resolving];
 }

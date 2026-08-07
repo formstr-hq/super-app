@@ -63,7 +63,7 @@ export interface LLMProvider {
 }
 
 export interface EntityRef {
-  module: "forms" | "calendar" | "pages" | "drive" | "polls";
+  module: "forms" | "calendar" | "drive";
   ref: string;
   label: string;
   createdAt?: number;

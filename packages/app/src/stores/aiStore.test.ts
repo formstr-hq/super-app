@@ -67,20 +67,20 @@ describe("aiStore", () => {
 
   it("collects run steps onto the assistant message", async () => {
     scriptedRun = async (cb) => {
-      cb.onStepStart?.({ id: "1", toolName: "create_poll", module: "polls", status: "running" });
+      cb.onStepStart?.({ id: "1", toolName: "create_form", module: "forms", status: "running" });
       cb.onStepUpdate?.({
         id: "1",
-        toolName: "create_poll",
-        module: "polls",
+        toolName: "create_form",
+        module: "forms",
         status: "success",
         resultText: "ok",
       });
       cb.onToken("Done.");
       cb.onDone();
     };
-    await useAIStore.getState().sendMessage("make a poll");
+    await useAIStore.getState().sendMessage("make a form");
     const assistant = useAIStore.getState().messages.find((m) => m.role === "assistant");
-    expect(assistant?.run?.[0]).toMatchObject({ toolName: "create_poll", status: "success" });
+    expect(assistant?.run?.[0]).toMatchObject({ toolName: "create_form", status: "success" });
   });
 
   it("exposes a pendingConfirm that resolveConfirm unblocks", async () => {
@@ -89,8 +89,8 @@ describe("aiStore", () => {
       approved =
         (await cb.onConfirmRequired?.({
           id: "1",
-          toolName: "delete_poll",
-          module: "polls",
+          toolName: "delete_form",
+          module: "forms",
           message: "Confirm?",
         })) ?? null;
       cb.onToken(approved ? "Deleted." : "Cancelled.");
@@ -99,7 +99,7 @@ describe("aiStore", () => {
     const send = useAIStore.getState().sendMessage("delete poll");
     // Wait for the agent to reach the confirm point (robust against the async init chain).
     await vi.waitFor(() =>
-      expect(useAIStore.getState().pendingConfirm?.toolName).toBe("delete_poll"),
+      expect(useAIStore.getState().pendingConfirm?.toolName).toBe("delete_form"),
     );
     useAIStore.getState().resolveConfirm(true);
     await send;

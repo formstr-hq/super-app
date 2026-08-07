@@ -83,30 +83,6 @@ const CALENDAR_TOOLS = new Set([
   "remove_event_from_calendar",
 ]);
 
-const PAGES_TOOLS = new Set([
-  "list_pages",
-  "get_page",
-  "create_page",
-  "update_page",
-  "delete_page",
-  "save_private_note",
-  "share_page",
-  "list_shared_pages",
-  "get_page_tags",
-  "set_page_tags",
-]);
-
-const POLLS_TOOLS = new Set([
-  "list_polls",
-  "list_recent_polls",
-  "get_poll",
-  "create_poll",
-  "delete_poll",
-  "submit_poll_response",
-  "clear_my_vote",
-  "fetch_poll_results",
-]);
-
 const DRIVE_TOOLS = new Set([
   "browse_files",
   "get_file_info",
@@ -122,8 +98,6 @@ const DRIVE_TOOLS = new Set([
 export function moduleForTool(toolName: string): AIModule | null {
   if (FORMS_TOOLS.has(toolName)) return "forms";
   if (CALENDAR_TOOLS.has(toolName)) return "calendar";
-  if (PAGES_TOOLS.has(toolName)) return "pages";
-  if (POLLS_TOOLS.has(toolName)) return "polls";
   if (DRIVE_TOOLS.has(toolName)) return "drive";
   return null;
 }
