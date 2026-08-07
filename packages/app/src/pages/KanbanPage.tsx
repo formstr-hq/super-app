@@ -7,7 +7,7 @@ import {
   type KanbanCard,
 } from "@formstr/kanban-sdk";
 import { Alert, Box, Button, IconButton, Snackbar, Tooltip, Typography } from "@mui/material";
-import { ArrowLeft, Lock, Pencil, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Lock, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -15,6 +15,7 @@ import { BoardListView } from "../components/kanban/BoardListView";
 import { BoardView } from "../components/kanban/BoardView";
 import { CardDialog } from "../components/kanban/CardDialog";
 import { CreateBoardDialog } from "../components/kanban/CreateBoardDialog";
+import { DeleteBoardDialog } from "../components/kanban/DeleteBoardDialog";
 import { KanbanSidebar } from "../components/kanban/KanbanSidebar";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { PageHeader } from "../components/PageHeader";
@@ -25,6 +26,7 @@ import { useAuthStore, useKanbanStore } from "../stores";
 type ActiveDialog =
   | { kind: "none" }
   | { kind: "board"; board?: KanbanBoard }
+  | { kind: "deleteBoard"; board: KanbanBoard }
   | { kind: "card"; column: Column; card?: KanbanCard };
 
 export function KanbanPage() {
@@ -46,6 +48,7 @@ export function KanbanPage() {
     fetchCards,
     createBoard,
     updateBoard,
+    deleteBoard,
     createCard,
     updateCard,
     deleteCard,
@@ -70,6 +73,10 @@ export function KanbanPage() {
 
   const cards = board ? (cardsByBoard[boardKey(board)] ?? []) : [];
   const readOnly = !board || !pubkey || !canEditCards(board, pubkey);
+  // Maintainers may write cards, but a NIP-09 tombstone is only honored from
+  // the event's own author — a maintainer's deletion would be signed by the
+  // wrong key and silently ignored by relays. Offer it to the owner alone.
+  const isOwner = Boolean(board && pubkey && board.pubkey === pubkey);
 
   const cardCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -113,6 +120,20 @@ export function KanbanPage() {
       setDialog({ kind: "none" });
     } catch {
       // store holds the error; leave the dialog up
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeBoard = async () => {
+    if (dialog.kind !== "deleteBoard") return;
+    setSaving(true);
+    try {
+      await deleteBoard(dialog.board);
+      setDialog({ kind: "none" });
+      openBoard(null);
+    } catch {
+      // store holds the error; leave the dialog up so the user can retry
     } finally {
       setSaving(false);
     }
@@ -191,6 +212,17 @@ export function KanbanPage() {
                       Edit
                     </Button>
                   )}
+                  {isOwner && (
+                    <Tooltip title="Delete board">
+                      <IconButton
+                        size="small"
+                        aria-label="Delete board"
+                        onClick={() => setDialog({ kind: "deleteBoard", board })}
+                      >
+                        <Trash2 size={15} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </>
               }
             />
@@ -250,6 +282,15 @@ export function KanbanPage() {
         saving={saving}
         onClose={() => setDialog({ kind: "none" })}
         onSubmit={(draft) => void submitBoard(draft)}
+      />
+
+      <DeleteBoardDialog
+        open={dialog.kind === "deleteBoard"}
+        board={dialog.kind === "deleteBoard" ? dialog.board : undefined}
+        cardCount={cards.filter((c) => !c.binned).length}
+        deleting={saving}
+        onClose={() => setDialog({ kind: "none" })}
+        onConfirm={() => void removeBoard()}
       />
 
       <CardDialog
