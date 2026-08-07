@@ -6,7 +6,7 @@ import { requireConfirm } from "../safety";
 import { calendar, calendarBooking, calendarRsvp } from "../services";
 
 import { normalizePubkeyList } from "./pubkey";
-import type { ToolEntry } from "./types";
+import type { ToolDef } from "./types";
 
 /**
  * Parse an ISO 8601 string to a Date, or null when unparseable. LLM callers
@@ -25,16 +25,16 @@ function badDate(field: string, value: string) {
   );
 }
 
-export const calendarTools: ToolEntry[] = buildCalendarTools();
+export const calendarTools: ToolDef[] = buildCalendarTools();
 
-function buildCalendarTools(): ToolEntry[] {
-  const tools: ToolEntry[] = [];
+function buildCalendarTools(): ToolDef[] {
+  const tools: ToolDef[] = [];
   let write = false;
   const server = {
     registerTool(
       name: string,
-      config: Pick<ToolEntry, "description" | "inputSchema">,
-      handler: ToolEntry["handler"],
+      config: Pick<ToolDef, "description" | "inputSchema">,
+      handler: ToolDef["handler"],
     ) {
       tools.push({ name, ...config, handler, ...(write ? { write: true } : {}) });
     },
