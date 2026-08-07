@@ -34,9 +34,15 @@ const renderSidebar = () =>
 describe("Sidebar (mobile drawer nav)", () => {
   it("lists every module", () => {
     renderSidebar();
-    ["Forms", "Calendar", "Pages", "Drive", "Polls"].forEach((label) =>
+    ["Forms", "Calendar", "Kanban", "Drive"].forEach((label) =>
       expect(screen.getByText(label)).toBeInTheDocument(),
     );
+  });
+
+  it("no longer lists the removed modules", () => {
+    renderSidebar();
+    expect(screen.queryByText("Pages")).not.toBeInTheDocument();
+    expect(screen.queryByText("Polls")).not.toBeInTheDocument();
   });
 
   it("offers Sign In when logged out", () => {

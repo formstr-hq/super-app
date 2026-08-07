@@ -7,10 +7,7 @@ interface ShortcutsDialogProps {
 
 const SHORTCUTS: Array<[string, string]> = [
   ["Command palette", "⌘K"],
-  ["Save page", "⌘S"],
   ["Saved AI prompt", "/keyword"],
-  ["Block menu (Pages editor)", "/"],
-  ["Link entity (Pages editor)", "@"],
   ["This dialog", "?"],
 ];
 

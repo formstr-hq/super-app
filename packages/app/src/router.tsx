@@ -1,6 +1,6 @@
 import { Box, Skeleton } from "@mui/material";
 import { lazy, Suspense, type ReactNode } from "react";
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, type RouteObject } from "react-router-dom";
 
 import { AppShell } from "./layout";
 import { FillPage } from "./pages/FillPage";
@@ -9,9 +9,10 @@ const FormsPage = lazy(() => import("./pages/FormsPage").then((m) => ({ default:
 const CalendarPage = lazy(() =>
   import("./pages/CalendarPage").then((m) => ({ default: m.CalendarPage })),
 );
-const PagesPage = lazy(() => import("./pages/PagesPage").then((m) => ({ default: m.PagesPage })));
+const KanbanPage = lazy(() =>
+  import("./pages/KanbanPage").then((m) => ({ default: m.KanbanPage })),
+);
 const DrivePage = lazy(() => import("./pages/DrivePage").then((m) => ({ default: m.DrivePage })));
-const PollsPage = lazy(() => import("./pages/PollsPage").then((m) => ({ default: m.PollsPage })));
 const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
@@ -51,7 +52,8 @@ function LazyRoute({ children }: { children: ReactNode }) {
   return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
 }
 
-export const router = createBrowserRouter([
+/** Exported so tests can mount the same tree in a memory router. */
+export const routes: RouteObject[] = [
   { path: "/forms/fill/:naddr", element: <FillPage /> },
   {
     path: "/",
@@ -75,10 +77,10 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "pages/*",
+        path: "kanban/*",
         element: (
           <LazyRoute>
-            <PagesPage />
+            <KanbanPage />
           </LazyRoute>
         ),
       },
@@ -90,14 +92,11 @@ export const router = createBrowserRouter([
           </LazyRoute>
         ),
       },
-      {
-        path: "polls/*",
-        element: (
-          <LazyRoute>
-            <PollsPage />
-          </LazyRoute>
-        ),
-      },
+      // Pages and Polls moved out of this app and live on in the MCP server
+      // only. Redirect rather than 404 — both routes were shipped, so links to
+      // them exist in the wild.
+      { path: "pages/*", element: <Navigate to="/forms" replace /> },
+      { path: "polls/*", element: <Navigate to="/forms" replace /> },
       {
         path: "settings",
         element: (
@@ -108,4 +107,6 @@ export const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
+
+export const router = createBrowserRouter(routes);

@@ -7,7 +7,7 @@ import { requireConfirm } from "../safety";
 import { forms, FORM_KINDS, type FormField } from "../services";
 
 import { aiFieldsToFormFields, normalizePubkeyList } from "./shared";
-import type { ToolEntry } from "./types";
+import type { ToolDef } from "./types";
 
 const optionShape = z.union([
   z.string(),
@@ -81,7 +81,7 @@ function parseFormRef(ref: string): { pubkey: string; formId: string } | null {
   return null;
 }
 
-export const formsTools: ToolEntry[] = [
+export const formsTools: ToolDef[] = [
   {
     name: "list_forms",
     description: "List the forms in the user's forms index, with metadata.",

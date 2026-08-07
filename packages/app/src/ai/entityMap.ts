@@ -37,18 +37,6 @@ export function entityFromTool(name: string, args: Dict, data: unknown): EntityR
       if (!ref) return null;
       return { module: "calendar", ref, label: str(a.title) ?? ref, route: "/calendar" };
     }
-    case "create_page":
-    case "save_private_note":
-    case "update_page": {
-      const ref = str(d.address);
-      if (!ref) return null;
-      return { module: "pages", ref, label: str(a.title) ?? ref, route: "/pages" };
-    }
-    case "create_poll": {
-      const ref = str(d.id);
-      if (!ref) return null;
-      return { module: "polls", ref, label: str(a.question) ?? ref, route: "/polls" };
-    }
     default:
       return null;
   }

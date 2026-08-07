@@ -11,6 +11,7 @@ function entry(overrides: Partial<ToolEntry> = {}): ToolEntry {
   return {
     name: "demo_tool",
     description: "demo",
+    module: "forms",
     inputSchema: { title: z.string(), count: z.number().optional() },
     handler: vi.fn(async () => ok("ran")),
     ...overrides,

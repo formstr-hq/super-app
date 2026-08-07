@@ -7,9 +7,9 @@ export function AboutSection() {
         About
       </Typography>
       <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
-        Formstr is a suite of Nostr-native apps — forms, calendar, pages, polls, and drive — with an
-        AI assistant that can act across every module. Your data lives on Nostr relays and (for
-        files) Blossom servers; your AI keys stay on this device.
+        Formstr is a suite of Nostr-native apps — forms, calendar, kanban boards, and drive — with
+        an AI assistant that can act across forms, calendar, and drive. Your data lives on Nostr
+        relays and (for files) Blossom servers; your AI keys stay on this device.
       </Typography>
       <Typography variant="body2">
         <Link

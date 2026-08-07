@@ -4,18 +4,18 @@ import { ok, fail } from "../result";
 import { requireConfirm } from "../safety";
 import { polls } from "../services";
 
-import type { ToolEntry } from "./types";
+import type { ToolDef } from "./types";
 
-export const pollsTools: ToolEntry[] = buildPollsTools();
+export const pollsTools: ToolDef[] = buildPollsTools();
 
-function buildPollsTools(): ToolEntry[] {
-  const tools: ToolEntry[] = [];
+function buildPollsTools(): ToolDef[] {
+  const tools: ToolDef[] = [];
   let write = false;
   const server = {
     registerTool(
       name: string,
-      config: Pick<ToolEntry, "description" | "inputSchema">,
-      handler: ToolEntry["handler"],
+      config: Pick<ToolDef, "description" | "inputSchema">,
+      handler: ToolDef["handler"],
     ) {
       tools.push({ name, ...config, handler, ...(write ? { write: true } : {}) });
     },

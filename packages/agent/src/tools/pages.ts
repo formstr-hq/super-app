@@ -5,23 +5,23 @@ import { requireConfirm } from "../safety";
 import { pages, pagesComments } from "../services";
 import type { PageComment } from "../services";
 
-import type { ToolEntry } from "./types";
+import type { ToolDef } from "./types";
 
 /** Fold a title into the Markdown body as an H1 (the doc has no plaintext title tag). */
 function withTitle(title: string | undefined, content: string): string {
   return title ? `# ${title}\n\n${content}` : content;
 }
 
-export const pagesTools: ToolEntry[] = buildPagesTools();
+export const pagesTools: ToolDef[] = buildPagesTools();
 
-function buildPagesTools(): ToolEntry[] {
-  const tools: ToolEntry[] = [];
+function buildPagesTools(): ToolDef[] {
+  const tools: ToolDef[] = [];
   let write = false;
   const server = {
     registerTool(
       name: string,
-      config: Pick<ToolEntry, "description" | "inputSchema">,
-      handler: ToolEntry["handler"],
+      config: Pick<ToolDef, "description" | "inputSchema">,
+      handler: ToolDef["handler"],
     ) {
       tools.push({ name, ...config, handler, ...(write ? { write: true } : {}) });
     },

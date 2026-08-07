@@ -1,16 +1,15 @@
 import { CALENDAR_KINDS } from "@formstr/agent/services/calendar/types";
 import { FORM_KINDS } from "@formstr/agent/services/forms/types";
-import { PAGES_KINDS } from "@formstr/agent/services/pages/types";
-import { POLLS_KINDS } from "@formstr/agent/services/polls/types";
 import { createRef as createNostrRef, type ModuleType } from "@formstr/core";
+import { KANBAN_KINDS } from "@formstr/kanban-sdk";
 import { Box, Typography, Paper } from "@mui/material";
-import { Calendar, ClipboardList, FileText, FolderOpen, Vote } from "lucide-react";
+import { Calendar, ClipboardList, FolderOpen, SquareKanban } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useCalendarStore } from "../stores/calendarStore";
 import { useFormsStore } from "../stores/formsStore";
-import { usePagesStore } from "../stores/pagesStore";
-import { usePollsStore } from "../stores/pollsStore";
+import { useKanbanStore } from "../stores/kanbanStore";
 
 export interface MentionItem {
   module: ModuleType;
@@ -36,20 +35,18 @@ interface MentionPickerProps {
   limit?: number;
 }
 
-const MODULE_ICON: Record<ModuleType, typeof FileText> = {
+const MODULE_ICON: Record<ModuleType, LucideIcon> = {
   forms: ClipboardList,
   calendar: Calendar,
-  pages: FileText,
+  kanban: SquareKanban,
   drive: FolderOpen,
-  polls: Vote,
 };
 
 const MODULE_TINT: Record<ModuleType, string> = {
   forms: "info.main",
   calendar: "warning.main",
-  pages: "success.main",
+  kanban: "success.main",
   drive: "secondary.main",
-  polls: "primary.main",
 };
 
 export function MentionPicker({
@@ -57,13 +54,12 @@ export function MentionPicker({
   onSelect,
   onClose,
   autoFetch = true,
-  modules = ["forms", "calendar", "pages", "polls"],
+  modules = ["forms", "calendar", "kanban"],
   limit = 8,
 }: MentionPickerProps) {
   const formsStore = useFormsStore();
   const calendarStore = useCalendarStore();
-  const pagesStore = usePagesStore();
-  const pollsStore = usePollsStore();
+  const kanbanStore = useKanbanStore();
 
   const [highlight, setHighlight] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -77,11 +73,8 @@ export function MentionPicker({
     if (modules.includes("calendar") && calendarStore.events.length === 0) {
       calendarStore.fetchEvents().catch(() => {});
     }
-    if (modules.includes("pages") && pagesStore.pages.length === 0) {
-      pagesStore.fetchMyPages().catch(() => {});
-    }
-    if (modules.includes("polls") && pollsStore.myPolls.length === 0) {
-      pollsStore.fetchMyPolls().catch(() => {});
+    if (modules.includes("kanban") && kanbanStore.boards.length === 0) {
+      kanbanStore.fetchBoards().catch(() => {});
     }
     // We intentionally run this once; stores themselves manage memoized state
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,31 +115,17 @@ export function MentionPicker({
       }
     }
 
-    if (modules.includes("pages")) {
-      for (const p of pagesStore.pages) {
+    if (modules.includes("kanban")) {
+      for (const b of kanbanStore.boards) {
+        const kind = b.isPrivate ? KANBAN_KINDS.privateBoard : KANBAN_KINDS.publicBoard;
         all.push({
-          module: "pages",
-          kind: PAGES_KINDS.document,
-          pubkey: p.pubkey,
-          identifier: p.id,
-          label: p.title || "Untitled page",
-          createdAt: p.createdAt,
-          naddr: createNostrRef("pages", PAGES_KINDS.document, p.pubkey, p.id),
-        });
-      }
-    }
-
-    if (modules.includes("polls")) {
-      for (const poll of pollsStore.myPolls) {
-        const firstLine = (poll.content || "").split("\n")[0]?.trim() ?? "";
-        all.push({
-          module: "polls",
-          kind: POLLS_KINDS.poll,
-          pubkey: poll.pubkey,
-          identifier: poll.id,
-          label: firstLine.slice(0, 60) || "Untitled poll",
-          createdAt: poll.createdAt,
-          naddr: createNostrRef("polls", POLLS_KINDS.poll, poll.pubkey, poll.id),
+          module: "kanban",
+          kind,
+          pubkey: b.pubkey,
+          identifier: b.id,
+          label: b.title || "Untitled board",
+          createdAt: b.createdAt,
+          naddr: createNostrRef("kanban", kind, b.pubkey, b.id),
         });
       }
     }
@@ -157,15 +136,7 @@ export function MentionPicker({
       : all;
 
     return filtered.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
-  }, [
-    query,
-    modules,
-    limit,
-    formsStore.myForms,
-    calendarStore.events,
-    pagesStore.pages,
-    pollsStore.myPolls,
-  ]);
+  }, [query, modules, limit, formsStore.myForms, calendarStore.events, kanbanStore.boards]);
 
   // Keep highlight in range when filter changes
   useEffect(() => {
@@ -214,7 +185,7 @@ export function MentionPicker({
         >
           {query
             ? `No entities match “${query}”`
-            : "Nothing to mention yet — create a form, event, page, or poll first."}
+            : "Nothing to mention yet — create a form, event, or board first."}
         </Typography>
       </Paper>
     );
