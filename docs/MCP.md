@@ -10,7 +10,7 @@ boots and authenticates, what every tool does, and how to configure a host. For 
 formats of the Nostr events these tools read and write, see
 [ARCHITECTURE.md](./ARCHITECTURE.md); this file does not repeat them.
 
-- Package: `packages/mcp`, published to npm as `@formstr/mcp`, current version 0.4.0
+- Package: `packages/mcp`, published to npm as `@formstr/mcp`, current version 0.5.0
 - Binary: `formstr-mcp`
 - Transport: stdio
 - Runtime: Node 20 or newer
@@ -198,6 +198,13 @@ So to actually mutate state from a host you need both: start the server with
 `--allow-writes`, and the model must pass `confirm: true` on the call. Read and create tools
 have neither requirement.
 
+Independent of the two gates, every tool's input schema is registered **strict**
+(`additionalProperties: false`): a call with a parameter the tool does not declare fails
+with an `InvalidParams` error naming the unrecognized key, instead of the parameter being
+silently stripped. Before this, a model could pass a plausible-but-wrong argument (say,
+`registrationFormRef` on a tool that doesn't take it), have it dropped, and walk away
+believing the write happened.
+
 One sharing nuance worth stating: `share_form` distributes only the view key, which grants
 read access. It never distributes the signing key.
 
@@ -241,9 +248,13 @@ Write: `approve_booking`, `decline_booking`, `delete_calendar_event`, `rsvp_even
 Two calendar notes for integrators. `create_calendar_event` defaults to a private event and
 asks which calendar to file it under when you have calendars and have not chosen one (it
 returns the list and a `CALENDAR_REQUIRED` code). A private event created from an MCP host
-does send NIP-59 gift-wrap invitations to each participant, published to that participant's
-NIP-65 relays, but the tool result does not currently echo how many invites went out, which
-is the usual reason an invite seems "missing".
+sends NIP-59 gift-wrap invitations to each participant, published to that participant's
+NIP-65 relays, and the tool result echoes the count as `invitationsSent`. A registration
+form can be attached at create time (`registrationFormRef`), later via
+`attach_form_to_event`, or through `update_calendar_event` (whose `registrationFormRef`
+also detaches when set to an empty string); `get_calendar_event` reports the attached
+form as `registrationFormRef` plus a `registrationFormHasViewKey` flag, so a write can be
+verified — the form's view key itself is never returned.
 
 ### Pages (12)
 
@@ -330,8 +341,8 @@ npm registry for a newer one:
 
 ```text
 $ formstr-mcp version
-@formstr/mcp 0.4.0
-Update available: 0.5.0 (you have 0.4.0).
+@formstr/mcp 0.5.0
+Update available: 0.6.0 (you have 0.5.0).
 Upgrade: npm install -g @formstr/mcp@latest
 Or just re-run via: npx -y @formstr/mcp@latest
 ```

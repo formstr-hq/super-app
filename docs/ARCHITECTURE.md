@@ -44,7 +44,7 @@ packages:
 | `@formstr/core`  | 0.0.1   | private       | Nostr primitives: signers, relay and runtime plumbing, crypto, Blossom, cross-module linking. Plain TypeScript, built with `tsc`.                                                |
 | `@formstr/agent` | 0.0.1   | private       | The five modules' service layer plus the 53-tool registry and the neutral result/safety/schema helpers. Ships its source directly through package `exports`, with no build step. |
 | `@formstr/app`   | 0.0.1   | private       | The React 19 web client: UI, Zustand stores, and the in-browser AI runtime. Built with Vite.                                                                                     |
-| `@formstr/mcp`   | 0.4.0   | public on npm | The stdio MCP server that wraps the agent's tool registry. A single-file bundle built with `tsup`, with the `formstr-mcp` binary.                                                |
+| `@formstr/mcp`   | 0.5.0   | public on npm | The stdio MCP server that wraps the agent's tool registry. A single-file bundle built with `tsup`, with the `formstr-mcp` binary.                                                |
 
 The root `package.json` is private and orchestrates the workspace (`pnpm -r build`,
 `pnpm -r typecheck`, `vitest run`, and so on).
@@ -311,13 +311,18 @@ helps to keep them straight:
    anything. The MCP turns that into an error result; the browser agent turns it into a
    confirm card and re-calls with `confirm: true` if the user approves.
 
-There is also an exported `GATED_TOOLS` constant (15 names) plus an `isGated` helper. The
-browser agent uses `isGated` to decide which tools to preview with a confirm card before
-the first call. It is a subset of the 23 write tools (it does not include `update_form`,
-`share_form`, `approve_booking`, `decline_booking`, `update_calendar`, `delete_calendar`,
-`add_event_to_calendar`, or `remove_event_from_calendar`); for those, the handler-level
-`requireConfirm` is still the real enforcement, and the model just sees the confirmation
-message and re-calls.
+There is also an exported `GATED_TOOLS` constant plus an `isGated` helper. The browser
+agent uses `isGated` to decide which tools to preview with a confirm card before the
+first call. `GATED_TOOLS` covers every one of the 23 write tools (write ⟺ gated — a
+registry test enforces the equality), and the preview strips any model-supplied
+`confirm: true` so the human approval card cannot be bypassed.
+
+Independent of both gates, the registry strict-validates every call's arguments against
+the tool's zod shape (`tools/validate.ts`): an unknown parameter is a hard `BAD_INPUT`
+error naming the key and the valid parameters, never a silent drop. The stdio MCP
+registers the same schemas as strict Zod objects so its SDK boundary rejects unknown
+keys too, and the JSON schemas advertised to LLM providers carry
+`additionalProperties: false` to match.
 
 ## Event-kind reference (all modules)
 

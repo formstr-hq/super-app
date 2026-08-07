@@ -79,6 +79,10 @@ function buildPollsTools(): ToolEntry[] {
           createdAt: poll.createdAt,
           endsAt: poll.endsAt,
           hashtags: poll.hashtags,
+          // Votes on a PoW-gated poll must be NIP-13 mined to this difficulty
+          // (submit_poll_response caps mining at 20) — surface it so callers
+          // know why a vote may be slow or refused.
+          powDifficulty: poll.powDifficulty ?? null,
         },
       });
     },
@@ -120,11 +124,21 @@ function buildPollsTools(): ToolEntry[] {
       },
     },
     async (args) => {
+      // Reject junk dates up front: the service silently drops an unparseable
+      // endsAt, which would publish a poll that never expires without telling
+      // the caller (same convention as the calendar tools' BAD_INPUT guard).
+      const endsAt = args.endsAt ? new Date(args.endsAt) : undefined;
+      if (args.endsAt && !Number.isFinite(endsAt!.getTime())) {
+        return fail(
+          `Could not parse endsAt "${args.endsAt}" — pass an ISO 8601 date-time (e.g. 2026-07-02T15:00:00Z).`,
+          "BAD_INPUT",
+        );
+      }
       const poll = await polls.createPoll({
         question: args.question,
         options: args.options.map((label: string) => ({ label })),
         pollType: args.pollType ?? "singlechoice",
-        endsAt: args.endsAt ? new Date(args.endsAt) : undefined,
+        endsAt,
         hashtags: args.hashtags,
       });
       return ok(`Created poll "${args.question}".`, { id: poll.id });

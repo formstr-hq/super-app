@@ -2,6 +2,7 @@ import { toolRegistry, type ToolCtx, type ToolResult } from "@formstr/agent";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 
 import { readInstalledVersion } from "./version";
 
@@ -25,7 +26,11 @@ export function buildServer(ctx: ToolCtx): McpServer {
     if (t.write && !ctx.allowWrites) continue;
     server.registerTool(
       t.name,
-      { description: t.description, inputSchema: t.inputSchema },
+      // Strict object, not the raw shape: the SDK's own parse would silently
+      // STRIP unknown keys before our handler runs, so a misspelled parameter
+      // looked accepted while doing nothing. Strict makes it an InvalidParams
+      // error the model can react to (and advertises additionalProperties:false).
+      { description: t.description, inputSchema: z.object(t.inputSchema).strict() },
       async (args: unknown) => adapt(await t.handler(args, ctx)),
     );
   }
