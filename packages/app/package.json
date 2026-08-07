@@ -13,10 +13,14 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@formstr/agent": "workspace:*",
     "@formstr/core": "workspace:*",
+    "@formstr/kanban-sdk": "^0.1.0",
     "@formstr/signer": "^0.2.2",
     "@mui/material": "^6.4.0",
     "lucide-react": "^1.8.0",

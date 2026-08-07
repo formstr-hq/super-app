@@ -28,8 +28,20 @@ export const MODULE_DEFAULT_RELAYS = {
     "wss://relay.snort.social",
     "wss://nostr21.com",
   ],
+  // MUST stay a superset of @formstr/kanban-sdk's DEFAULT_RELAYS
+  // (relay.damus.io, nos.lol, relay.primal.net). Narrowing below those three
+  // silently breaks interop with kanbanstr.com — boards published here stop
+  // appearing there, and no local test catches it.
+  kanban: [
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.primal.net",
+    "wss://relay.nostr.band",
+  ],
+  // Pages and Polls have no UI in the web app any more, but the agent still
+  // implements them for the MCP server — these are protocol relays, not app
+  // navigation, so they stay.
   pages: ["wss://relay.damus.io", "wss://relay.primal.net", "wss://nos.lol"],
-  drive: ["wss://relay.damus.io", "wss://relay.nostr.band", "wss://nos.lol"],
   polls: [
     "wss://relay.damus.io",
     "wss://relay.primal.net",
@@ -38,6 +50,7 @@ export const MODULE_DEFAULT_RELAYS = {
     "wss://nostr-01.yakihonne.com",
     "wss://nostr21.com",
   ],
+  drive: ["wss://relay.damus.io", "wss://relay.nostr.band", "wss://nos.lol"],
 } as const;
 
 export type ModuleName = keyof typeof MODULE_DEFAULT_RELAYS;
