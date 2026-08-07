@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { FileText, Calendar, HardDrive, LogIn } from "lucide-react";
+import { FileText, Calendar, HardDrive, SquareKanban, LogIn } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import formstrLogo from "../assets/formstr.png";
@@ -23,6 +23,7 @@ export const SIDEBAR_COLLAPSED_WIDTH = 56;
 const NAV_ITEMS = [
   { label: "Forms", path: "/forms", icon: FileText },
   { label: "Calendar", path: "/calendar", icon: Calendar },
+  { label: "Kanban", path: "/kanban", icon: SquareKanban },
   { label: "Drive", path: "/drive", icon: HardDrive },
 ] as const;
 

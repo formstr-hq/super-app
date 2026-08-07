@@ -34,7 +34,7 @@ const renderSidebar = () =>
 describe("Sidebar (mobile drawer nav)", () => {
   it("lists every module", () => {
     renderSidebar();
-    ["Forms", "Calendar", "Drive"].forEach((label) =>
+    ["Forms", "Calendar", "Kanban", "Drive"].forEach((label) =>
       expect(screen.getByText(label)).toBeInTheDocument(),
     );
   });

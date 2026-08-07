@@ -9,6 +9,9 @@ const FormsPage = lazy(() => import("./pages/FormsPage").then((m) => ({ default:
 const CalendarPage = lazy(() =>
   import("./pages/CalendarPage").then((m) => ({ default: m.CalendarPage })),
 );
+const KanbanPage = lazy(() =>
+  import("./pages/KanbanPage").then((m) => ({ default: m.KanbanPage })),
+);
 const DrivePage = lazy(() => import("./pages/DrivePage").then((m) => ({ default: m.DrivePage })));
 const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
@@ -70,6 +73,14 @@ export const routes: RouteObject[] = [
         element: (
           <LazyRoute>
             <CalendarPage />
+          </LazyRoute>
+        ),
+      },
+      {
+        path: "kanban/*",
+        element: (
+          <LazyRoute>
+            <KanbanPage />
           </LazyRoute>
         ),
       },

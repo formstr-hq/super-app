@@ -22,6 +22,7 @@ import {
   Search,
   Sparkles,
   Sun,
+  SquareKanban,
 } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -86,6 +87,14 @@ export function CommandPalette({
       action: () => run(() => navigate("/calendar")),
     },
     {
+      id: "nav-kanban",
+      group: "Navigate",
+      label: "Kanban",
+      shortcut: "G K",
+      icon: SquareKanban,
+      action: () => run(() => navigate("/kanban")),
+    },
+    {
       id: "nav-drive",
       group: "Navigate",
       label: "Drive",
@@ -106,6 +115,13 @@ export function CommandPalette({
       label: "New event",
       icon: Plus,
       action: () => run(() => navigate("/calendar?action=new")),
+    },
+    {
+      id: "new-board",
+      group: "Create",
+      label: "New board",
+      icon: Plus,
+      action: () => run(() => navigate("/kanban?action=new")),
     },
     {
       id: "new-file",

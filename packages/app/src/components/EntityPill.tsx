@@ -1,12 +1,13 @@
 import { parseRef, resolveRef, type ModuleType } from "@formstr/core";
 import { Box, Chip, CircularProgress, Tooltip, Typography } from "@mui/material";
-import { Calendar, ClipboardList, FolderOpen, X } from "lucide-react";
+import { Calendar, ClipboardList, FolderOpen, SquareKanban, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useCalendarStore } from "../stores/calendarStore";
 import { useFormsStore } from "../stores/formsStore";
+import { useKanbanStore } from "../stores/kanbanStore";
 
 const MODULE_META: Record<
   ModuleType,
@@ -25,6 +26,11 @@ const MODULE_META: Record<
     icon: Calendar,
     label: "Event",
     color: "warning",
+  },
+  kanban: {
+    icon: SquareKanban,
+    label: "Board",
+    color: "success",
   },
   drive: {
     icon: FolderOpen,
@@ -107,6 +113,7 @@ function useResolveLabel(
 ): [string | null, boolean] {
   const formsStore = useFormsStore();
   const calendarStore = useCalendarStore();
+  const kanbanStore = useKanbanStore();
 
   const [label, setLabel] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
@@ -137,6 +144,13 @@ function useResolveLabel(
         found = match?.title ?? null;
         break;
       }
+      case "kanban": {
+        const match = kanbanStore.boards.find(
+          (b) => b.id === identifier && (!pubkey || b.pubkey === pubkey),
+        );
+        found = match?.title ?? null;
+        break;
+      }
       case "drive":
         // Drive files are addressed differently; just leave label null for now
         found = null;
@@ -144,7 +158,7 @@ function useResolveLabel(
     }
     setLabel(found);
     setResolving(false);
-  }, [module, params, formsStore.myForms, calendarStore.events]);
+  }, [module, params, formsStore.myForms, calendarStore.events, kanbanStore.boards]);
 
   return [label, resolving];
 }

@@ -59,6 +59,8 @@ export class ConversationContext {
 
 You have a full set of tools spanning those modules. Use them to take real actions, and chain multiple tool calls across modules in a single turn when a request needs it (e.g. create a form, then a calendar event that collects registrations through it). Read tools (list/get/fetch) and constructive creates run immediately; irreversible actions (delete, share, submit, rsvp, rename, move) will ask the user to confirm before running — call them normally and the app handles the confirmation.
 
+The app also has a Kanban board module, but it has no tools — if the user asks you to act on a board, say so and point them at the Kanban tab rather than reaching for another module.
+
 For dates and times: the current date is ${new Date().toISOString().split("T")[0]}. Convert natural-language dates/times to ISO 8601.
 
 For form fields: use "shortText" for short answers, "paragraph" for long text, "radioButton" for single-choice, "checkboxes" for multi-choice, "dropdown" for select menus, and "number"/"date"/"time"/"datetime" for typed inputs.

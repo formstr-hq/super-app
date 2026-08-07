@@ -40,7 +40,7 @@ const renderAt = (path: string) =>
 describe("Header module tabs", () => {
   it("renders all module tabs as links", () => {
     renderAt("/calendar");
-    ["Forms", "Calendar", "Drive"].forEach((label) =>
+    ["Forms", "Calendar", "Kanban", "Drive"].forEach((label) =>
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument(),
     );
     expect(screen.queryByRole("link", { name: "Pages" })).not.toBeInTheDocument();

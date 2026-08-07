@@ -10,12 +10,14 @@ import { useAuthStore, useSettingsStore } from "../stores";
 const NAV_ITEMS = [
   { label: "Forms", path: "/forms" },
   { label: "Calendar", path: "/calendar" },
+  { label: "Kanban", path: "/kanban" },
   { label: "Drive", path: "/drive" },
 ] as const;
 
 const ROUTE_LABELS: Record<string, string> = {
   "/forms": "Forms",
   "/calendar": "Calendar",
+  "/kanban": "Kanban",
   "/drive": "Drive",
 };
 

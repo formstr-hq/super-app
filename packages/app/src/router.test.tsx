@@ -60,3 +60,14 @@ describe("removed module routes", () => {
     await expectPath("/polls/nevent1abc", "/forms");
   });
 });
+
+describe("kanban route", () => {
+  it("keeps /kanban itself", async () => {
+    await expectPath("/kanban", "/kanban");
+  });
+
+  it("keeps an encoded board coordinate in the path", async () => {
+    const coordinate = encodeURIComponent("30301:pk:board-1");
+    await expectPath(`/kanban/${coordinate}`, `/kanban/${coordinate}`);
+  });
+});

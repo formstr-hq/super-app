@@ -1,13 +1,15 @@
 import { CALENDAR_KINDS } from "@formstr/agent/services/calendar/types";
 import { FORM_KINDS } from "@formstr/agent/services/forms/types";
 import { createRef as createNostrRef, type ModuleType } from "@formstr/core";
+import { KANBAN_KINDS } from "@formstr/kanban-sdk";
 import { Box, Typography, Paper } from "@mui/material";
-import { Calendar, ClipboardList, FolderOpen } from "lucide-react";
+import { Calendar, ClipboardList, FolderOpen, SquareKanban } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useCalendarStore } from "../stores/calendarStore";
 import { useFormsStore } from "../stores/formsStore";
+import { useKanbanStore } from "../stores/kanbanStore";
 
 export interface MentionItem {
   module: ModuleType;
@@ -36,12 +38,14 @@ interface MentionPickerProps {
 const MODULE_ICON: Record<ModuleType, LucideIcon> = {
   forms: ClipboardList,
   calendar: Calendar,
+  kanban: SquareKanban,
   drive: FolderOpen,
 };
 
 const MODULE_TINT: Record<ModuleType, string> = {
   forms: "info.main",
   calendar: "warning.main",
+  kanban: "success.main",
   drive: "secondary.main",
 };
 
@@ -50,11 +54,12 @@ export function MentionPicker({
   onSelect,
   onClose,
   autoFetch = true,
-  modules = ["forms", "calendar"],
+  modules = ["forms", "calendar", "kanban"],
   limit = 8,
 }: MentionPickerProps) {
   const formsStore = useFormsStore();
   const calendarStore = useCalendarStore();
+  const kanbanStore = useKanbanStore();
 
   const [highlight, setHighlight] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -67,6 +72,9 @@ export function MentionPicker({
     }
     if (modules.includes("calendar") && calendarStore.events.length === 0) {
       calendarStore.fetchEvents().catch(() => {});
+    }
+    if (modules.includes("kanban") && kanbanStore.boards.length === 0) {
+      kanbanStore.fetchBoards().catch(() => {});
     }
     // We intentionally run this once; stores themselves manage memoized state
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,13 +115,28 @@ export function MentionPicker({
       }
     }
 
+    if (modules.includes("kanban")) {
+      for (const b of kanbanStore.boards) {
+        const kind = b.isPrivate ? KANBAN_KINDS.privateBoard : KANBAN_KINDS.publicBoard;
+        all.push({
+          module: "kanban",
+          kind,
+          pubkey: b.pubkey,
+          identifier: b.id,
+          label: b.title || "Untitled board",
+          createdAt: b.createdAt,
+          naddr: createNostrRef("kanban", kind, b.pubkey, b.id),
+        });
+      }
+    }
+
     const q = query.trim().toLowerCase();
     const filtered = q
       ? all.filter((i) => i.label.toLowerCase().includes(q) || i.module.includes(q))
       : all;
 
     return filtered.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
-  }, [query, modules, limit, formsStore.myForms, calendarStore.events]);
+  }, [query, modules, limit, formsStore.myForms, calendarStore.events, kanbanStore.boards]);
 
   // Keep highlight in range when filter changes
   useEffect(() => {
@@ -162,7 +185,7 @@ export function MentionPicker({
         >
           {query
             ? `No entities match “${query}”`
-            : "Nothing to mention yet — create a form or an event first."}
+            : "Nothing to mention yet — create a form, event, or board first."}
         </Typography>
       </Paper>
     );

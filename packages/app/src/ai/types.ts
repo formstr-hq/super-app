@@ -63,6 +63,10 @@ export interface LLMProvider {
 }
 
 export interface EntityRef {
+  /**
+   * Kanban is absent on purpose: it has no tools, so nothing can produce a
+   * kanban entity. It joins this union in whatever version adds them.
+   */
   module: "forms" | "calendar" | "drive";
   ref: string;
   label: string;
