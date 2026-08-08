@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { BoardListView } from "../components/kanban/BoardListView";
+import { BoardToolbar } from "../components/kanban/BoardToolbar";
 import { BoardView } from "../components/kanban/BoardView";
 import { CardDialog } from "../components/kanban/CardDialog";
 import { CreateBoardDialog } from "../components/kanban/CreateBoardDialog";
@@ -20,6 +21,13 @@ import { KanbanSidebar } from "../components/kanban/KanbanSidebar";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { PageHeader } from "../components/PageHeader";
 import { boardKey } from "../kanban/boardKey";
+import {
+  collectLabels,
+  EMPTY_FILTER,
+  filterCards,
+  unfilteredDropIndex,
+  type CardFilter,
+} from "../kanban/cardFilter";
 import { columnForCard, statusFor } from "../kanban/columns";
 import { useAuthStore, useKanbanStore } from "../stores";
 
@@ -57,6 +65,10 @@ export function KanbanPage() {
 
   const [dialog, setDialog] = useState<ActiveDialog>({ kind: "none" });
   const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState<CardFilter>(EMPTY_FILTER);
+
+  // Filters describe one board's cards, so they do not follow you to the next.
+  useEffect(() => setFilter(EMPTY_FILTER), [activeKey]);
 
   useEffect(() => {
     void fetchBoards();
@@ -72,6 +84,9 @@ export function KanbanPage() {
   }, [board, fetchCards]);
 
   const cards = board ? (cardsByBoard[boardKey(board)] ?? []) : [];
+  const liveCards = cards.filter((c) => !c.binned);
+  const visibleCards = filterCards(liveCards, filter, pubkey);
+  const boardLabels = collectLabels(cards);
   const readOnly = !board || !pubkey || !canEditCards(board, pubkey);
   // Maintainers may write cards, but a NIP-09 tombstone is only honored from
   // the event's own author — a maintainer's deletion would be signed by the
@@ -85,6 +100,21 @@ export function KanbanPage() {
     }
     return counts;
   }, [cardsByBoard]);
+
+  /**
+   * The board renders filtered cards, so dnd-kit hands back an index in that
+   * shorter list. The store ranks against the whole column, so translate before
+   * publishing — otherwise a drop lands above every hidden card in the column.
+   */
+  const handleMoveCard = (cardId: string, targetStatus: string, visibleIndex: number) => {
+    if (!board) return;
+    const byRank = (list: KanbanCard[]) =>
+      list
+        .filter((c) => c.status === targetStatus && c.id !== cardId)
+        .sort((a, b) => a.rank - b.rank);
+    const index = unfilteredDropIndex(byRank(liveCards), byRank(visibleCards), visibleIndex);
+    void moveCard(board, cardId, targetStatus, index);
+  };
 
   const openBoard = useCallback(
     (next: KanbanBoard | null) => {
@@ -233,11 +263,20 @@ export function KanbanPage() {
               </Alert>
             )}
 
+            <BoardToolbar
+              filter={filter}
+              onChange={setFilter}
+              labels={boardLabels}
+              canFilterMine={Boolean(pubkey)}
+              matchCount={visibleCards.length}
+              totalCount={liveCards.length}
+            />
+
             <BoardView
               board={board}
-              cards={cards}
+              cards={visibleCards}
               readOnly={readOnly}
-              onMoveCard={(cardId, status, index) => void moveCard(board, cardId, status, index)}
+              onMoveCard={handleMoveCard}
               onAddCard={(column) => setDialog({ kind: "card", column })}
               onOpenCard={(card) => {
                 const column = columnForCard(board, card);
