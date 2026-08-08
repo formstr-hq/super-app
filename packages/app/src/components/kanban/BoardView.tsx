@@ -87,7 +87,7 @@ export function BoardView({
           flex: 1,
           minHeight: 0,
           display: "flex",
-          gap: 2,
+          gap: 1.5,
           p: 2,
           overflowX: "auto",
           alignItems: "flex-start",
@@ -107,7 +107,7 @@ export function BoardView({
 
       <DragOverlay>
         {draggingCard && (
-          <Card variant="outlined" sx={{ p: 1.25, borderRadius: 1.5, width: 264 }}>
+          <Card variant="outlined" sx={{ p: 1.125, borderRadius: 1, width: 252 }}>
             <Typography variant="body2" fontWeight={500}>
               {draggingCard.title || "Untitled card"}
             </Typography>

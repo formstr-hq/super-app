@@ -2,11 +2,31 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Column, KanbanCard } from "@formstr/kanban-sdk";
 import { Box, Button, Paper, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { Plus } from "lucide-react";
 
+import { columnAccent, type ColumnAccent } from "../../kanban/columnAccent";
 import { columnDroppableId } from "../../kanban/dndMapping";
 
 import { KanbanCardItem } from "./KanbanCardItem";
+
+/** Muted enough to sit beside the app's monochrome palette without shouting. */
+const ACCENTS: Record<"light" | "dark", Record<ColumnAccent, string>> = {
+  light: {
+    neutral: "#8C95A3",
+    progress: "#3B72C4",
+    review: "#B5811F",
+    blocked: "#DC2626",
+    done: "#2E8B57",
+  },
+  dark: {
+    neutral: "#9AA3B1",
+    progress: "#6E9BE6",
+    review: "#D9A93F",
+    blocked: "#F87171",
+    done: "#4FB07A",
+  },
+};
 
 interface KanbanColumnProps {
   column: Column;
@@ -23,35 +43,53 @@ export function KanbanColumn({
   onAddCard,
   onOpenCard,
 }: KanbanColumnProps) {
+  const theme = useTheme();
   const { setNodeRef, isOver } = useDroppable({ id: columnDroppableId(column.id) });
+  const accent =
+    ACCENTS[theme.palette.mode === "dark" ? "dark" : "light"][columnAccent(column.name)];
 
   return (
     <Paper
       variant="outlined"
       sx={{
-        width: 288,
+        width: 276,
         flexShrink: 0,
         display: "flex",
         flexDirection: "column",
         maxHeight: "100%",
-        borderRadius: 2,
+        borderRadius: 1,
         bgcolor: "action.hover",
-        borderColor: isOver ? "primary.main" : "divider",
+        borderColor: isOver ? "text.primary" : "divider",
       }}
     >
       <Box
         sx={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          px: 1.5,
+          gap: 0.875,
+          px: 1.25,
           py: 1,
+          position: "sticky",
+          top: 0,
+          zIndex: 1,
         }}
       >
-        <Typography variant="caption" fontWeight={600} sx={{ textTransform: "uppercase" }}>
+        <Box
+          sx={{ width: 7, height: 7, borderRadius: "2px", bgcolor: accent, flexShrink: 0 }}
+          aria-hidden
+        />
+        <Typography
+          variant="caption"
+          fontWeight={650}
+          sx={{ textTransform: "uppercase", letterSpacing: "0.06em" }}
+        >
           {column.name}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ ml: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+        >
           {cards.length}
         </Typography>
       </Box>
@@ -64,7 +102,7 @@ export function KanbanColumn({
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
-          gap: 1,
+          gap: 0.875,
           px: 1,
           pb: 1,
         }}
@@ -86,7 +124,13 @@ export function KanbanColumn({
           size="small"
           startIcon={<Plus size={13} />}
           onClick={onAddCard}
-          sx={{ m: 1, mt: 0, justifyContent: "flex-start", color: "text.secondary" }}
+          sx={{
+            m: 1,
+            mt: 0,
+            borderRadius: 1,
+            justifyContent: "flex-start",
+            color: "text.secondary",
+          }}
         >
           Add card
         </Button>

@@ -1,7 +1,12 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { KanbanCard } from "@formstr/kanban-sdk";
-import { Box, Card, Chip, Typography } from "@mui/material";
+import { Box, Card, Tooltip, Typography } from "@mui/material";
+import { Link2, Paperclip } from "lucide-react";
+
+import { shortCardKey } from "../../kanban/cardKey";
+
+import { AssigneeStack } from "./AssigneeAvatar";
 
 interface KanbanCardItemProps {
   card: KanbanCard;
@@ -24,10 +29,13 @@ export function KanbanCardItem({ card, disabled, onOpen }: KanbanCardItemProps) 
       {...attributes}
       {...listeners}
       sx={{
-        p: 1.25,
-        borderRadius: 1.5,
+        p: 1.125,
+        borderRadius: 1,
         cursor: disabled ? "pointer" : "grab",
         opacity: isDragging ? 0.4 : 1,
+        display: "flex",
+        flexDirection: "column",
+        gap: 0.75,
         "&:hover": { borderColor: "text.disabled" },
       }}
     >
@@ -40,24 +48,94 @@ export function KanbanCardItem({ card, disabled, onOpen }: KanbanCardItemProps) 
           variant="caption"
           color="text.secondary"
           sx={{
-            mt: 0.5,
             display: "-webkit-box",
             WebkitLineClamp: 2,
             WebkitBoxOrient: "vertical",
             overflow: "hidden",
+            lineHeight: 1.4,
           }}
         >
           {card.description}
         </Typography>
       )}
 
-      {card.labels.length > 0 && (
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.75 }}>
-          {card.labels.map((label) => (
-            <Chip key={label} size="small" label={label} sx={{ height: 18, fontSize: 10 }} />
-          ))}
-        </Box>
-      )}
+      {/* Footer: identity and labels left, ownership and attachments right. */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+        <Tooltip title={card.id}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 10.5 }}
+          >
+            {shortCardKey(card.id)}
+          </Typography>
+        </Tooltip>
+
+        {card.labels.length > 0 && (
+          <Box sx={{ display: "flex", gap: 0.5, minWidth: 0, overflow: "hidden" }}>
+            {card.labels.slice(0, 2).map((label) => (
+              <CardLabel key={label} label={label} />
+            ))}
+            {card.labels.length > 2 && (
+              <Tooltip title={card.labels.slice(2).join(", ")}>
+                <Box component="span">
+                  <CardLabel label={`+${card.labels.length - 2}`} />
+                </Box>
+              </Tooltip>
+            )}
+          </Box>
+        )}
+
+        <Box sx={{ flex: 1, minWidth: 4 }} />
+
+        {card.links.length > 0 && (
+          <MetaCount icon={<Link2 size={11} />} value={card.links.length} />
+        )}
+        {card.attachments.length > 0 && (
+          <MetaCount icon={<Paperclip size={11} />} value={card.attachments.length} />
+        )}
+        <AssigneeStack pubkeys={card.assignees} />
+      </Box>
     </Card>
+  );
+}
+
+function CardLabel({ label }: { label: string }) {
+  return (
+    <Box
+      sx={{
+        height: 17,
+        px: 0.625,
+        borderRadius: "3px",
+        bgcolor: "action.selected",
+        color: "text.primary",
+        fontSize: 10.5,
+        fontWeight: 500,
+        lineHeight: "17px",
+        whiteSpace: "nowrap",
+        maxWidth: 84,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
+function MetaCount({ icon, value }: { icon: React.ReactNode; value: number }) {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.25,
+        color: "text.secondary",
+        fontSize: 10.5,
+      }}
+    >
+      {icon}
+      {value}
+    </Box>
   );
 }

@@ -78,7 +78,11 @@ describe("BoardView", () => {
     renderBoard({
       cards: [makeCard("second", "To Do", 20), makeCard("first", "To Do", 10)],
     });
-    const titles = screen.getAllByText(/first|second/).map((el) => el.textContent);
+    // Fixture ids double as titles, and a card also renders its id as its key,
+    // so match the title paragraph rather than every node holding the text.
+    const titles = screen
+      .getAllByText(/first|second/, { selector: "p" })
+      .map((el) => el.textContent);
     expect(titles).toEqual(["first", "second"]);
   });
 
@@ -98,7 +102,7 @@ describe("BoardView", () => {
     const onOpenCard = vi.fn();
     const card = makeCard("a", "To Do", 10);
     renderBoard({ cards: [card], onOpenCard });
-    fireEvent.click(screen.getByText("a"));
+    fireEvent.click(screen.getByText("a", { selector: "p" }));
     expect(onOpenCard).toHaveBeenCalledWith(card);
   });
 
