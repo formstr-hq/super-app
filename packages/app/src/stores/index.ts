@@ -3,6 +3,7 @@ export { useSettingsStore } from "./settingsStore";
 export { useFormsStore } from "./formsStore";
 export { useCalendarStore } from "./calendarStore";
 export { useKanbanStore } from "./kanbanStore";
+export { useKanbanMembersStore } from "./kanbanMembersStore";
 export { useDriveStore } from "./driveStore";
 export { useAIStore } from "./aiStore";
 export { useAIPendingStore, moduleForTool } from "./aiPendingStore";

@@ -19,6 +19,7 @@ interface KanbanStore {
   error: string | null;
 
   clearError(): void;
+  ingestBoard(board: KanbanBoard): void;
   fetchBoards(): Promise<void>;
   fetchCards(board: KanbanBoard): Promise<void>;
   createBoard(draft: BoardDraft): Promise<KanbanBoard>;
@@ -53,6 +54,30 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
 
   reset() {
     set({ boards: [], cardsByBoard: {}, error: null });
+  },
+
+  /**
+   * Replace one board with a newer version of itself, or add it if it is new.
+   *
+   * Membership writes (`invite`, `removeMember`) hand back an updated board,
+   * and after a key rotation that board carries a *different view key* — the
+   * only copy that can still decrypt the board's cards. Dropping it and waiting
+   * for the next `fetchBoards` would leave the open board unreadable in the
+   * meantime.
+   *
+   * Keyed by `boardKey`, which is the replaceable coordinate, so a rotation
+   * (same coordinate, new event id) updates in place rather than duplicating.
+   */
+  ingestBoard(board) {
+    set((s) => {
+      const key = boardKey(board);
+      const known = s.boards.some((b) => boardKey(b) === key);
+      return {
+        boards: known
+          ? s.boards.map((b) => (boardKey(b) === key ? board : b))
+          : [board, ...s.boards],
+      };
+    });
   },
 
   async fetchBoards() {
