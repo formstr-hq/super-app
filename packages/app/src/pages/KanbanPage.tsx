@@ -7,7 +7,7 @@ import {
   type KanbanCard,
 } from "@formstr/kanban-sdk";
 import { Alert, Box, Button, IconButton, Snackbar, Tooltip, Typography } from "@mui/material";
-import { ArrowLeft, Lock, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Lock, Pencil, Plus, RefreshCw, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -17,7 +17,9 @@ import { BoardView } from "../components/kanban/BoardView";
 import { CardDialog } from "../components/kanban/CardDialog";
 import { CreateBoardDialog } from "../components/kanban/CreateBoardDialog";
 import { DeleteBoardDialog } from "../components/kanban/DeleteBoardDialog";
+import { InvitationsView } from "../components/kanban/InvitationsView";
 import { KanbanSidebar } from "../components/kanban/KanbanSidebar";
+import { MembersDialog } from "../components/kanban/MembersDialog";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { PageHeader } from "../components/PageHeader";
 import { boardKey } from "../kanban/boardKey";
@@ -29,21 +31,30 @@ import {
   type CardFilter,
 } from "../kanban/cardFilter";
 import { columnForCard, statusFor } from "../kanban/columns";
-import { useAuthStore, useKanbanStore } from "../stores";
+import { INVITATIONS_KEY } from "../kanban/routes";
+import { useAuthStore, useKanbanMembersStore, useKanbanStore } from "../stores";
 
 type ActiveDialog =
   | { kind: "none" }
   | { kind: "board"; board?: KanbanBoard }
   | { kind: "deleteBoard"; board: KanbanBoard }
+  | { kind: "members"; board: KanbanBoard }
   | { kind: "card"; column: Column; card?: KanbanCard };
 
 export function KanbanPage() {
   const navigate = useNavigate();
   const params = useParams();
   const activeKey = params["*"] ? decodeURIComponent(params["*"]) : null;
+  const showingInvitations = activeKey === INVITATIONS_KEY;
 
   const pubkey = useAuthStore((s) => s.pubkey);
   const openAuthModal = useAuthStore((s) => s.openAuthModal);
+
+  const invitations = useKanbanMembersStore((s) => s.invitations);
+  const removedCoordinates = useKanbanMembersStore((s) => s.removedCoordinates);
+  const loadInvitations = useKanbanMembersStore((s) => s.loadInvitations);
+  const loadRemovalNotices = useKanbanMembersStore((s) => s.loadRemovalNotices);
+  const resetMembers = useKanbanMembersStore((s) => s.reset);
 
   const {
     boards,
@@ -74,6 +85,17 @@ export function KanbanPage() {
     void fetchBoards();
   }, [fetchBoards, pubkey]);
 
+  // Both queries are per-identity: invitations are gift wraps addressed to this
+  // pubkey, removal notices are matched against the keys in its board lists.
+  useEffect(() => {
+    if (!pubkey) {
+      resetMembers();
+      return;
+    }
+    void loadInvitations();
+    void loadRemovalNotices();
+  }, [pubkey, loadInvitations, loadRemovalNotices, resetMembers]);
+
   const board = useMemo(
     () => (activeKey ? boards.find((b) => boardKey(b) === activeKey) : undefined),
     [boards, activeKey],
@@ -92,6 +114,10 @@ export function KanbanPage() {
   // the event's own author — a maintainer's deletion would be signed by the
   // wrong key and silently ignored by relays. Offer it to the owner alone.
   const isOwner = Boolean(board && pubkey && board.pubkey === pubkey);
+  // The owner published a kind-84 saying we are off this board. Advisory: the
+  // board event is authoritative, and after a key rotation this copy simply
+  // stops resolving.
+  const wasRemoved = Boolean(board && removedCoordinates.includes(boardKey(board)));
 
   const cardCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -186,12 +212,17 @@ export function KanbanPage() {
     <KanbanSidebar
       boards={boards}
       activeKey={activeKey}
+      pendingInvitations={invitations.length}
       onSelect={(next) => {
         openBoard(next);
         onNavigate();
       }}
       onNew={() => {
         setDialog({ kind: "board" });
+        onNavigate();
+      }}
+      onOpenInvitations={() => {
+        navigate(`/kanban/${INVITATIONS_KEY}`);
         onNavigate();
       }}
     />
@@ -203,7 +234,12 @@ export function KanbanPage() {
       <MobileRailDrawer ariaLabel="Open boards panel">{renderRail}</MobileRailDrawer>
 
       <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        {board ? (
+        {showingInvitations ? (
+          <InvitationsView
+            onBack={() => openBoard(null)}
+            onOpenBoard={(coordinate) => navigate(`/kanban/${encodeURIComponent(coordinate)}`)}
+          />
+        ) : board ? (
           <>
             <PageHeader
               title={board.title || "Untitled board"}
@@ -228,11 +264,24 @@ export function KanbanPage() {
                   </Tooltip>
                   {board.isPrivate && (
                     <Tooltip title="Private board — encrypted under a view key">
-                      <IconButton size="small" disabled>
-                        <Lock size={15} />
-                      </IconButton>
+                      {/* A disabled button fires no events, so the tooltip needs
+                          a live element to listen on. */}
+                      <span>
+                        <IconButton size="small" disabled>
+                          <Lock size={15} />
+                        </IconButton>
+                      </span>
                     </Tooltip>
                   )}
+                  <Tooltip title="Members">
+                    <IconButton
+                      size="small"
+                      aria-label="Members"
+                      onClick={() => setDialog({ kind: "members", board })}
+                    >
+                      <Users size={15} />
+                    </IconButton>
+                  </Tooltip>
                   {!readOnly && (
                     <Button
                       size="small"
@@ -256,6 +305,13 @@ export function KanbanPage() {
                 </>
               }
             />
+
+            {wasRemoved && (
+              <Alert severity="warning" square sx={{ borderRadius: 0, py: 0.25 }}>
+                The owner removed you from this board. Your copy stops receiving updates once the
+                board key is rotated.
+              </Alert>
+            )}
 
             {readOnly && (
               <Alert severity="info" square sx={{ borderRadius: 0, py: 0.25 }}>
@@ -321,6 +377,14 @@ export function KanbanPage() {
         saving={saving}
         onClose={() => setDialog({ kind: "none" })}
         onSubmit={(draft) => void submitBoard(draft)}
+      />
+
+      <MembersDialog
+        open={dialog.kind === "members"}
+        board={dialog.kind === "members" ? dialog.board : undefined}
+        self={pubkey}
+        cardCount={liveCards.length}
+        onClose={() => setDialog({ kind: "none" })}
       />
 
       <DeleteBoardDialog

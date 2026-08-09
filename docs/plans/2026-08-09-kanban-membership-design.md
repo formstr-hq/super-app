@@ -1,8 +1,8 @@
 # Design: kanban board membership — roles, invitations, revocation
 
 **Date:** 2026-08-09
-**Branch:** `feat/kanban-members` (based on `dev`)
-**Status:** design approved, not yet implemented
+**Branch:** `dev`
+**Status:** implemented
 
 ## 1. Goal
 
