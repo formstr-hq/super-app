@@ -71,6 +71,7 @@ export function KanbanPage() {
     createCard,
     updateCard,
     deleteCard,
+    binCard,
     moveCard,
   } = useKanbanStore();
 
@@ -114,6 +115,11 @@ export function KanbanPage() {
   // the event's own author — a maintainer's deletion would be signed by the
   // wrong key and silently ignored by relays. Offer it to the owner alone.
   const isOwner = Boolean(board && pubkey && board.pubkey === pubkey);
+  const openCard = dialog.kind === "card" ? dialog.card : undefined;
+  // A NIP-09 tombstone is only honored from the key that signed the event, so
+  // offer Delete to that key alone — everyone else with write access bins the
+  // card instead. After a key rotation the signer is the rotator, not the author.
+  const canDeleteOpenCard = Boolean(openCard && pubkey && openCard.pubkey === pubkey);
   // The owner published a kind-84 saying we are off this board. Advisory: the
   // board event is authoritative, and after a key rotation this copy simply
   // stops resolving.
@@ -208,6 +214,19 @@ export function KanbanPage() {
     }
   };
 
+  const binOpenCard = async () => {
+    if (dialog.kind !== "card" || !dialog.card || !board) return;
+    setSaving(true);
+    try {
+      await binCard(board, dialog.card);
+      setDialog({ kind: "none" });
+    } catch {
+      // store holds the error
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const renderRail = (onNavigate: () => void) => (
     <KanbanSidebar
       boards={boards}
@@ -282,7 +301,10 @@ export function KanbanPage() {
                       <Users size={15} />
                     </IconButton>
                   </Tooltip>
-                  {!readOnly && (
+                  {/* A board is an addressable single-owner event: a maintainer's
+                      edit would fork it to their own coordinate, so the SDK
+                      refuses one. Offer it to the owner alone. */}
+                  {isOwner && (
                     <Button
                       size="small"
                       startIcon={<Pencil size={14} />}
@@ -398,12 +420,14 @@ export function KanbanPage() {
 
       <CardDialog
         open={dialog.kind === "card"}
-        card={dialog.kind === "card" ? dialog.card : undefined}
+        card={openCard}
         columnName={dialog.kind === "card" ? dialog.column.name : ""}
         saving={saving}
+        readOnly={readOnly}
         onClose={() => setDialog({ kind: "none" })}
         onSubmit={(draft) => void submitCard(draft)}
-        onDelete={() => void removeCard()}
+        onDelete={canDeleteOpenCard ? () => void removeCard() : undefined}
+        onBin={readOnly ? undefined : () => void binOpenCard()}
       />
 
       <Snackbar

@@ -32,6 +32,7 @@ interface KanbanStore {
     changes: Partial<CardDraft>,
   ): Promise<KanbanCard>;
   deleteCard(board: KanbanBoard, card: KanbanCard): Promise<void>;
+  binCard(board: KanbanBoard, card: KanbanCard, binned?: boolean): Promise<void>;
   moveCard(
     board: KanbanBoard,
     cardId: string,
@@ -218,6 +219,29 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
       }));
     } catch (e) {
       set({ error: message(e, "Failed to delete card") });
+      throw e;
+    }
+  },
+
+  /**
+   * Hide a card without a tombstone. NIP-09 only lets a card's own author delete
+   * it, so this is how a maintainer takes down someone else's — and unlike a
+   * deletion it is an ordinary edit, which means the card is replaced in the
+   * cache rather than dropped from it.
+   */
+  async binCard(board, card, binned = true) {
+    set({ error: null });
+    try {
+      const saved = await kanbanSdk.binCard(board, card, binned);
+      const key = boardKey(board);
+      set((s) => ({
+        cardsByBoard: {
+          ...s.cardsByBoard,
+          [key]: (s.cardsByBoard[key] ?? []).map((c) => (c.id === saved.id ? saved : c)),
+        },
+      }));
+    } catch (e) {
+      set({ error: message(e, "Failed to bin card") });
       throw e;
     }
   },

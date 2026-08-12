@@ -20,7 +20,7 @@
     "@emotion/styled": "^11.14.0",
     "@formstr/agent": "workspace:*",
     "@formstr/core": "workspace:*",
-    "@formstr/kanban-sdk": "^0.1.0",
+    "@formstr/kanban-sdk": "^0.1.1",
     "@formstr/signer": "^0.2.2",
     "@mui/material": "^6.4.0",
     "lucide-react": "^1.8.0",

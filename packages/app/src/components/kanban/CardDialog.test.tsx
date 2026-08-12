@@ -98,6 +98,37 @@ describe("CardDialog", () => {
     expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
   });
 
+  it("offers bin instead of delete for a card the signer did not write", () => {
+    renderDialog({ card: makeCard(), onBin: noop });
+    expect(screen.getByRole("button", { name: /bin/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^delete$/i })).not.toBeInTheDocument();
+  });
+
+  it("offers delete, not bin, once the signer owns the version", () => {
+    renderDialog({ card: makeCard(), onDelete: noop, onBin: noop });
+    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /bin/i })).not.toBeInTheDocument();
+  });
+
+  describe("read-only", () => {
+    it("disables every field and offers no way to save", () => {
+      renderDialog({ card: makeCard(), readOnly: true });
+
+      expect(screen.getByLabelText("Title")).toBeDisabled();
+      expect(screen.getByLabelText("Description")).toBeDisabled();
+      expect(screen.getByLabelText("Labels")).toBeDisabled();
+      expect(screen.getByLabelText("Assignees")).toBeDisabled();
+      expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /close/i })).toBeInTheDocument();
+    });
+
+    it("still shows the card's contents", () => {
+      renderDialog({ card: makeCard(), readOnly: true });
+      expect(screen.getByLabelText("Title")).toHaveValue("Ship the SDK");
+      expect(screen.getByText("Card")).toBeInTheDocument();
+    });
+  });
+
   it("blocks a second submit while the first is in flight", () => {
     renderDialog({ card: makeCard(), saving: true });
     expect(screen.getByRole("button", { name: /saving/i })).toBeDisabled();
