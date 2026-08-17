@@ -38,7 +38,10 @@ type ActiveDialog =
   | { kind: "none" }
   | { kind: "board"; board?: KanbanBoard }
   | { kind: "deleteBoard"; board: KanbanBoard }
-  | { kind: "members"; board: KanbanBoard }
+  // Carries no board: it is always the open one, and every membership write
+  // ingests a new object into the store. A snapshot taken at open time would
+  // show the roster as it was before the invite that just succeeded.
+  | { kind: "members" }
   | { kind: "card"; column: Column; card?: KanbanCard };
 
 export function KanbanPage() {
@@ -273,13 +276,19 @@ export function KanbanPage() {
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Refresh">
-                    <IconButton
-                      size="small"
-                      onClick={() => void fetchCards(board)}
-                      disabled={isLoadingCards}
-                    >
-                      <RefreshCw size={16} />
-                    </IconButton>
+                    {/* Disabled while a fetch is in flight, and a disabled button
+                        fires no events — the tooltip needs a live element to
+                        listen on, same as the private-board lock below. */}
+                    <span>
+                      <IconButton
+                        size="small"
+                        aria-label="Refresh"
+                        onClick={() => void fetchCards(board)}
+                        disabled={isLoadingCards}
+                      >
+                        <RefreshCw size={16} />
+                      </IconButton>
+                    </span>
                   </Tooltip>
                   {board.isPrivate && (
                     <Tooltip title="Private board — encrypted under a view key">
@@ -296,7 +305,7 @@ export function KanbanPage() {
                     <IconButton
                       size="small"
                       aria-label="Members"
-                      onClick={() => setDialog({ kind: "members", board })}
+                      onClick={() => setDialog({ kind: "members" })}
                     >
                       <Users size={15} />
                     </IconButton>
@@ -403,7 +412,7 @@ export function KanbanPage() {
 
       <MembersDialog
         open={dialog.kind === "members"}
-        board={dialog.kind === "members" ? dialog.board : undefined}
+        board={dialog.kind === "members" ? board : undefined}
         self={pubkey}
         cardCount={liveCards.length}
         onClose={() => setDialog({ kind: "none" })}

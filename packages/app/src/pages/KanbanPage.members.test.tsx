@@ -1,5 +1,5 @@
 import type { KanbanBoard } from "@formstr/kanban-sdk";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -76,6 +76,25 @@ describe("KanbanPage membership", () => {
     fireEvent.click(screen.getByRole("button", { name: "Members" }));
 
     expect(screen.getByText("Members · 1")).toBeInTheDocument();
+  });
+
+  it("shows a member added while the dialog is open", async () => {
+    const board = makeBoard();
+    renderKanban(`/kanban/${encodeURIComponent(BOARD_KEY)}`, board, OWNER);
+
+    fireEvent.click(screen.getByRole("button", { name: "Members" }));
+    expect(screen.getByText("Members · 1")).toBeInTheDocument();
+
+    // What every membership write does: ingest the board the SDK returned. The
+    // dialog must read that, not the board it was opened with — an invite that
+    // succeeded against a relay used to leave the roster showing the old one.
+    await act(async () => {
+      useKanbanStore.setState({
+        boards: [{ ...board, maintainers: ["b".repeat(64)] }],
+      } as never);
+    });
+
+    expect(screen.getByText("Members · 2")).toBeInTheDocument();
   });
 
   it("offers the members dialog to a non-owner too, read-only", () => {
