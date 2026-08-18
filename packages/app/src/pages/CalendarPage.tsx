@@ -1,5 +1,4 @@
 import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
-import { CALENDAR_KINDS } from "@formstr/agent/services/calendar";
 import { Box, Button, Typography } from "@mui/material";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -252,7 +251,7 @@ export function CalendarPage() {
         onDelete={
           editCalendar
             ? (cal) => {
-                deleteCalendar(`${CALENDAR_KINDS.calendarList}:${pubkey}:${cal.id}`, cal.id);
+                deleteCalendar(cal);
                 setManageOpen(false);
               }
             : undefined

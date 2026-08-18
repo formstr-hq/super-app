@@ -1,11 +1,8 @@
-import type {
-  CalendarEvent,
-  CalendarList,
-  CalendarEventDraft,
-} from "@formstr/agent/services/calendar";
-import { addBusyRange, removeBusyRange } from "@formstr/agent/services/calendar/busyList";
-import * as calendarService from "@formstr/agent/services/calendar/service";
+import { fetchEventsForUser } from "@formstr/agent/services/calendar/discovery";
 import { create } from "zustand";
+
+import { getCalendarSdk } from "../lib/calendar/sdk";
+import type { AppCalendarEvent, CalendarEventDraft, CalendarList } from "../lib/calendar/types";
 
 import { useSettingsStore } from "./settingsStore";
 
@@ -18,19 +15,25 @@ import { useSettingsStore } from "./settingsStore";
  * gated on the device-local opt-out; retraction is NOT (deleting an event must
  * still clean up ranges published before the user opted out).
  */
-function publishBusyRangeFor(event: CalendarEvent): void {
+function publishBusyRangeFor(event: AppCalendarEvent): void {
   if (!useSettingsStore.getState().publishBusyTimes) return;
   if (event.repeat.rrule) return;
-  void addBusyRange({ start: event.begin, end: event.end }).catch(() => {});
+  void (async () =>
+    (await getCalendarSdk()).addBusyRange({ start: event.begin, end: event.end }))().catch(
+    () => {},
+  );
 }
 
-function retractBusyRangeFor(event: CalendarEvent): void {
+function retractBusyRangeFor(event: AppCalendarEvent): void {
   if (event.repeat.rrule) return;
-  void removeBusyRange({ start: event.begin, end: event.end }).catch(() => {});
+  void (async () =>
+    (await getCalendarSdk()).removeBusyRange({ start: event.begin, end: event.end }))().catch(
+    () => {},
+  );
 }
 
 interface CalendarStore {
-  events: CalendarEvent[];
+  events: AppCalendarEvent[];
   calendars: CalendarList[];
   isLoadingEvents: boolean;
   isLoadingCalendars: boolean;
@@ -40,13 +43,17 @@ interface CalendarStore {
   setSelectedDate(date: Date): void;
   fetchEvents(opts?: { authors?: string[]; since?: number; until?: number }): Promise<void>;
   fetchCalendars(): Promise<void>;
-  createEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
+  createEvent(
+    draft: CalendarEventDraft & { isPrivate?: boolean; calendarId?: string },
+  ): Promise<AppCalendarEvent>;
   createCalendar(title: string, color: string, description?: string): Promise<CalendarList>;
   updateCalendar(calendar: CalendarList): Promise<CalendarList>;
-  deleteCalendar(coordinate: string, id: string): Promise<void>;
+  deleteCalendar(calendar: CalendarList): Promise<void>;
   deleteEvent(id: string, coordinate?: string): Promise<void>;
-  ingestEvent(event: CalendarEvent): void;
-  updateEvent(draft: CalendarEventDraft): Promise<CalendarEvent>;
+  ingestEvent(event: AppCalendarEvent): void;
+  updateEvent(
+    draft: CalendarEventDraft & { id: string; isPrivate?: boolean; calendarId?: string },
+  ): Promise<AppCalendarEvent>;
 }
 
 export const useCalendarStore = create<CalendarStore>((set, get) => ({
@@ -66,7 +73,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     try {
       // Pass the loaded calendar lists so private members (which carry their
       // viewKeys in eventRefs) are fetched + decrypted alongside direct events.
-      const events = await calendarService.fetchCalendarEventsForUser(get().calendars, opts ?? {});
+      const events = await fetchEventsForUser({ calendars: get().calendars, ...(opts ?? {}) });
       set({ events, isLoadingEvents: false });
     } catch (e) {
       set({
@@ -79,7 +86,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   async fetchCalendars() {
     set({ isLoadingCalendars: true, error: null });
     try {
-      const calendars = await calendarService.fetchCalendarLists();
+      const calendars = await (await getCalendarSdk()).fetchCalendars();
       set({ calendars, isLoadingCalendars: false });
     } catch (e) {
       set({
@@ -98,10 +105,26 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   async updateEvent(draft) {
     set({ error: null });
     try {
-      const previous = get().events.find((e) => e.id === draft.existingId);
-      const event = draft.isPrivate
-        ? await calendarService.publishPrivateCalendarEvent(draft, draft.calendarId ?? "default")
-        : await calendarService.publishPublicCalendarEvent(draft);
+      const sdk = await getCalendarSdk();
+      const previous = get().events.find((e) => e.id === draft.id);
+      const isPrivate = draft.isPrivate ?? previous?.isPrivate ?? true;
+      let event: AppCalendarEvent;
+      if (isPrivate) {
+        const published = await sdk.updatePrivateEvent(draft, {
+          // Everyone already on the event holds an invitation; without this the
+          // SDK re-wraps a fresh one for each of them on every edit.
+          previousParticipants: previous?.participants ?? [],
+          calendarId: draft.calendarId ?? previous?.calendarId,
+          calendars: get().calendars,
+          previousCreatedAt: previous?.createdAt,
+        });
+        event = { ...published.event, calendarId: draft.calendarId ?? previous?.calendarId };
+      } else {
+        const published = await sdk.publishPublicEvent(draft, {
+          previousCreatedAt: previous?.createdAt,
+        });
+        event = published.event;
+      }
       // Swap the public busy entry only when the times actually moved.
       if (previous && (previous.begin !== event.begin || previous.end !== event.end)) {
         retractBusyRangeFor(previous);
@@ -120,26 +143,41 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   async createEvent(draft) {
     set({ error: null });
     try {
-      // Publish + calendar-list linking is owned by the shared agent service
-      // (createCalendarEvent) so the super-app and the MCP `create_calendar_event`
-      // tool behave identically: a private event lands in a calendar list (the
-      // only way calendar.formstr.app discovers + decrypts it). Busy-range
-      // publishing stays here — it is gated on an app-only user setting.
-      const { event, calendar } = await calendarService.createCalendarEvent(draft, {
-        calendars: get().calendars,
+      const sdk = await getCalendarSdk();
+      const isPrivate = draft.isPrivate ?? true;
+
+      if (!isPrivate) {
+        const { event } = await sdk.publishPublicEvent(draft);
+        publishBusyRangeFor(event);
+        set((state) => ({ events: [...state.events, event] }));
+        return event;
+      }
+
+      // A private event's per-event viewKey only survives a refresh if it is
+      // stored in a list's eventRef — that is also how calendar.formstr.app
+      // discovers and decrypts it — so a private event MUST land in a calendar.
+      const calendars = get().calendars;
+      let list = draft.calendarId ? calendars.find((c) => c.id === draft.calendarId) : calendars[0];
+      let known = calendars;
+      if (!list) {
+        list = await sdk.createCalendar({ title: "My Calendar", color: "#334155" });
+        known = [...calendars, list];
+      }
+
+      const published = await sdk.publishPrivateEvent(draft, {
+        calendarId: list.id,
+        calendars: known,
       });
+      const event: AppCalendarEvent = { ...published.event, calendarId: list.id };
 
       publishBusyRangeFor(event);
 
       set((state) => {
         const events = [...state.events, event];
-        if (!calendar) return { events };
-        const exists = state.calendars.some((c) => c.id === calendar.id);
+        const exists = state.calendars.some((c) => c.id === list.id);
         return {
           events,
-          calendars: exists
-            ? state.calendars.map((c) => (c.id === calendar.id ? calendar : c))
-            : [...state.calendars, calendar],
+          calendars: exists ? state.calendars : [...state.calendars, list],
         };
       });
       return event;
@@ -152,7 +190,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   async createCalendar(title, color, description) {
     set({ error: null });
     try {
-      const calendar = await calendarService.createCalendarList(title, color, description);
+      const calendar = await (await getCalendarSdk()).createCalendar({ title, color, description });
       set((state) => ({ calendars: [...state.calendars, calendar] }));
       return calendar;
     } catch (e) {
@@ -164,7 +202,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   async updateCalendar(calendar) {
     set({ error: null });
     try {
-      const saved = await calendarService.updateCalendarList(calendar);
+      const saved = await (await getCalendarSdk()).updateCalendar(calendar);
       set((state) => ({
         calendars: state.calendars.map((c) => (c.id === saved.id ? saved : c)),
       }));
@@ -175,10 +213,10 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     }
   },
 
-  async deleteCalendar(coordinate, id) {
+  async deleteCalendar(calendar) {
     try {
-      await calendarService.deleteCalendarList(coordinate);
-      set((state) => ({ calendars: state.calendars.filter((c) => c.id !== id) }));
+      await (await getCalendarSdk()).deleteCalendar(calendar);
+      set((state) => ({ calendars: state.calendars.filter((c) => c.id !== calendar.id) }));
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Failed to delete calendar" });
     }
@@ -186,8 +224,13 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
 
   async deleteEvent(id, coordinate) {
     try {
+      const sdk = await getCalendarSdk();
       const deleted = get().events.find((e) => e.id === id);
-      await calendarService.deleteCalendarEvent(id, coordinate);
+      await sdk.deleteEvent({
+        kind: deleted?.kind ?? 31923,
+        coordinate,
+        eventId: deleted?.eventId,
+      });
       if (deleted) retractBusyRangeFor(deleted);
       // Remove the event ref from whichever calendar list holds it, then
       // republish that list. Without this the ref survives on the relay and
@@ -197,7 +240,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
           c.eventRefs.some((ref) => ref[0] === coordinate),
         );
         if (owning) {
-          const updated = await calendarService.removeEventFromCalendarList(owning, coordinate);
+          const updated = await sdk.unlinkEventFromCalendar(owning, coordinate);
           set((state) => ({
             calendars: state.calendars.map((c) => (c.id === updated.id ? updated : c)),
           }));
