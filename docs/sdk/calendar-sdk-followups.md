@@ -12,7 +12,7 @@ Design doc: [../plans/2026-08-18-calendar-sdk-integration.md](../plans/2026-08-1
 
 ## 1. Event discovery beyond calendar-list refs
 
-**Status:** open. **Blocks deleting:** `packages/app/src/lib/calendar/discovery.ts`.
+**Status:** open. **Blocks deleting:** `packages/agent/src/services/calendar/discovery.ts`.
 
 `fetchEventsFromCalendars()` returns only events referenced by a calendar
 list's `eventRefs`, and `fetchEvents()` is just that over the caller's own
@@ -44,6 +44,12 @@ Union of the direct-by-author query, the calendar-list refs and
 `newestByCoordinate` resolution, with a deletion sweep across every collected
 author. `fetchDeletions` currently takes a single pubkey; it needs an overload
 taking a list, or the method fans out internally.
+
+`isDeleted` also drops a nuance the agent's index had: the agent mapped each
+deleted coordinate to the deletion's `created_at` and hid the event only when
+its own `created_at` was older, so a legitimate re-publish after a delete
+survived. The SDK's index is a bare `Set`, so a re-published event stays
+hidden.
 
 ---
 

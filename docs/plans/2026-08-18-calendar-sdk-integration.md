@@ -172,8 +172,11 @@ does four things; the SDK's `fetchEvents()` does only the second:
 covers the public half of 1 and the "show all public" browse mode. Neither
 filters deletions.
 
-So the app keeps a thin `fetchEventsForUser(sdk, calendars, opts)` in
-`packages/app/src/lib/calendar/discovery.ts`, assembled entirely from exported
+So a thin `fetchEventsForUser(options)` lives in
+`packages/agent/src/services/calendar/discovery.ts` — in the agent, not the
+app, because the MCP `list_calendar_events` tool needs the identical
+composition and the app can import from the agent while the reverse is
+forbidden. It is assembled entirely from exported
 SDK pieces — `fetchEventsFromCalendars`, `fetchPublicEvents`, `parseCalendarEvent`,
 `lookupViewKey`, `fetchDeletions`, `isDeleted`, `newestByCoordinate` — plus one
 raw `nostrRuntime.querySync` for the user's own private kinds. This is
@@ -256,7 +259,7 @@ which is the interop claim this whole change rests on.
 Tracked in detail, with the app code each one lets us delete, in
 [../sdk/calendar-sdk-followups.md](../sdk/calendar-sdk-followups.md):
 
-1. `fetchEventsForUser` in the SDK — retires `lib/calendar/discovery.ts`.
+1. `fetchEventsForUser` in the SDK — retires the agent's `discovery.ts`.
 2. Booking / scheduling pages in the SDK — retires the agent's last calendar file.
 3. Booking wire-format upgrade to kind 1059 + `["k", …]`.
 4. Legacy kind-1052 wraps in `invitationInboxFilters` — retires the app's legacy filter.
