@@ -1,4 +1,4 @@
-import type { Invitation } from "@formstr/calendar-sdk";
+import { parseInvitationRumor, unwrapEvent, type Invitation } from "@formstr/calendar-sdk";
 import { signerManager, type SubscriptionHandle } from "@formstr/core";
 import type { Event } from "nostr-tools";
 import { create } from "zustand";
@@ -38,6 +38,7 @@ export const useInvitationsStore = create<InvitationsStore>((set, get) => ({
     try {
       const sdk = await getCalendarSdk();
       const rawSigner = await signerManager.getSigner();
+      const calendarSigner = toCalendarSigner(rawSigner);
       const pubkey = await rawSigner.getPublicKey();
 
       /** Resolve an invitation's event and fold it into state, once per wrap. */
@@ -70,20 +71,27 @@ export const useInvitationsStore = create<InvitationsStore>((set, get) => ({
         );
       }
 
-      const subscription = sdk.subscribeToInvitations(pubkey, (wrap: Event) => {
-        void (async () => {
-          for (const invitation of await sdk.fetchInvitationsWithEvents({ limit: 1 })) {
-            if (invitation.giftWrapId === wrap.id) await ingest(invitation);
-          }
-        })();
-      });
+      // Decode the arriving wrap directly. Re-querying the inbox to find it
+      // again would be a round trip that can miss: a relay's `limit` is applied
+      // to its own ordering, not to "the one that just arrived".
+      const decode = async (wrap: Event) => {
+        try {
+          const rumor = await unwrapEvent(wrap, calendarSigner);
+          const invitation = parseInvitationRumor(rumor, wrap.id);
+          if (invitation) await ingest(invitation);
+        } catch {
+          // Unverifiable or undecryptable wrap — not ours to render.
+        }
+      };
+
+      const subscription = sdk.subscribeToInvitations(pubkey, (wrap: Event) => void decode(wrap));
 
       // Wraps written by older super-app builds are bare kind 1052 and the
       // SDK's inbox filter never sees them. calendar.formstr.app reads both.
       const legacySubscription = subscribeToLegacyInvitations(
         pubkey,
         [...sdk.relays],
-        toCalendarSigner(rawSigner),
+        calendarSigner,
         (invitation) => void ingest(invitation),
       );
 

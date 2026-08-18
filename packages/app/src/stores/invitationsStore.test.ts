@@ -3,7 +3,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const sdk = vi.hoisted(() => ({
   relays: ["wss://relay.test"],
   fetchInvitationsWithEvents: vi.fn(async () => []),
-  subscribeToInvitations: vi.fn(() => ({ unsub: vi.fn() })),
+  subscribeToInvitations: vi.fn((_pubkey: string, _cb: (w: unknown) => void) => ({
+    unsub: vi.fn(),
+  })),
   dismissInvitation: vi.fn(async () => undefined),
   fetchEventByCoordinate: vi.fn(async () => null),
 }));
@@ -22,6 +24,10 @@ vi.mock("../lib/calendar/sdk", () => ({
 vi.mock("../lib/calendar/legacyInvitations", () => ({
   subscribeToLegacyInvitations: vi.fn(() => ({ unsub: vi.fn() })),
 }));
+
+const unwrapEvent = vi.hoisted(() => vi.fn());
+const parseInvitationRumor = vi.hoisted(() => vi.fn());
+vi.mock("@formstr/calendar-sdk", () => ({ unwrapEvent, parseInvitationRumor }));
 
 import { signerManager } from "@formstr/core";
 
@@ -102,6 +108,25 @@ describe("invitationsStore.start", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(useInvitationsStore.getState().invitations).toHaveLength(1);
+  });
+
+  it("decodes an arriving wrap directly instead of re-querying the inbox", async () => {
+    // A relay's `limit` applies to its own ordering, so re-querying to find the
+    // wrap that just arrived can silently return a different one.
+    unwrapEvent.mockResolvedValue({ kind: 14, pubkey: "author", tags: [], content: "" });
+    parseInvitationRumor.mockReturnValue(invitation({ giftWrapId: "w-live" }));
+
+    let onWrap: ((w: unknown) => void) | undefined;
+    sdk.subscribeToInvitations.mockImplementation((_pubkey: string, cb: (w: unknown) => void) => {
+      onWrap = cb;
+      return { unsub: vi.fn() };
+    });
+    await useInvitationsStore.getState().start();
+
+    onWrap!({ id: "w-live", kind: 1059 });
+    await vi.waitFor(() => expect(useInvitationsStore.getState().invitations).toHaveLength(1));
+    expect(sdk.fetchInvitationsWithEvents).toHaveBeenCalledTimes(1); // the seed only
+    expect(parseInvitationRumor).toHaveBeenCalledWith(expect.anything(), "w-live");
   });
 
   it("is a no-op when already subscribed", async () => {
