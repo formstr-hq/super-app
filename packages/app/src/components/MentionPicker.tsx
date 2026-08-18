@@ -1,4 +1,3 @@
-import { CALENDAR_KINDS } from "@formstr/agent/services/calendar/types";
 import { FORM_KINDS } from "@formstr/agent/services/forms/types";
 import { createRef as createNostrRef, type ModuleType } from "@formstr/core";
 import { KANBAN_KINDS } from "@formstr/kanban-sdk";
@@ -7,6 +6,7 @@ import { Calendar, ClipboardList, FolderOpen, SquareKanban } from "lucide-react"
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { CALENDAR_KINDS } from "../lib/calendar/types";
 import { useCalendarStore } from "../stores/calendarStore";
 import { useFormsStore } from "../stores/formsStore";
 import { useKanbanStore } from "../stores/kanbanStore";

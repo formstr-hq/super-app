@@ -1,7 +1,7 @@
-import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
+import type { AppCalendarEvent, CalendarList } from "./calendar/types";
 
 /** Addressable coordinate of a calendar event: `kind:authorPubkey:dTag`. */
-export function eventCoordinate(event: CalendarEvent): string {
+export function eventCoordinate(event: AppCalendarEvent): string {
   return `${event.kind}:${event.user}:${event.id}`;
 }
 
@@ -17,10 +17,10 @@ export function eventCoordinate(event: CalendarEvent): string {
  *   of those calendars is currently visible.
  */
 export function filterEventsByCalendarVisibility(
-  events: CalendarEvent[],
+  events: AppCalendarEvent[],
   calendars: CalendarList[],
   visibleCalendarIds: Set<string>,
-): CalendarEvent[] {
+): AppCalendarEvent[] {
   return events.filter((event) => {
     const coord = eventCoordinate(event);
     const owning = calendars.filter((c) => c.eventRefs.some((ref) => ref[0] === coord));
@@ -39,7 +39,7 @@ export function filterEventsByCalendarVisibility(
  * elsewhere (e.g. calendar.formstr.app).
  */
 export function calendarForEvent(
-  event: CalendarEvent,
+  event: AppCalendarEvent,
   calendars: CalendarList[],
 ): CalendarList | null {
   // Prefer the in-session `calendarId` (set right after creating an event,

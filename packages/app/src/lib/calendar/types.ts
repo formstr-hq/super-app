@@ -13,7 +13,7 @@ export type {
 } from "@formstr/calendar-sdk";
 export { CALENDAR_KINDS, RSVPStatus } from "@formstr/calendar-sdk";
 
-import type { CalendarEvent } from "@formstr/calendar-sdk";
+import type { CalendarEvent, CalendarEventDraft } from "@formstr/calendar-sdk";
 
 /**
  * A calendar event plus the two fields the app derives locally.
@@ -27,4 +27,14 @@ import type { CalendarEvent } from "@formstr/calendar-sdk";
 export type AppCalendarEvent = CalendarEvent & {
   calendarId?: string;
   isInvitation?: boolean;
+};
+
+/**
+ * The draft the UI edits. `isPrivate` and `calendarId` are routing decisions
+ * the store turns into a publish path and a publish option — the SDK's own
+ * draft carries neither, because neither is a field on the wire.
+ */
+export type AppCalendarEventDraft = CalendarEventDraft & {
+  isPrivate?: boolean;
+  calendarId?: string;
 };

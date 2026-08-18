@@ -1,12 +1,12 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@formstr/agent/services/calendar/rsvp", () => ({
-  fetchRsvpsForEvent: vi.fn().mockResolvedValue([]),
-  rsvpToEvent: vi.fn().mockResolvedValue(undefined),
-}));
+const fetchRsvps = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+const rsvp = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
-import { fetchRsvpsForEvent, rsvpToEvent } from "@formstr/agent/services/calendar/rsvp";
+vi.mock("../../lib/calendar/sdk", () => ({
+  getCalendarSdk: vi.fn(async () => ({ fetchRsvps, rsvp })),
+}));
 
 import { EventDetailsDialog } from "./EventDetailsDialog";
 
@@ -23,7 +23,6 @@ function evt(over = {}) {
     categories: [],
     participants: [],
     location: [],
-    website: "",
     user: "me",
     isPrivate: false,
     repeat: { rrule: null },
@@ -33,7 +32,8 @@ function evt(over = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  (fetchRsvpsForEvent as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+  fetchRsvps.mockResolvedValue([]);
+  rsvp.mockClear();
 });
 
 describe("EventDetailsDialog", () => {
@@ -77,12 +77,13 @@ describe("EventDetailsDialog", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Yes" }));
     await waitFor(() =>
-      expect(rsvpToEvent).toHaveBeenCalledWith(
-        "31923:someone-else:d1",
-        "accepted",
-        false,
-        expect.objectContaining({ status: "accepted" }),
-        undefined, // viewKey — public event has none
+      expect(rsvp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          coordinate: "31923:someone-else:d1",
+          payload: expect.objectContaining({ status: "accepted" }),
+          // A public event carries no view key.
+          viewKey: undefined,
+        }),
       ),
     );
   });
@@ -100,7 +101,6 @@ describe("EventDetailsDialog", () => {
             color: "#4285f4",
             eventRefs: [],
             createdAt: 0,
-            isVisible: true,
           },
         ]}
         currentUserPubkey="me"
@@ -117,11 +117,11 @@ describe("EventDetailsDialog", () => {
   });
 
   it("renders an attendee's status, note and suggested time", async () => {
-    (fetchRsvpsForEvent as ReturnType<typeof vi.fn>).mockResolvedValue([
+    fetchRsvps.mockResolvedValue([
       {
         pubkey: "abcd1234ef",
         status: "tentative",
-        eventCoordinate: "31923:me:d1",
+        eventCoord: "31923:me:d1",
         createdAt: 5,
         suggestedStart: Math.floor(new Date(2026, 5, 10, 9, 30).getTime() / 1000),
         suggestedEnd: Math.floor(new Date(2026, 5, 10, 10, 30).getTime() / 1000),

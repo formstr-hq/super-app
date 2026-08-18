@@ -1,5 +1,4 @@
-import type { CalendarEvent, CalendarList, RSVPResponse } from "@formstr/agent/services/calendar";
-import { fetchRsvpsForEvent, rsvpToEvent } from "@formstr/agent/services/calendar/rsvp";
+import type { RSVPStatus } from "@formstr/calendar-sdk";
 import {
   Box,
   Button,
@@ -13,18 +12,20 @@ import {
 import { Lock, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { getCalendarSdk } from "../../lib/calendar/sdk";
+import type { AppCalendarEvent, CalendarList, RSVPResponse } from "../../lib/calendar/types";
 import { calendarForEvent } from "../../lib/calendarMembership";
 import { formatNpub } from "../../lib/npub";
 
 import { RSVPBar, type RSVPBarPayload, type RSVPBarStatus } from "./RSVPBar";
 
 interface EventDetailsDialogProps {
-  event: CalendarEvent | null;
+  event: AppCalendarEvent | null;
   currentUserPubkey: string | null;
   calendars?: CalendarList[];
   onClose: () => void;
-  onEdit: (event: CalendarEvent) => void;
-  onDelete: (event: CalendarEvent) => void;
+  onEdit: (event: AppCalendarEvent) => void;
+  onDelete: (event: AppCalendarEvent) => void;
 }
 
 function formatWhen(beginMs: number, endMs: number): string {
@@ -91,11 +92,11 @@ export function EventDetailsDialog({
   useEffect(() => {
     if (!event) return;
     let active = true;
-    fetchRsvpsForEvent(coordinate, event.viewKey)
-      .then((r) => {
-        if (active) setRsvps(r);
-      })
-      .catch(() => {});
+    void (async () => {
+      const sdk = await getCalendarSdk();
+      const fetched = await sdk.fetchRsvps(coordinate, { viewKey: event.viewKey });
+      if (active) setRsvps([...fetched]);
+    })().catch(() => {});
     return () => {
       active = false;
     };
@@ -112,9 +113,16 @@ export function EventDetailsDialog({
   const submitRsvp = async (payload: RSVPBarPayload) => {
     setSubmitting(true);
     try {
-      await rsvpToEvent(coordinate, payload.status, event.isPrivate, payload, event.viewKey);
-      const refreshed = await fetchRsvpsForEvent(coordinate, event.viewKey);
-      setRsvps(refreshed);
+      // The SDK picks the public (31925) or private (32069) path from the
+      // coordinate's own kind, so `isPrivate` no longer has to be passed.
+      const sdk = await getCalendarSdk();
+      await sdk.rsvp({
+        coordinate,
+        payload: { ...payload, status: payload.status as RSVPStatus },
+        viewKey: event.viewKey,
+        relayHint: event.relayHint,
+      });
+      setRsvps([...(await sdk.fetchRsvps(coordinate, { viewKey: event.viewKey }))]);
     } finally {
       setSubmitting(false);
     }

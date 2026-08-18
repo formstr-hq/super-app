@@ -1,7 +1,7 @@
-import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
 import { Box, Paper, Skeleton, Typography } from "@mui/material";
 import { CalendarDays } from "lucide-react";
 
+import type { AppCalendarEvent, CalendarList } from "../../lib/calendar/types";
 import { calendarForEvent } from "../../lib/calendarMembership";
 import { expandEvents } from "../../lib/rrule";
 import { EmptyState } from "../EmptyState";
@@ -9,12 +9,12 @@ import { EmptyState } from "../EmptyState";
 import { EventCard } from "./EventCard";
 
 interface CalendarListViewProps {
-  events: CalendarEvent[];
+  events: AppCalendarEvent[];
   /** Selected month — the list mirrors the grid's range so the two views agree. */
   year: number;
   month: number;
   isLoading?: boolean;
-  onEventClick: (event: CalendarEvent) => void;
+  onEventClick: (event: AppCalendarEvent) => void;
   calendars?: CalendarList[];
 }
 
@@ -26,7 +26,7 @@ export function CalendarListView({
   onEventClick,
   calendars = [],
 }: CalendarListViewProps) {
-  const colorFor = (e: CalendarEvent) => calendarForEvent(e, calendars)?.color;
+  const colorFor = (e: AppCalendarEvent) => calendarForEvent(e, calendars)?.color;
 
   if (isLoading) {
     return (
@@ -59,7 +59,7 @@ export function CalendarListView({
     );
   }
 
-  const groups = new Map<string, CalendarEvent[]>();
+  const groups = new Map<string, AppCalendarEvent[]>();
   for (const e of inMonth) {
     const key = new Date(e.begin).toLocaleDateString(undefined, {
       weekday: "long",

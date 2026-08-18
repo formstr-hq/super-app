@@ -1,6 +1,7 @@
-import type { CalendarList } from "@formstr/agent/services/calendar";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
+
+import type { CalendarList } from "../../lib/calendar/types";
 
 import { CalendarManageDialog } from "./CalendarManageDialog";
 
@@ -12,7 +13,6 @@ const cal = (over: Partial<CalendarList> = {}): CalendarList => ({
   color: "#4285f4",
   eventRefs: [],
   createdAt: 0,
-  isVisible: true,
   ...over,
 });
 

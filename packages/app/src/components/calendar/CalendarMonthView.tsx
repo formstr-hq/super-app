@@ -1,9 +1,9 @@
-import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
 import { Box, Paper, Popover, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { Lock, X } from "lucide-react";
 import { useState } from "react";
 
+import type { AppCalendarEvent, CalendarList } from "../../lib/calendar/types";
 import { calendarForEvent } from "../../lib/calendarMembership";
 import { expandEvents } from "../../lib/rrule";
 
@@ -17,7 +17,7 @@ function EventChip({
   onClick,
   onDelete,
 }: {
-  event: CalendarEvent;
+  event: AppCalendarEvent;
   color: string;
   onClick: () => void;
   onDelete: () => void;
@@ -86,12 +86,12 @@ function EventChip({
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 interface CalendarMonthViewProps {
-  events: CalendarEvent[];
+  events: AppCalendarEvent[];
   year: number;
   month: number;
   calendars: CalendarList[];
-  onEventClick: (event: CalendarEvent) => void;
-  onDeleteEvent: (event: CalendarEvent) => void;
+  onEventClick: (event: AppCalendarEvent) => void;
+  onDeleteEvent: (event: AppCalendarEvent) => void;
 }
 
 export function CalendarMonthView({
@@ -107,7 +107,9 @@ export function CalendarMonthView({
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
   // Anchor + payload for the "+N more" overflow popover.
-  const [more, setMore] = useState<{ anchor: HTMLElement; events: CalendarEvent[] } | null>(null);
+  const [more, setMore] = useState<{ anchor: HTMLElement; events: AppCalendarEvent[] } | null>(
+    null,
+  );
 
   const expanded = expandEvents(
     events,
@@ -123,7 +125,7 @@ export function CalendarMonthView({
       .filter((e) => e.begin >= dayStart && e.begin < dayEnd)
       .sort((a, b) => a.begin - b.begin);
   };
-  const colorFor = (e: CalendarEvent) =>
+  const colorFor = (e: AppCalendarEvent) =>
     calendarForEvent(e, calendars)?.color ?? theme.palette.primary.main;
 
   return (

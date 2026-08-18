@@ -1,10 +1,4 @@
-import {
-  addBusyRange,
-  busyListMonthKey,
-  fetchBusyListsForUser,
-  removeBusyRange,
-  type BusyRange,
-} from "@formstr/agent/services/calendar/busyList";
+import { busyListMonthKey, type BusyRange } from "@formstr/calendar-sdk";
 import {
   Box,
   Button,
@@ -28,6 +22,7 @@ import {
 import { useSnackbar } from "notistack";
 import { useCallback, useEffect, useState } from "react";
 
+import { getCalendarSdk } from "../../lib/calendar/sdk";
 import { useAuthStore } from "../../stores";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { EmptyState } from "../EmptyState";
@@ -90,7 +85,7 @@ export function AvailabilityView({ onBack }: AvailabilityViewProps) {
     if (!pubkey) return;
     setLoading(true);
     try {
-      const lists = await fetchBusyListsForUser(pubkey, [monthKey]);
+      const lists = await (await getCalendarSdk()).fetchBusyLists(pubkey, [monthKey]);
       setRanges(lists[0]?.ranges ?? []);
     } finally {
       setLoading(false);
@@ -110,7 +105,7 @@ export function AvailabilityView({ onBack }: AvailabilityViewProps) {
     }
     setBusy(true);
     try {
-      await addBusyRange({ start, end });
+      await (await getCalendarSdk()).addBusyRange({ start, end });
       enqueueSnackbar("Busy time published", { variant: "success" });
       await load();
     } catch {
@@ -123,7 +118,7 @@ export function AvailabilityView({ onBack }: AvailabilityViewProps) {
   const handleRemove = async (range: BusyRange) => {
     setBusy(true);
     try {
-      await removeBusyRange(range);
+      await (await getCalendarSdk()).removeBusyRange(range);
       enqueueSnackbar("Busy time removed", { variant: "success" });
       await load();
     } catch {

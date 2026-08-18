@@ -2,7 +2,7 @@ import { fetchEventsForUser } from "@formstr/agent/services/calendar/discovery";
 import { create } from "zustand";
 
 import { getCalendarSdk } from "../lib/calendar/sdk";
-import type { AppCalendarEvent, CalendarEventDraft, CalendarList } from "../lib/calendar/types";
+import type { AppCalendarEvent, AppCalendarEventDraft, CalendarList } from "../lib/calendar/types";
 
 import { useSettingsStore } from "./settingsStore";
 
@@ -43,17 +43,13 @@ interface CalendarStore {
   setSelectedDate(date: Date): void;
   fetchEvents(opts?: { authors?: string[]; since?: number; until?: number }): Promise<void>;
   fetchCalendars(): Promise<void>;
-  createEvent(
-    draft: CalendarEventDraft & { isPrivate?: boolean; calendarId?: string },
-  ): Promise<AppCalendarEvent>;
+  createEvent(draft: AppCalendarEventDraft): Promise<AppCalendarEvent>;
   createCalendar(title: string, color: string, description?: string): Promise<CalendarList>;
   updateCalendar(calendar: CalendarList): Promise<CalendarList>;
   deleteCalendar(calendar: CalendarList): Promise<void>;
   deleteEvent(id: string, coordinate?: string): Promise<void>;
   ingestEvent(event: AppCalendarEvent): void;
-  updateEvent(
-    draft: CalendarEventDraft & { id: string; isPrivate?: boolean; calendarId?: string },
-  ): Promise<AppCalendarEvent>;
+  updateEvent(draft: AppCalendarEventDraft & { id: string }): Promise<AppCalendarEvent>;
 }
 
 export const useCalendarStore = create<CalendarStore>((set, get) => ({
