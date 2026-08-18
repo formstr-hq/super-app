@@ -13,16 +13,17 @@ Design doc: [../plans/2026-08-18-calendar-sdk-integration.md](../plans/2026-08-1
 ## 1. Event discovery beyond calendar-list refs
 
 **Status:** open. **Blocks deleting:** `packages/agent/src/services/calendar/discovery.ts`.
+**Confirmed during integration.**
 
 `fetchEventsFromCalendars()` returns only events referenced by a calendar
 list's `eventRefs`, and `fetchEvents()` is just that over the caller's own
 lists. Two things the super-app needs are missing:
 
-- **Direct-by-author events.** `publishPrivateEvent`'s `calendarId` is
-  optional, so an event published without it exists on relays but is
-  unreachable through any SDK read path. The app queries
-  `{kinds: [32678], authors: [self]}` directly and resolves the view key with
-  `lookupViewKey(lists, coordinate)`.
+- **Direct-by-author public events.** `fetchPublicEvents` covers these, but nothing
+  unions them with the calendar-list results or resolves newest-per-coordinate
+  across both. (A direct query for _private_ events turns out to be pointless:
+  the view key lives only in a list ref, so an unlinked private event is
+  undecryptable by anyone, SDK or not. The composer does not attempt it.)
 - **NIP-09 deletion filtering.** No read path consults kind-5 events, so a
   deleted event is re-fetched and re-rendered on every refresh — relays keep
   serving it. `fetchDeletions` and `isDeleted` are exported but never wired
@@ -50,6 +51,11 @@ deleted coordinate to the deletion's `created_at` and hid the event only when
 its own `created_at` was older, so a legitimate re-publish after a delete
 survived. The SDK's index is a bare `Set`, so a re-published event stays
 hidden.
+
+One more shape note for whoever ports this: the composer must default `authors`
+to the signed-in user **only when no `since`/`until` window was given**. With a
+window and no explicit authors it has to browse public events broadly — that is
+what the app's "show all public" toggle relies on.
 
 ---
 
@@ -134,3 +140,54 @@ gone.
 
 Listed for the record. A one-shot kind-84 read in the SDK is possible but the
 blast radius is one extra dismissal per stale invitation, per user, ever.
+
+---
+
+## 7. `toCalendarSigner` has an unusable parameter type
+
+**Status:** open. **Blocks deleting:** the local `toCalendarSigner` in both
+`packages/agent/src/services/calendar/sdk.ts` and
+`packages/app/src/lib/calendar/sdk.ts`.
+
+The published adapter declares its parameter as:
+
+```ts
+declare function toCalendarSigner(signer: {
+  getPublicKey(): Promise<string> | string;
+  signEvent(event: never): Promise<never> | never;   // ← unusable
+  …
+}): CalendarSigner;
+```
+
+No real signer satisfies it. The blocker is the **return** type, not the
+parameter: a `signEvent(e: EventTemplate): Promise<VerifiedEvent>` is not
+assignable to one returning `Promise<never>`, and return-type covariance is
+always enforced regardless of strictness settings. Every consumer therefore has
+to either cast or hand-roll the adapter. The super-app hand-rolls it — a bound
+object literal typed against `CalendarSigner`, which is correctly typed — so no
+`as` cast is needed anywhere.
+
+**Proposed fix:** type the parameter as the structural signer it actually
+accepts, e.g. `signEvent(event: EventTemplate): Promise<Event> | Event`.
+
+Worth noting alongside it: `CalendarSigner` requires `nip44Encrypt`/`nip44Decrypt`
+while `@formstr/core`'s `NostrSigner` declares them optional, so any adapter has
+to narrow that gap. The super-app throws a named error when they are absent.
+
+---
+
+## 8. No booking, no busy-list, no tzid — the shape of what is left
+
+A summary of what the super-app still owns after the integration, for whoever
+picks up items 1-5:
+
+| Concern                              | Where it lives now                                   | Item |
+| ------------------------------------ | ---------------------------------------------------- | ---- |
+| Event discovery union + NIP-09 sweep | `packages/agent/src/services/calendar/discovery.ts`  | 1    |
+| Booking / scheduling pages           | `packages/agent/src/services/calendar/booking.ts`    | 2, 3 |
+| Legacy kind-1052 invitation reads    | `packages/app/src/lib/calendar/legacyInvitations.ts` | 4    |
+| `start_tzid` on export               | `packages/app/src/lib/ics.ts` (reads raw tags)       | 5    |
+| Signer adaptation                    | `sdk.ts` in both packages                            | 7    |
+
+Everything else — events, calendar lists, invitations, RSVPs, busy lists,
+deletions, view keys, recurrence — is the SDK's.
