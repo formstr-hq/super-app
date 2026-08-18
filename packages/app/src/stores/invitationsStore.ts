@@ -1,22 +1,16 @@
-import {
-  extractInvitationFromWrap,
-  type InvitationRumor,
-} from "@formstr/agent/services/calendar/rsvp";
-import {
-  fetchCalendarEventByCoordinate,
-  fetchParticipantRemovals,
-  getInvitationInboxRelays,
-  publishParticipantRemovalEvent,
-} from "@formstr/agent/services/calendar/service";
-import { CALENDAR_KINDS, type CalendarEvent } from "@formstr/agent/services/calendar/types";
-import { signerManager, nostrRuntime, type SubscriptionHandle } from "@formstr/core";
-import type { Filter } from "nostr-tools";
+import type { Invitation } from "@formstr/calendar-sdk";
+import { signerManager, type SubscriptionHandle } from "@formstr/core";
+import type { Event } from "nostr-tools";
 import { create } from "zustand";
+
+import { subscribeToLegacyInvitations } from "../lib/calendar/legacyInvitations";
+import { getCalendarSdk, toCalendarSigner } from "../lib/calendar/sdk";
+import type { AppCalendarEvent } from "../lib/calendar/types";
 
 import { useCalendarStore } from "./calendarStore";
 
-export interface InvitationEntry extends InvitationRumor {
-  event?: CalendarEvent;
+export interface InvitationEntry extends Invitation {
+  event?: AppCalendarEvent;
   rsvp?: "accepted" | "declined" | "tentative";
 }
 
@@ -24,10 +18,11 @@ interface InvitationsStore {
   invitations: InvitationEntry[];
   isSubscribing: boolean;
   subscription: SubscriptionHandle | null;
+  legacySubscription: SubscriptionHandle | null;
   start(): Promise<void>;
   stop(): void;
   markRsvp(coord: string, status: "accepted" | "declined" | "tentative"): void;
-  dismiss(wrapId: string): void;
+  dismiss(giftWrapId: string): void;
   hasPending(): boolean;
 }
 
@@ -35,42 +30,64 @@ export const useInvitationsStore = create<InvitationsStore>((set, get) => ({
   invitations: [],
   isSubscribing: false,
   subscription: null,
+  legacySubscription: null,
 
   async start() {
     if (get().subscription || get().isSubscribing) return;
     set({ isSubscribing: true });
     try {
-      const signer = await signerManager.getSigner();
-      const pubkey = await signer.getPublicKey();
-      // Module relays ∪ the user's NIP-65 read relays: upstream delivers each
-      // wrap to the recipient's own relay list, not to our module set.
-      const relays = await getInvitationInboxRelays(pubkey);
-      // The user's own kind-84 opt-outs — dismissed invitations stay gone
-      // across sessions (the relays keep serving the wraps).
-      const removals = await fetchParticipantRemovals(pubkey, relays);
-      const filters: Filter[] = [
-        { kinds: [CALENDAR_KINDS.giftWrap, CALENDAR_KINDS.rsvpGiftWrap], "#p": [pubkey] },
-      ];
-      const handle = nostrRuntime.subscribe(relays, filters, {
-        onEvent: (wrap) => {
-          void (async () => {
-            if (removals.ids.has(wrap.id)) return;
-            const invitation = await extractInvitationFromWrap(wrap);
-            if (!invitation) return;
-            const event = await fetchCalendarEventByCoordinate(invitation.eventCoordinate);
-            if (event) {
-              useCalendarStore.getState().ingestEvent({ ...event, isInvitation: true });
-            }
-            set((state) => {
-              if (state.invitations.some((i) => i.wrapId === invitation.wrapId)) return state;
-              return {
-                invitations: [{ ...invitation, event: event ?? undefined }, ...state.invitations],
-              };
-            });
-          })();
-        },
+      const sdk = await getCalendarSdk();
+      const rawSigner = await signerManager.getSigner();
+      const pubkey = await rawSigner.getPublicKey();
+
+      /** Resolve an invitation's event and fold it into state, once per wrap. */
+      const ingest = async (invitation: Invitation) => {
+        if (get().invitations.some((i) => i.giftWrapId === invitation.giftWrapId)) return;
+        const event = await sdk.fetchEventByCoordinate(invitation.coordinate, {
+          viewKey: invitation.viewKey,
+          relays: invitation.relayHint ? [invitation.relayHint] : undefined,
+        });
+        if (event) {
+          useCalendarStore.getState().ingestEvent({ ...event, isInvitation: true });
+        }
+        set((state) => {
+          if (state.invitations.some((i) => i.giftWrapId === invitation.giftWrapId)) return state;
+          return {
+            invitations: [{ ...invitation, event: event ?? undefined }, ...state.invitations],
+          };
+        });
+      };
+
+      // Seed from a one-shot query first: it honours the user's kind-5
+      // dismissals, which the live subscription below cannot see.
+      for (const invitation of await sdk.fetchInvitationsWithEvents()) {
+        const { event, ...rest } = invitation;
+        if (event) useCalendarStore.getState().ingestEvent({ ...event, isInvitation: true });
+        set((state) =>
+          state.invitations.some((i) => i.giftWrapId === rest.giftWrapId)
+            ? state
+            : { invitations: [{ ...rest, event: event ?? undefined }, ...state.invitations] },
+        );
+      }
+
+      const subscription = sdk.subscribeToInvitations(pubkey, (wrap: Event) => {
+        void (async () => {
+          for (const invitation of await sdk.fetchInvitationsWithEvents({ limit: 1 })) {
+            if (invitation.giftWrapId === wrap.id) await ingest(invitation);
+          }
+        })();
       });
-      set({ subscription: handle, isSubscribing: false });
+
+      // Wraps written by older super-app builds are bare kind 1052 and the
+      // SDK's inbox filter never sees them. calendar.formstr.app reads both.
+      const legacySubscription = subscribeToLegacyInvitations(
+        pubkey,
+        [...sdk.relays],
+        toCalendarSigner(rawSigner),
+        (invitation) => void ingest(invitation),
+      );
+
+      set({ subscription, legacySubscription, isSubscribing: false });
     } catch {
       set({ isSubscribing: false });
     }
@@ -78,28 +95,31 @@ export const useInvitationsStore = create<InvitationsStore>((set, get) => ({
 
   stop() {
     get().subscription?.unsub();
-    set({ subscription: null, invitations: [] });
+    get().legacySubscription?.unsub();
+    set({ subscription: null, legacySubscription: null, invitations: [] });
   },
 
   markRsvp(coord, status) {
     set((state) => ({
       invitations: state.invitations.map((i) =>
-        i.eventCoordinate === coord ? { ...i, rsvp: status } : i,
+        i.coordinate === coord ? { ...i, rsvp: status } : i,
       ),
     }));
   },
 
-  dismiss(wrapId) {
-    // Persist the opt-out as a kind-84 participant removal e-tagging the wrap,
-    // exactly as upstream does on dismiss — otherwise the invitation
-    // resurfaces every session and calendar.formstr.app never learns of it.
-    void publishParticipantRemovalEvent({
-      kinds: [CALENDAR_KINDS.giftWrap],
-      eventIds: [wrapId],
-    }).catch(() => {
-      // Best-effort: the local dismissal still applies this session.
-    });
-    set((state) => ({ invitations: state.invitations.filter((i) => i.wrapId !== wrapId) }));
+  dismiss(giftWrapId) {
+    // Persist the opt-out as a NIP-09 deletion of the wrap, which is what the
+    // SDK's inbox honours and what calendar.formstr.app writes — otherwise the
+    // invitation resurfaces on every load.
+    const invitation = get().invitations.find((i) => i.giftWrapId === giftWrapId);
+    if (invitation) {
+      void (async () => (await getCalendarSdk()).dismissInvitation(invitation))().catch(() => {
+        // Best-effort: the local dismissal still applies this session.
+      });
+    }
+    set((state) => ({
+      invitations: state.invitations.filter((i) => i.giftWrapId !== giftWrapId),
+    }));
   },
 
   hasPending() {

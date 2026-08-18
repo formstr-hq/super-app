@@ -1,10 +1,11 @@
-import { rsvpToEvent } from "@formstr/agent/services/calendar/rsvp";
+import type { RSVPStatus } from "@formstr/calendar-sdk";
 import { Box, Button, Chip, CircularProgress, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { ArrowLeft, Check, CircleHelp, Inbox, X } from "lucide-react";
 import { useSnackbar } from "notistack";
 import { useState } from "react";
 
+import { getCalendarSdk } from "../../lib/calendar/sdk";
 import { useInvitationsStore, type InvitationEntry } from "../../stores/invitationsStore";
 import { EmptyState } from "../EmptyState";
 
@@ -35,6 +36,22 @@ export function InvitationsView({ onBack }: InvitationsViewProps) {
 
   const pending = invitations.filter((i) => !i.rsvp);
 
+  /**
+   * Answer an invitation. The SDK picks the public (31925) or private (32069)
+   * RSVP path from the coordinate's own kind, so the caller only supplies the
+   * view key the invitation carried.
+   */
+  const respond = async (inv: InvitationEntry, status: "accepted" | "declined" | "tentative") => {
+    const sdk = await getCalendarSdk();
+    await sdk.rsvp({
+      coordinate: inv.coordinate,
+      payload: { status: status as RSVPStatus },
+      viewKey: inv.viewKey,
+      relayHint: inv.relayHint,
+    });
+    markRsvp(inv.coordinate, status);
+  };
+
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2.5 }}>
@@ -62,39 +79,12 @@ export function InvitationsView({ onBack }: InvitationsViewProps) {
         <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
           {pending.map((inv) => (
             <InvitationRow
-              key={inv.wrapId}
+              key={inv.giftWrapId}
               inv={inv}
-              onAccept={async () => {
-                await rsvpToEvent(
-                  inv.eventCoordinate,
-                  "accepted",
-                  inv.kind !== 31923,
-                  undefined,
-                  inv.viewKey,
-                );
-                markRsvp(inv.eventCoordinate, "accepted");
-              }}
-              onDecline={async () => {
-                await rsvpToEvent(
-                  inv.eventCoordinate,
-                  "declined",
-                  inv.kind !== 31923,
-                  undefined,
-                  inv.viewKey,
-                );
-                markRsvp(inv.eventCoordinate, "declined");
-              }}
-              onTentative={async () => {
-                await rsvpToEvent(
-                  inv.eventCoordinate,
-                  "tentative",
-                  inv.kind !== 31923,
-                  undefined,
-                  inv.viewKey,
-                );
-                markRsvp(inv.eventCoordinate, "tentative");
-              }}
-              onDismiss={() => dismiss(inv.wrapId)}
+              onAccept={() => respond(inv, "accepted")}
+              onDecline={() => respond(inv, "declined")}
+              onTentative={() => respond(inv, "tentative")}
+              onDismiss={() => dismiss(inv.giftWrapId)}
             />
           ))}
         </Box>

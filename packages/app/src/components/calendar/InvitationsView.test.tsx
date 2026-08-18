@@ -2,9 +2,9 @@ import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/re
 import { SnackbarProvider } from "notistack";
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 
-const rsvpToEvent = vi.fn().mockResolvedValue(undefined);
-vi.mock("@formstr/agent/services/calendar/rsvp", () => ({
-  rsvpToEvent: (...args: unknown[]) => rsvpToEvent(...args),
+const rsvp = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("../../lib/calendar/sdk", () => ({
+  getCalendarSdk: vi.fn(async () => ({ rsvp })),
 }));
 
 const state: {
@@ -21,11 +21,13 @@ vi.mock("../../stores/invitationsStore", () => ({
 import { InvitationsView } from "./InvitationsView";
 
 const pending = {
-  wrapId: "w1",
-  eventCoordinate: "31923:author:d1",
+  giftWrapId: "w1",
+  coordinate: "31923:author:d1",
   authorPubkey: "author",
   kind: 31923,
-  receivedAt: 0,
+  viewKey: "nsec1k",
+  relayHint: "wss://a.test",
+  createdAt: 0,
   event: { title: "Launch Party", begin: Date.now() + 3600000 },
 };
 
@@ -39,7 +41,7 @@ const renderView = (onBack = vi.fn()) => {
 };
 
 beforeEach(() => {
-  rsvpToEvent.mockClear();
+  rsvp.mockClear();
   state.invitations = [pending];
   state.markRsvp = vi.fn();
 });
@@ -62,12 +64,12 @@ describe("InvitationsView", () => {
     renderView();
     fireEvent.click(screen.getByRole("button", { name: /accept/i }));
     await waitFor(() =>
-      expect(rsvpToEvent).toHaveBeenCalledWith(
-        "31923:author:d1",
-        "accepted",
-        false,
-        undefined,
-        undefined,
+      expect(rsvp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          coordinate: "31923:author:d1",
+          payload: { status: "accepted" },
+          viewKey: "nsec1k",
+        }),
       ),
     );
     await waitFor(() => expect(state.markRsvp).toHaveBeenCalledWith("31923:author:d1", "accepted"));
