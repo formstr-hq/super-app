@@ -253,15 +253,12 @@ which is the interop claim this whole change rests on.
 
 ## Follow-ups
 
-1. Port booking / scheduling pages into `@formstr/calendar-sdk` 0.2.0, then
-   rebuild the agent's 4 booking tools on it and delete the last agent
-   calendar file.
-2. Upgrade booking's wire format to `1059 + ["k", …]`, matching what
-   calendar.formstr.app v2.1.0 writes.
-3. Add `start_tzid` / `end_tzid` round-tripping to the SDK, coordinated with
-   upstream, and restore tzid on publish.
-4. Teach the SDK to read legacy kind-1052 wraps so the app-side legacy filter
-   can be deleted.
-5. Move `fetchEventsForUser` into the SDK as a `fetchEventsForUser`-style
-   discovery method, including the deletion sweep, so the app-side helper can
-   be deleted.
+Tracked in detail, with the app code each one lets us delete, in
+[../sdk/calendar-sdk-followups.md](../sdk/calendar-sdk-followups.md):
+
+1. `fetchEventsForUser` in the SDK — retires `lib/calendar/discovery.ts`.
+2. Booking / scheduling pages in the SDK — retires the agent's last calendar file.
+3. Booking wire-format upgrade to kind 1059 + `["k", …]`.
+4. Legacy kind-1052 wraps in `invitationInboxFilters` — retires the app's legacy filter.
+5. `start_tzid` / `end_tzid` round-tripping — needs upstream coordination.
+6. kind-84 dismissal history — recorded, not planned.
