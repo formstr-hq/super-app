@@ -12,7 +12,7 @@ import { signerManager, nostrRuntime, relayManager, type NostrSigner } from "@fo
 // them. This narrows the type without a cast. It does not probe capability —
 // core's signers all define both methods and surface a missing extension or
 // bunker capability later, from inside the call.
-function toCalendarSigner(signer: NostrSigner): CalendarSigner {
+export function toCalendarSigner(signer: NostrSigner): CalendarSigner {
   if (!signer.nip44Encrypt || !signer.nip44Decrypt) {
     throw new Error(
       "The active signer does not declare NIP-44 support, which every calendar operation requires.",

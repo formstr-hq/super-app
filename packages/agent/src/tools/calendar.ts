@@ -340,7 +340,25 @@ function buildCalendarTools(): ToolDef[] {
       const lists = await calendar.fetchCalendarLists();
       const list = lists.find((c) => c.id === calendarId);
       if (!list) return fail(`No calendar found for id ${calendarId}.`, "NOT_FOUND");
-      const { event } = await calendarBooking.approveBookingRequest(request, list);
+      // `calendar.fetchCalendarLists` still returns the agent's pre-SDK
+      // CalendarList (`./calendar/types`), while `approveBookingRequest` takes
+      // the SDK's — same fields, but `eventRefs` is untyped `string[][]` on one
+      // side and a strict 3-tuple `EventRef[]` on the other. Adapt at this seam
+      // rather than loosening booking's SDK-shaped signature.
+      const { event } = await calendarBooking.approveBookingRequest(request, {
+        id: list.id,
+        eventId: list.eventId,
+        title: list.title,
+        description: list.description,
+        color: list.color,
+        notificationPreference: list.notificationPreference,
+        eventRefs: list.eventRefs.map((ref): [string, string, string] => [
+          ref[0] ?? "",
+          ref[1] ?? "",
+          ref[2] ?? "",
+        ]),
+        createdAt: list.createdAt,
+      });
       return ok(`Approved booking "${request.title}".`, {
         coordinate: `${event.kind}:${event.user}:${event.id}`,
       });

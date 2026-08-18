@@ -1,18 +1,20 @@
 import {
+  decryptWithViewKey,
+  unwrapEvent,
+  type CalendarEvent,
+  type CalendarList,
+} from "@formstr/calendar-sdk";
+import {
   signerManager,
   nostrRuntime,
   relayManager,
   nip44SelfDecrypt,
   wrapEvent,
-  unwrapEvent,
 } from "@formstr/core";
 import type { Event as NostrEvent, Filter } from "nostr-tools";
 import { nip19 } from "nostr-tools";
 
-import { addBusyRange } from "./busyList";
-import { addEventToCalendarList, publishPrivateCalendarEvent } from "./service";
-import { CALENDAR_KINDS, type CalendarEvent, type CalendarList } from "./types";
-import { decryptWithViewKey } from "./viewKey";
+import { getCalendarSdk, toCalendarSigner } from "./sdk";
 
 /**
  * Appointment-scheduling ("booking links") read + approve service, interoperable
@@ -28,6 +30,20 @@ import { decryptWithViewKey } from "./viewKey";
 
 /** Where the public booking page is hosted (the super-app doesn't render it). */
 const BOOKING_HOST = "https://calendar.formstr.app";
+
+/**
+ * Booking kinds, absent from @formstr/calendar-sdk 0.1.0. Tracked as follow-up
+ * 2 in docs/sdk/calendar-sdk-followups.md; delete this block when the SDK
+ * grows a booking service.
+ */
+const BOOKING_KINDS = {
+  schedulingPage: 31927,
+  schedulingPagesList: 32680,
+  requestGiftWrap: 1057,
+  requestRumor: 57,
+  responseGiftWrap: 1058,
+  responseRumor: 58,
+} as const;
 
 export interface SchedulingPage {
   /** d-tag identifier. */
@@ -79,7 +95,7 @@ export async function fetchSchedulingPages(): Promise<SchedulingPage[]> {
   // 1) Page-key index (kind 32680, self-encrypted): dTag → viewKey nsec.
   const viewKeyByDTag = new Map<string, string>();
   const keyEvents = await nostrRuntime.querySync(relays, {
-    kinds: [CALENDAR_KINDS.schedulingPagesList],
+    kinds: [BOOKING_KINDS.schedulingPagesList],
     authors: [pubkey],
   } as Filter);
   for (const event of keyEvents) {
@@ -98,7 +114,7 @@ export async function fetchSchedulingPages(): Promise<SchedulingPage[]> {
 
   // 2) Pages themselves (kind 31927), newest-wins per d-tag.
   const pageEvents = await nostrRuntime.querySync(relays, {
-    kinds: [CALENDAR_KINDS.schedulingPage],
+    kinds: [BOOKING_KINDS.schedulingPage],
     authors: [pubkey],
   } as Filter);
   const newest = new Map<string, NostrEvent>();
@@ -113,7 +129,7 @@ export async function fetchSchedulingPages(): Promise<SchedulingPage[]> {
     const viewKey = viewKeyByDTag.get(dTag);
     if (!viewKey || !event.content) continue; // can't decrypt / tombstone
     try {
-      const tags = JSON.parse(await decryptWithViewKey(viewKey, event.content)) as string[][];
+      const tags = decryptWithViewKey<string[][]>(viewKey, event.content);
       if (!Array.isArray(tags)) continue;
       pages.push({
         id: dTag,
@@ -153,7 +169,7 @@ export function bookingLinkUrl(page: SchedulingPage): string {
   const naddr = nip19.naddrEncode({
     identifier: page.id,
     pubkey: page.user,
-    kind: CALENDAR_KINDS.schedulingPage,
+    kind: BOOKING_KINDS.schedulingPage,
     relays: relayManager.getRelaysForModule("calendar"),
   });
   let url = `${BOOKING_HOST}/schedule/${naddr}`;
@@ -167,8 +183,8 @@ export function bookingLinkUrl(page: SchedulingPage): string {
 async function unwrapBookingRequest(wrap: NostrEvent): Promise<BookingRequest | null> {
   try {
     const signer = await signerManager.getSigner();
-    const rumor = await unwrapEvent(wrap, signer);
-    if (!rumor || rumor.kind !== CALENDAR_KINDS.bookingRequestRumor) return null;
+    const rumor = await unwrapEvent(wrap, toCalendarSigner(signer));
+    if (rumor.kind !== BOOKING_KINDS.requestRumor) return null;
     const tags: string[][] = Array.isArray(rumor.tags) ? rumor.tags : [];
     const get = (name: string) => tags.find((t) => t[0] === name)?.[1] ?? "";
     const schedulingPageRef = get("a");
@@ -199,7 +215,7 @@ export async function fetchBookingRequests(): Promise<BookingRequest[]> {
   const relays = relayManager.getRelaysForModule("calendar");
 
   const wraps = await nostrRuntime.querySync(relays, {
-    kinds: [CALENDAR_KINDS.bookingRequestGiftWrap],
+    kinds: [BOOKING_KINDS.requestGiftWrap],
     "#p": [pubkey],
   } as Filter);
 
@@ -222,7 +238,7 @@ async function sendBookingResponse(params: {
   start: number; // ms
   end: number; // ms
   status: "approved" | "declined";
-  eventRef?: string[];
+  eventRef?: readonly string[];
   viewKey?: string;
   reason?: string;
 }): Promise<void> {
@@ -239,10 +255,10 @@ async function sendBookingResponse(params: {
   if (params.status === "declined" && params.reason) tags.push(["reason", params.reason]);
 
   const wrap = await wrapEvent(
-    { kind: CALENDAR_KINDS.bookingResponseRumor, content: "", tags },
+    { kind: BOOKING_KINDS.responseRumor, content: "", tags },
     signer,
     params.bookerPubkey,
-    CALENDAR_KINDS.bookingResponseGiftWrap,
+    BOOKING_KINDS.responseGiftWrap,
   );
   await nostrRuntime.publish(relays, wrap);
 }
@@ -257,34 +273,52 @@ export async function approveBookingRequest(
   request: BookingRequest,
   calendar: CalendarList,
 ): Promise<{ event: CalendarEvent; calendar: CalendarList }> {
-  const event = await publishPrivateCalendarEvent(
+  const sdk = await getCalendarSdk();
+
+  const published = await sdk.publishPrivateEvent(
     {
       title: request.title || "Appointment",
       description: request.note || "",
-      begin: new Date(request.start),
-      end: new Date(request.end),
-      isPrivate: true,
+      begin: request.start,
+      end: request.end,
       participants: [request.bookerPubkey],
-      existingId: request.dTag || undefined,
+    },
+    {
+      // The booker generated this d-tag in advance and referenced it in the
+      // request, so the confirmed event has to land on exactly that coordinate.
+      dTag: request.dTag || undefined,
       viewKey: request.viewKey,
       calendarId: calendar.id,
+      // Already have the list in hand — skip the SDK's internal refetch.
+      calendars: [calendar],
     },
-    calendar.id,
   );
 
-  const relayHint = relayManager.getRelaysForModule("calendar")[0] ?? "";
-  const eventRef = [
-    `${event.kind}:${event.user}:${event.id}`,
-    relayHint,
-    event.viewKey ?? request.viewKey ?? "",
-  ];
-  const updatedCalendar = await addEventToCalendarList(calendar, eventRef);
+  // publishPrivateEvent already linked the event into `calendar` on the relay
+  // (via its `calendarId` option) but doesn't hand the updated list back, so
+  // mirror that merge locally for the caller's store ingestion instead of
+  // re-publishing the list a second time.
+  const alreadyLinked = calendar.eventRefs.some(
+    (ref) =>
+      ref[0] === published.eventRef[0] &&
+      ref[1] === published.eventRef[1] &&
+      ref[2] === published.eventRef[2],
+  );
+  const updatedCalendar: CalendarList = alreadyLinked
+    ? calendar
+    : {
+        ...calendar,
+        eventRefs: [
+          ...calendar.eventRefs.filter((ref) => ref[0] !== published.eventRef[0]),
+          published.eventRef,
+        ],
+      };
 
   // Always publish a public busy entry (kind 31926) for an approved booking so
   // future bookers see the slot as unavailable — the hosted BookingPage greys
   // out slots from these. Best-effort: never block the approval on it.
   try {
-    await addBusyRange({ start: request.start, end: request.end });
+    await sdk.addBusyRange({ start: request.start, end: request.end });
   } catch {
     // Busy-entry publish failed — the approval still stands.
   }
@@ -295,11 +329,11 @@ export async function approveBookingRequest(
     start: request.start,
     end: request.end,
     status: "approved",
-    eventRef,
-    viewKey: event.viewKey ?? request.viewKey,
+    eventRef: published.eventRef,
+    viewKey: published.viewKey,
   });
 
-  return { event, calendar: updatedCalendar };
+  return { event: published.event, calendar: updatedCalendar };
 }
 
 /** Decline a booking request: notify the booker (optionally with a reason). */
