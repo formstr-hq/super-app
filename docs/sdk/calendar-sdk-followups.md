@@ -27,7 +27,8 @@ lists. Two things the super-app needs are missing:
 - **NIP-09 deletion filtering.** No read path consults kind-5 events, so a
   deleted event is re-fetched and re-rendered on every refresh — relays keep
   serving it. `fetchDeletions` and `isDeleted` are exported but never wired
-  into a fetch.
+  into a fetch, and their index is too lossy to use as-is (below), so
+  `discovery.ts` indexes the kind-5 events itself.
 
 **Proposed API**
 
@@ -46,11 +47,26 @@ Union of the direct-by-author query, the calendar-list refs and
 author. `fetchDeletions` currently takes a single pubkey; it needs an overload
 taking a list, or the method fans out internally.
 
-`isDeleted` also drops a nuance the agent's index had: the agent mapped each
-deleted coordinate to the deletion's `created_at` and hid the event only when
-its own `created_at` was older, so a legitimate re-publish after a delete
-survived. The SDK's index is a bare `Set`, so a re-published event stays
-hidden.
+**`DeletionIndex` needs three properties it does not have.** `fetchDeletions`
+is scoped to one author and returns bare `Set`s, so a caller collecting several
+authors' events has no safe way to use it:
+
+1. **Same-author binding.** Merging per-author indexes and testing every event
+   against all of them lets any author tombstone any other author's event with
+   a forged `a` row. An index that carried its author, or an `isDeleted` that
+   took one, would close this. The agent's pre-SDK index checked
+   `coordinate.split(":")[1] === deletion.pubkey` and keyed `e` rows as
+   `${author}:${id}`.
+2. **Republish survival.** The old index mapped each coordinate to the newest
+   deletion's `created_at` and hid the event only when its own `created_at` was
+   at or below it, so a legitimate republish after a delete survived. The SDK's
+   `Set` hides it forever.
+3. **Multi-author fetch.** `fetchDeletions` takes a single pubkey, so a caller
+   with N authors issues N concurrent REQs per relay — hundreds of them in the
+   app's "show all public" view. It needs a list overload.
+
+Until then `discovery.ts` keeps its own ~40-line index and does not import
+`fetchDeletions`/`isDeleted`.
 
 One more shape note for whoever ports this: the composer must default `authors`
 to the signed-in user **only when no `since`/`until` window was given**. With a
@@ -181,13 +197,40 @@ to narrow that gap. The super-app throws a named error when they are absent.
 A summary of what the super-app still owns after the integration, for whoever
 picks up items 1-5:
 
-| Concern                              | Where it lives now                                   | Item |
-| ------------------------------------ | ---------------------------------------------------- | ---- |
-| Event discovery union + NIP-09 sweep | `packages/agent/src/services/calendar/discovery.ts`  | 1    |
-| Booking / scheduling pages           | `packages/agent/src/services/calendar/booking.ts`    | 2, 3 |
-| Legacy kind-1052 invitation reads    | `packages/app/src/lib/calendar/legacyInvitations.ts` | 4    |
-| `start_tzid` on export               | `packages/app/src/lib/ics.ts` (reads raw tags)       | 5    |
-| Signer adaptation                    | `sdk.ts` in both packages                            | 7    |
+| Concern                              | Where it lives now                                     | Item |
+| ------------------------------------ | ------------------------------------------------------ | ---- |
+| Event discovery union + NIP-09 sweep | `packages/agent/src/services/calendar/discovery.ts`    | 1    |
+| Booking / scheduling pages           | `packages/agent/src/services/calendar/booking.ts`      | 2, 3 |
+| Legacy kind-1052 invitation reads    | `packages/app/src/lib/calendar/legacyInvitations.ts`   | 4    |
+| `start_tzid` on export               | `packages/app/src/lib/ics.ts` (reads raw tags)         | 5    |
+| Signer adaptation                    | `sdk.ts` in both packages                              | 7    |
+| Invitation inbox relays + dismissals | `lib/calendar/{sdk,dismissals}.ts`, `invitationsStore` | 9    |
 
 Everything else — events, calendar lists, invitations, RSVPs, busy lists,
 deletions, view keys, recurrence — is the SDK's.
+
+---
+
+## 9. The invitation inbox cannot be pointed at a relay set
+
+**Status:** open. **Blocks deleting:** the second SDK instance in
+`packages/app/src/lib/calendar/sdk.ts` and `packages/app/src/lib/calendar/dismissals.ts`.
+**Confirmed during integration.**
+
+Two gaps, both in the inbox:
+
+- **Relay set.** Senders publish each gift wrap to the recipient's own NIP-65
+  relays (`outboxRelaysFor`), so the inbox has to read the module relays
+  unioned with the user's read relays. `subscribeToInvitations` uses
+  `ctx.relays`, and `FetchInvitationsOptions` has no `relays` field, so the
+  only way to widen it is a second `CalendarSDK` built on the union —
+  `getInvitationInboxSdk()`. A `relays` option on both calls, or a
+  `resolveInboxRelays` the SDK applies itself, removes it.
+- **Dismissals on the live path.** `fetchInvitations` honours the user's kind-5
+  dismissals; `subscribeToInvitations` hands over raw wraps and knows nothing
+  about them, and relays replay their backlog on subscribe, so every dismissed
+  invitation returns as soon as the inbox opens. The app re-queries the
+  deletions itself (`dismissals.ts`) and filters both paths. A subscription
+  that emitted parsed, dismissal-filtered `Invitation`s — the shape
+  `fetchInvitations` already returns — would delete that file and the
+  hand-rolled decode in `invitationsStore`.

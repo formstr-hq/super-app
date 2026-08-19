@@ -39,12 +39,48 @@ integration brings the app onto the current format.
 | `b609280` | **deleted the duplicated service (3,666 lines)** |
 | `5bcb1fe` | docs                                             |
 | `49e2aa0` | fix: decode arriving invitation wraps directly   |
+| `671ada7` | docs: branch state for a later session           |
+| `26e18a2` | fix: calendar event discovery (review round)     |
+| `754a3c5` | fix: link public events into their calendar      |
+| `cf6625c` | fix: repair the invitation inbox                 |
 
-## Gates (all green at `49e2aa0`)
+## Review round (2026-08-19)
+
+`/code-review` over `dev..HEAD` found nine defects; every one was verified
+against the pre-SDK service on `dev` before being acted on. Six were blockers
+and are fixed in `26e18a2`, `754a3c5` and `cf6625c` — each with regression
+tests written first and watched fail:
+
+1. Invitation inbox read only the module relays, so wraps delivered to the
+   user's own NIP-65 relays — where senders publish them — never arrived.
+2. Dismissed invitations came back: only the seed query honoured kind-5
+   dismissals, and relays replay their backlog to the live subscription.
+3. Logged-out "show all public" resolved a signer, hitting the login modal
+   whose promise never settles — a spinner that never stops for a visitor.
+4. Merging every author's `DeletionIndex` let any author tombstone any other
+   author's event; the same index also hid a legitimate republish forever.
+5. Public events silently dropped their `calendarId` on create and on edit.
+6. `fetchEventsDirect` passed no calendar lists, so MCP `list_calendar_events`
+   could never return a private event.
+
+Two smaller ones came along with the same rewrite: the kind-5 sweep is one
+query for all authors again (was one per author), and the republish rule is
+back.
+
+Still open from that review, both minor:
+
+- `create_calendar_event` mints a "My Calendar" when handed an unknown
+  `calendarId`, where every other calendar-scoped tool returns `NOT_FOUND`.
+- `ics.ts` reads `start_tzid` off the wire tags, but pre-migration **private**
+  events carried it inside the encrypted payload, so those exports become UTC
+  despite the comment promising otherwise. Private is the default, so this is
+  most of them.
+
+## Gates (all green at `cf6625c`)
 
 ```
-corepack pnpm --filter @formstr/agent test      # 270 tests / 22 files
-corepack pnpm --filter @formstr/app test        # 399 tests / 69 files
+corepack pnpm --filter @formstr/agent test      # 280 tests / 22 files
+corepack pnpm --filter @formstr/app test        # 414 tests / 70 files
 corepack pnpm -r typecheck                      # includes mcp
 corepack pnpm --filter @formstr/app build       # tsc -b && vite build
 ```
@@ -176,9 +212,8 @@ with.
    ```
    The PR body should state the wire-format change, the accepted regressions, and
    link the design doc and the follow-ups tracker. No AI attribution.
-2. **Optional second opinion** — `/code-review` over the branch. Tasks 5-10 were
-   reviewed by me rather than a fresh reviewer, after subagent dispatch was
-   declined mid-session.
+2. **Two minor review findings**, listed above — decide whether they land here
+   or in a follow-up.
 3. **Delete this file** before merge.
 
 ## Resuming in a new session
