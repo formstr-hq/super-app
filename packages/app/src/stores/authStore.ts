@@ -14,6 +14,7 @@ import {
 } from "../auth/legacySession";
 import { mapMethod } from "../auth/methodMap";
 import { toNostrSigner } from "../auth/toNostrSigner";
+import { resetCalendarSdk } from "../lib/calendar/sdk";
 
 export interface AccountView {
   pubkey: string;
@@ -97,6 +98,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       }
     } else {
       signerManager.logout();
+      resetCalendarSdk();
       profileLoadedFor = null;
       set({
         accounts,

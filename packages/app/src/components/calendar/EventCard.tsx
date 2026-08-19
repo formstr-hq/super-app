@@ -1,9 +1,10 @@
-import type { CalendarEvent } from "@formstr/agent/services/calendar";
 import { Paper, Typography } from "@mui/material";
 import { Lock } from "lucide-react";
 
+import type { AppCalendarEvent } from "../../lib/calendar/types";
+
 interface EventCardProps {
-  event: CalendarEvent;
+  event: AppCalendarEvent;
   onClick: () => void;
   color?: string;
 }

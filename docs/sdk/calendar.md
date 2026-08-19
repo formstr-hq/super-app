@@ -1,5 +1,26 @@
 # Calendar SDK — Protocol & Implementation Reference
 
+> **Superseded as an implementation guide.** This document described the protocol so
+> that a headless SDK could be built from it. That SDK exists:
+> [`@formstr/calendar-sdk`](https://www.npmjs.com/package/@formstr/calendar-sdk), whose
+> own README is now the authority on wire format and API. The super-app consumes it and
+> keeps no protocol implementation of its own — see
+> [../plans/2026-08-18-calendar-sdk-integration.md](../plans/2026-08-18-calendar-sdk-integration.md).
+>
+> Kept for the protocol archaeology: the tag-by-tag wire notes and the divergence
+> analysis between the two implementations are still accurate history and still useful
+> when reading relay traffic. Two things below have since changed on the wire, and the
+> SDK follows the new shape:
+>
+> - **Invitation gift wraps are kind 1059 tagged `["k", "1052"]`, with a NIP-17 kind-14
+>   rumor.** This doc describes the older bare kind-1052 wrap with a kind-52 rumor.
+>   calendar.formstr.app v2.1.0 writes the new shape and reads both.
+> - **Invitation dismissal is a NIP-09 kind-5 deletion of the wrap**, not a kind-84
+>   participant removal.
+>
+> The `@formstr/agent` calendar service this doc cites as its reference implementation
+> has been deleted; the SDK replaced it.
+
 > A protocol-first reference for building a **headless TypeScript calendar SDK** on
 > Nostr. It documents the complete on-relay wire format, the cryptography, the
 > discovery model, a proposed headless API surface, and the UI/interaction
@@ -215,25 +236,25 @@ The authoritative map. Canonical values are from upstream `EventConfigs`
 and the agent `CALENDAR_KINDS`
 ([../common-packages/packages/agent/src/services/calendar/types.ts](../common-packages/packages/agent/src/services/calendar/types.ts)).
 
-| Kind          | Name                          | Class                  | Encrypted?           | Authored by | Purpose                             |
-| ------------- | ----------------------------- | ---------------------- | -------------------- | ----------- | ----------------------------------- |
-| **31923**     | Public time event             | Param-replaceable      | No                   | user        | NIP-52 public event                 |
-| **31922**     | Public day event              | Param-replaceable      | No                   | user        | NIP-52 all-day event — **spec-only, see §4.1** |
-| **32678**     | Private time event            | Param-replaceable      | **NIP-44 (viewKey)** | user        | Encrypted time event                |
+| Kind          | Name                          | Class                  | Encrypted?           | Authored by | Purpose                                                     |
+| ------------- | ----------------------------- | ---------------------- | -------------------- | ----------- | ----------------------------------------------------------- |
+| **31923**     | Public time event             | Param-replaceable      | No                   | user        | NIP-52 public event                                         |
+| **31922**     | Public day event              | Param-replaceable      | No                   | user        | NIP-52 all-day event — **spec-only, see §4.1**              |
+| **32678**     | Private time event            | Param-replaceable      | **NIP-44 (viewKey)** | user        | Encrypted time event                                        |
 | **32681**     | Private day event             | Param-replaceable      | **NIP-44 (viewKey)** | user        | Encrypted all-day event (NIP-52E) — **spec-only, see §4.1** |
-| **32123**     | Calendar list                 | Param-replaceable      | **NIP-44 (self)**    | user        | Named collection of event refs      |
-| **1052**      | Calendar gift-wrap            | Regular (NIP-59)       | **NIP-44 (layered)** | ephemeral   | Invitation carrying viewKey         |
-| **52**        | Calendar rumor                | Unsigned (inside 1052) | —                    | sender      | Inner pointer (a-tag + viewKey)     |
-| **31925**     | Public RSVP                   | Param-replaceable      | No                   | responder   | NIP-52 RSVP                         |
-| **32069**     | Private RSVP                  | Param-replaceable      | **NIP-44 (viewKey)** | responder   | Encrypted RSVP for a private event  |
-| **84**        | Participant removal           | Regular                | No                   | participant | Opt out of an event (NIP-09-style)  |
-| **31926**     | Public busy list              | Param-replaceable      | No (empty content)   | user        | Free/busy ranges, one per month     |
-| **31927**     | Scheduling page               | Param-replaceable      | **NIP-44 (viewKey)** | host        | Calendly-style booking link         |
-| **32680**     | Scheduling-pages list         | Param-replaceable      | **NIP-44 (self)**    | host        | viewKey backup for own pages        |
-| **1057 / 57** | Booking request wrap / rumor  | NIP-59                 | layered              | booker      | Request a slot                      |
-| **1058 / 58** | Booking response wrap / rumor | NIP-59                 | layered              | host        | Approve/decline                     |
-| **5**         | Deletion                      | Regular                | No                   | author      | NIP-09 tombstone                    |
-| **10002**     | Relay list                    | Replaceable            | No                   | user        | NIP-65 inbox/outbox relays          |
+| **32123**     | Calendar list                 | Param-replaceable      | **NIP-44 (self)**    | user        | Named collection of event refs                              |
+| **1052**      | Calendar gift-wrap            | Regular (NIP-59)       | **NIP-44 (layered)** | ephemeral   | Invitation carrying viewKey                                 |
+| **52**        | Calendar rumor                | Unsigned (inside 1052) | —                    | sender      | Inner pointer (a-tag + viewKey)                             |
+| **31925**     | Public RSVP                   | Param-replaceable      | No                   | responder   | NIP-52 RSVP                                                 |
+| **32069**     | Private RSVP                  | Param-replaceable      | **NIP-44 (viewKey)** | responder   | Encrypted RSVP for a private event                          |
+| **84**        | Participant removal           | Regular                | No                   | participant | Opt out of an event (NIP-09-style)                          |
+| **31926**     | Public busy list              | Param-replaceable      | No (empty content)   | user        | Free/busy ranges, one per month                             |
+| **31927**     | Scheduling page               | Param-replaceable      | **NIP-44 (viewKey)** | host        | Calendly-style booking link                                 |
+| **32680**     | Scheduling-pages list         | Param-replaceable      | **NIP-44 (self)**    | host        | viewKey backup for own pages                                |
+| **1057 / 57** | Booking request wrap / rumor  | NIP-59                 | layered              | booker      | Request a slot                                              |
+| **1058 / 58** | Booking response wrap / rumor | NIP-59                 | layered              | host        | Approve/decline                                             |
+| **5**         | Deletion                      | Regular                | No                   | author      | NIP-09 tombstone                                            |
+| **10002**     | Relay list                    | Replaceable            | No                   | user        | NIP-65 inbox/outbox relays                                  |
 
 ### 4.1 Kind wrinkles you must handle
 
@@ -259,7 +280,7 @@ and the agent `CALENDAR_KINDS`
   NIP-101 form template/response — used for event registration forms via
   `@formstr/sdk`) and kind 1984 (NIP-56 reporting). Neither belongs in the
   calendar SDK's write surface; 30168 matters only for the `["form", naddr,
-  viewKey?]` attachment (§6.2.1).
+viewKey?]` attachment (§6.2.1).
 
 ---
 
@@ -1345,20 +1366,20 @@ captured from `calendar.formstr.app`.
 
 **Which side to copy, per concern (verified against both codebases 2026-07-02):**
 
-| Concern | Take from | Why |
-| --- | --- | --- |
-| Codec healing (double-`a`, object lists) | agent | upstream doesn't heal; old relay data must stay readable (§6.3, §13.4) |
-| Per-item read error isolation | upstream | one poisoned list/event must not sink the load (§13.4) |
-| Deletion filtering + same-author guard | agent | upstream applies less rigor at fetch time (§6.9) |
-| viewKey reuse on edit, `lookupEventViewKey` | agent | prevents invalid-MAC lockouts (§13.3) |
-| Deterministic RSVP/booking `d`-tags | both (identical) | verified byte-identical derivation (§6.5, §13.8) |
-| Relay-hint usage on ref fetch | upstream | fetches from where the event actually lives (§8.1) |
-| Streaming reads + client cache model | upstream | `nostrRuntime` EventStore; SDK exposes subscribe, host owns cache (§9) |
-| Window-free own-event fetch | agent | upstream's `since/until` public window drops long-lived events (§8.2) |
-| Gift-wrap timestamps | agent default, upstream via option | rumor real, seal/wrap jittered; `wrapTimestamps: "real"` for parity (§5.4) |
-| Public-event tags | agent (`title`), read both | upstream writes legacy `name` + has the location→image bug (§6.1) |
-| Signer handling | upstream | `@formstr/signer` `createSigner` + bind-safe adapter (§3.1) |
-| Packaging/DX | formstr-sdk | class + zero-config pool/relays + dist-only npm (§14.1) |
+| Concern                                     | Take from                          | Why                                                                        |
+| ------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------- |
+| Codec healing (double-`a`, object lists)    | agent                              | upstream doesn't heal; old relay data must stay readable (§6.3, §13.4)     |
+| Per-item read error isolation               | upstream                           | one poisoned list/event must not sink the load (§13.4)                     |
+| Deletion filtering + same-author guard      | agent                              | upstream applies less rigor at fetch time (§6.9)                           |
+| viewKey reuse on edit, `lookupEventViewKey` | agent                              | prevents invalid-MAC lockouts (§13.3)                                      |
+| Deterministic RSVP/booking `d`-tags         | both (identical)                   | verified byte-identical derivation (§6.5, §13.8)                           |
+| Relay-hint usage on ref fetch               | upstream                           | fetches from where the event actually lives (§8.1)                         |
+| Streaming reads + client cache model        | upstream                           | `nostrRuntime` EventStore; SDK exposes subscribe, host owns cache (§9)     |
+| Window-free own-event fetch                 | agent                              | upstream's `since/until` public window drops long-lived events (§8.2)      |
+| Gift-wrap timestamps                        | agent default, upstream via option | rumor real, seal/wrap jittered; `wrapTimestamps: "real"` for parity (§5.4) |
+| Public-event tags                           | agent (`title`), read both         | upstream writes legacy `name` + has the location→image bug (§6.1)          |
+| Signer handling                             | upstream                           | `@formstr/signer` `createSigner` + bind-safe adapter (§3.1)                |
+| Packaging/DX                                | formstr-sdk                        | class + zero-config pool/relays + dist-only npm (§14.1)                    |
 
 **Protocol specs (read first):**
 

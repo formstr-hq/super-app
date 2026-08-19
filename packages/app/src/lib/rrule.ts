@@ -1,6 +1,7 @@
-import type { CalendarEvent } from "@formstr/agent/services/calendar/types";
 import type { Weekday } from "rrule";
 import { RRule, RRuleSet, rrulestr } from "rrule";
+
+import type { AppCalendarEvent } from "./calendar/types";
 
 function asRRule(x: unknown): RRule | null {
   if (x instanceof RRule) return x;
@@ -19,11 +20,11 @@ function asRRule(x: unknown): RRule | null {
  * downstream actions (delete, RSVP) target the correct addressable event.
  */
 export function expandEvent(
-  event: CalendarEvent,
+  event: AppCalendarEvent,
   rangeStart: Date,
   rangeEnd: Date,
   maxOccurrences = 365,
-): CalendarEvent[] {
+): AppCalendarEvent[] {
   const rruleStr = event.repeat?.rrule;
   if (!rruleStr) return [event];
 
@@ -57,10 +58,10 @@ export function expandEvent(
 }
 
 export function expandEvents(
-  events: CalendarEvent[],
+  events: AppCalendarEvent[],
   rangeStart: Date,
   rangeEnd: Date,
-): CalendarEvent[] {
+): AppCalendarEvent[] {
   return events.flatMap((e) => expandEvent(e, rangeStart, rangeEnd));
 }
 

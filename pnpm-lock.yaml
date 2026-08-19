@@ -44,6 +44,9 @@ importers:
 
   packages/agent:
     dependencies:
+      '@formstr/calendar-sdk':
+        specifier: ^0.1.0
+        version: 0.1.0(typescript@5.9.3)
       '@formstr/core':
         specifier: workspace:*
         version: link:../core
@@ -90,6 +93,9 @@ importers:
       '@formstr/agent':
         specifier: workspace:*
         version: link:../agent
+      '@formstr/calendar-sdk':
+        specifier: ^0.1.0
+        version: 0.1.0(typescript@5.9.3)
       '@formstr/core':
         specifier: workspace:*
         version: link:../core
@@ -953,6 +959,14 @@ packages:
   '@eslint/plugin-kit@0.4.1':
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@formstr/calendar-sdk@0.1.0':
+    resolution: {integrity: sha512-YtFn981EX3JiGxjK6ji0U0Az38BVs72ZPcjiyEllcvVj6HxUgagFBQtFfl/A7KrFD1mUouzyqPBTjpCu5WwLdA==}
+    peerDependencies:
+      '@formstr/local-relay': '>=0.4.0 <1.0.0'
+    peerDependenciesMeta:
+      '@formstr/local-relay':
+        optional: true
 
   '@formstr/kanban-sdk@0.1.1':
     resolution: {integrity: sha512-FproZNaf22430e3AdqLfymxVfpxzVDgKZ7i92pw2QgcH+p1Ph+ncqe+Dl5cnZEsEc1+XYWvYXOCBMsF3VCARYw==}
@@ -4536,6 +4550,14 @@ snapshots:
     dependencies:
       '@eslint/core': 0.17.0
       levn: 0.4.1
+
+  '@formstr/calendar-sdk@0.1.0(typescript@5.9.3)':
+    dependencies:
+      '@noble/hashes': 1.8.0
+      nostr-tools: 2.23.3(typescript@5.9.3)
+      rrule: 2.8.1
+    transitivePeerDependencies:
+      - typescript
 
   '@formstr/kanban-sdk@0.1.1(typescript@5.9.3)':
     dependencies:
