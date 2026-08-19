@@ -42,7 +42,7 @@ export function BoardListView({
     return (
       <Box sx={{ display: "grid", gridTemplateColumns: GRID_COLUMNS, gap: 2, p: 3 }}>
         {[0, 1, 2].map((i) => (
-          <Skeleton key={i} variant="rectangular" height={132} sx={{ borderRadius: 2 }} />
+          <Skeleton key={i} variant="rectangular" height={132} sx={{ borderRadius: 1 }} />
         ))}
       </Box>
     );

@@ -1,19 +1,29 @@
 import type { KanbanBoard } from "@formstr/kanban-sdk";
 import { Box, Button, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { Lock, Plus, SquareKanban } from "lucide-react";
+import { Inbox, Lock, Plus, SquareKanban } from "lucide-react";
 
 import { boardKey } from "../../kanban/boardKey";
+import { INVITATIONS_KEY } from "../../kanban/routes";
 
 interface KanbanSidebarProps {
   boards: KanbanBoard[];
-  /** `boardKey` of the open board, or null on the board list. */
+  /** `boardKey` of the open board, `INVITATIONS_KEY`, or null on the board list. */
   activeKey: string | null;
+  pendingInvitations: number;
   onSelect: (board: KanbanBoard | null) => void;
   onNew: () => void;
+  onOpenInvitations: () => void;
 }
 
-export function KanbanSidebar({ boards, activeKey, onSelect, onNew }: KanbanSidebarProps) {
+export function KanbanSidebar({
+  boards,
+  activeKey,
+  pendingInvitations,
+  onSelect,
+  onNew,
+  onOpenInvitations,
+}: KanbanSidebarProps) {
   const theme = useTheme();
 
   return (
@@ -50,6 +60,14 @@ export function KanbanSidebar({ boards, activeKey, onSelect, onNew }: KanbanSide
         selected={activeKey === null}
         onClick={() => onSelect(null)}
         count={boards.length}
+      />
+
+      <SidebarRow
+        label="Invitations"
+        icon={<Inbox size={14} style={{ flexShrink: 0, opacity: 0.8 }} />}
+        selected={activeKey === INVITATIONS_KEY}
+        onClick={onOpenInvitations}
+        count={pendingInvitations}
       />
 
       {boards.map((board) => {

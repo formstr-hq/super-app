@@ -12,7 +12,7 @@ export function BoardCard({ board, cardCount, onOpen }: BoardCardProps) {
   const collaborators = board.maintainers.length + board.members.length;
 
   return (
-    <Card variant="outlined" sx={{ borderRadius: 2, height: "100%" }}>
+    <Card variant="outlined" sx={{ borderRadius: 1, height: "100%" }}>
       <CardActionArea onClick={onOpen} sx={{ height: "100%", p: 2, alignItems: "stretch" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -40,13 +40,13 @@ export function BoardCard({ board, cardCount, onOpen }: BoardCardProps) {
             <Chip
               size="small"
               label={`${board.columns.length} column${board.columns.length === 1 ? "" : "s"}`}
-              sx={{ height: 20, fontSize: 11 }}
+              sx={{ height: 20, fontSize: 11, borderRadius: 1 }}
             />
             {cardCount !== undefined && (
               <Chip
                 size="small"
                 label={`${cardCount} card${cardCount === 1 ? "" : "s"}`}
-                sx={{ height: 20, fontSize: 11 }}
+                sx={{ height: 20, fontSize: 11, borderRadius: 1 }}
               />
             )}
             {collaborators > 0 && (
@@ -54,7 +54,7 @@ export function BoardCard({ board, cardCount, onOpen }: BoardCardProps) {
                 size="small"
                 icon={<Users size={11} />}
                 label={collaborators}
-                sx={{ height: 20, fontSize: 11 }}
+                sx={{ height: 20, fontSize: 11, borderRadius: 1 }}
               />
             )}
           </Box>

@@ -3,4 +3,4 @@ packages:
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
-  - "@formstr/kanban-sdk@0.1.0"
+  - "@formstr/kanban-sdk@0.1.0 || 0.1.1"
