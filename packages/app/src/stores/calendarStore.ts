@@ -119,7 +119,7 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
         const published = await sdk.publishPublicEvent(draft, {
           previousCreatedAt: previous?.createdAt,
         });
-        event = published.event;
+        event = { ...published.event, calendarId: draft.calendarId ?? previous?.calendarId };
       }
       // Swap the public busy entry only when the times actually moved.
       if (previous && (previous.begin !== event.begin || previous.end !== event.end)) {
@@ -143,10 +143,34 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
       const isPrivate = draft.isPrivate ?? true;
 
       if (!isPrivate) {
-        const { event } = await sdk.publishPublicEvent(draft);
-        publishBusyRangeFor(event);
-        set((state) => ({ events: [...state.events, event] }));
-        return event;
+        const { event, relayHint } = await sdk.publishPublicEvent(draft);
+        // A public event needs no view key, but the list ref is what groups it
+        // under the calendar the user picked — here and in every other client.
+        // Best-effort: a failed link must not lose the published event.
+        const target = draft.calendarId
+          ? get().calendars.find((c) => c.id === draft.calendarId)
+          : undefined;
+        let linked: CalendarList | undefined;
+        if (target) {
+          try {
+            linked = await sdk.linkEventToCalendar(target, [
+              `${event.kind}:${event.user}:${event.id}`,
+              relayHint ?? "",
+              "",
+            ]);
+          } catch {
+            // Keep the event; the calendar just misses its ref this round.
+          }
+        }
+        const publicEvent: AppCalendarEvent = { ...event, calendarId: target?.id };
+        publishBusyRangeFor(publicEvent);
+        set((state) => ({
+          events: [...state.events, publicEvent],
+          calendars: linked
+            ? state.calendars.map((c) => (c.id === linked.id ? linked : c))
+            : state.calendars,
+        }));
+        return publicEvent;
       }
 
       // A private event's per-event viewKey only survives a refresh if it is

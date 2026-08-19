@@ -10,6 +10,7 @@ const sdk = vi.hoisted(() => ({
   publishPrivateEvent: vi.fn(),
   updatePrivateEvent: vi.fn(),
   publishPublicEvent: vi.fn(),
+  linkEventToCalendar: vi.fn(),
   deleteEvent: vi.fn(),
   addBusyRange: vi.fn().mockResolvedValue([]),
   removeBusyRange: vi.fn().mockResolvedValue([]),
@@ -164,6 +165,52 @@ describe("createEvent", () => {
     expect(state.events.map((e) => e.id)).toContain("p1");
   });
 
+  it("links a public event into the chosen calendar", async () => {
+    const cal = { id: "c1", title: "Work", eventRefs: [] };
+    useCalendarStore.setState({ calendars: [cal as any] });
+    sdk.publishPublicEvent.mockResolvedValue({
+      event: evt({ id: "d3", kind: 31923, user: "pub" }),
+      relayHint: "wss://r.test",
+    });
+    sdk.linkEventToCalendar.mockResolvedValue({ ...cal, eventRefs: [["31923:pub:d3", "", ""]] });
+    await useCalendarStore.getState().createEvent({
+      title: "Townhall",
+      description: "",
+      begin: 0,
+      end: 0,
+      calendarId: "c1",
+      isPrivate: false,
+    } as any);
+    // A public event has no view key, but the ref is what groups it under the
+    // calendar the user picked — for this client and for every other one.
+    expect(sdk.linkEventToCalendar).toHaveBeenCalledWith(expect.objectContaining({ id: "c1" }), [
+      "31923:pub:d3",
+      "wss://r.test",
+      "",
+    ]);
+    const state = useCalendarStore.getState();
+    expect(state.events.find((e) => e.id === "d3")?.calendarId).toBe("c1");
+    expect(state.calendars.find((c) => c.id === "c1")?.eventRefs).toHaveLength(1);
+  });
+
+  it("keeps a public event when linking it to its calendar fails", async () => {
+    useCalendarStore.setState({ calendars: [{ id: "c1", title: "Work", eventRefs: [] } as any] });
+    sdk.publishPublicEvent.mockResolvedValue({
+      event: evt({ id: "d4", kind: 31923, user: "pub" }),
+      relayHint: "",
+    });
+    sdk.linkEventToCalendar.mockRejectedValue(new Error("relay down"));
+    await useCalendarStore.getState().createEvent({
+      title: "Townhall",
+      description: "",
+      begin: 0,
+      end: 0,
+      calendarId: "c1",
+      isPrivate: false,
+    } as any);
+    expect(useCalendarStore.getState().events.map((e) => e.id)).toContain("d4");
+  });
+
   it("stores a public event without touching any calendar list", async () => {
     sdk.publishPublicEvent.mockResolvedValue({
       event: evt({ id: "d2", kind: 31923, user: "pub" }),
@@ -214,6 +261,27 @@ describe("fetchEvents", () => {
     expect(fetchEventsForUser).toHaveBeenCalledWith(
       expect.objectContaining({ calendars, authors: ["me"] }),
     );
+  });
+});
+
+describe("updateEvent — calendar membership", () => {
+  it("keeps a public event's calendar after an edit", async () => {
+    useCalendarStore.setState({
+      events: [evt({ id: "x", title: "Old", calendarId: "c1" }) as any],
+    });
+    sdk.publishPublicEvent.mockResolvedValue({
+      event: evt({ id: "x", title: "New" }),
+      relayHint: "wss://r.test",
+    });
+    await useCalendarStore.getState().updateEvent({
+      id: "x",
+      title: "New",
+      description: "",
+      begin: 0,
+      end: 0,
+      isPrivate: false,
+    } as any);
+    expect(useCalendarStore.getState().events.find((e) => e.id === "x")?.calendarId).toBe("c1");
   });
 });
 
