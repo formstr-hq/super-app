@@ -70,7 +70,28 @@ export async function getCalendarSdk(): Promise<CalendarSDK> {
   return sdk;
 }
 
-/** Drops the cached instance. Call on logout, and from tests. */
+/**
+ * A signerless `CalendarSDK` for read paths that must work logged out.
+ *
+ * `getCalendarSdk()` resolves a signer, and in the app that routes to the login
+ * modal — whose promise only settles once someone logs in. Public browsing must
+ * not depend on that, so it gets its own instance. The SDK throws
+ * `SignerRequiredError` on anything but public reads, which is the intent.
+ */
+let cachedAnonymous: { relayKey: string; sdk: CalendarSDK } | null = null;
+
+export async function getAnonymousCalendarSdk(): Promise<CalendarSDK> {
+  const relays = calendarRelays();
+  const relayKey = relays.join(",");
+  if (cachedAnonymous && cachedAnonymous.relayKey === relayKey) return cachedAnonymous.sdk;
+
+  const sdk = new CalendarSDK({ runtime: nostrRuntime, relays });
+  cachedAnonymous = { relayKey, sdk };
+  return sdk;
+}
+
+/** Drops the cached instances. Call on logout, and from tests. */
 export function resetCalendarSdk(): void {
   cached = null;
+  cachedAnonymous = null;
 }

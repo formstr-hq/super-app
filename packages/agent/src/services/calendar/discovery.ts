@@ -1,14 +1,8 @@
-import {
-  coordinate,
-  fetchDeletions,
-  isDeleted,
-  type CalendarEvent,
-  type CalendarList,
-  type DeletionIndex,
-} from "@formstr/calendar-sdk";
+import { coordinate, type CalendarEvent, type CalendarList } from "@formstr/calendar-sdk";
 import { signerManager, nostrRuntime } from "@formstr/core";
+import type { Event, Filter } from "nostr-tools";
 
-import { calendarRelays, getCalendarSdk } from "./sdk";
+import { calendarRelays, getAnonymousCalendarSdk, getCalendarSdk } from "./sdk";
 
 export interface DiscoveryOptions {
   /** Pre-fetched calendar lists, whose refs carry the view keys. */
@@ -27,16 +21,55 @@ async function selfPubkey(): Promise<string | undefined> {
   }
 }
 
-/** kind-5 sweep across every author whose events we collected, in parallel. */
-async function deletionsFor(authors: Iterable<string>): Promise<DeletionIndex[]> {
-  const relays = calendarRelays();
-  return Promise.all([...authors].map((a) => fetchDeletions(nostrRuntime, relays, a)));
+/**
+ * NIP-09 deletion index. Maps a deleted addressable coordinate to the newest
+ * deletion's `created_at` — an addressable event is only hidden when its own
+ * `created_at` is at or below that, so a legitimate republish after a delete
+ * survives — plus `${author}:${eventId}` keys for non-replaceable events.
+ *
+ * The SDK's own `fetchDeletions`/`isDeleted` are deliberately not used here:
+ * that index is per-author, timestamp-free and keyed on the bare id, so
+ * merging several authors' indexes lets any author's `a` row hide any other
+ * author's event, and a republish stays hidden forever. See
+ * docs/sdk/calendar-sdk-followups.md item 1.
+ */
+interface DeletionIndex {
+  coordTimes: Map<string, number>;
+  ids: Set<string>;
 }
 
-function surviving(events: CalendarEvent[], indexes: DeletionIndex[]): CalendarEvent[] {
+/** One kind-5 query for every collected author, with the same-author rule applied. */
+async function fetchDeletions(authors: string[]): Promise<DeletionIndex> {
+  const coordTimes = new Map<string, number>();
+  const ids = new Set<string>();
+  if (authors.length === 0) return { coordTimes, ids };
+
+  const events = await nostrRuntime.querySync(calendarRelays(), {
+    kinds: [5],
+    authors,
+  } as Filter);
+
+  for (const event of events as Event[]) {
+    for (const tag of event.tags) {
+      if (tag[0] === "a" && tag[1]) {
+        // A deletion only binds a coordinate its own author owns; without this
+        // anyone can tombstone anyone's event.
+        if (tag[1].split(":")[1] !== event.pubkey) continue;
+        const prev = coordTimes.get(tag[1]) ?? 0;
+        if (event.created_at > prev) coordTimes.set(tag[1], event.created_at);
+      } else if (tag[0] === "e" && tag[1]) {
+        ids.add(`${event.pubkey}:${tag[1]}`);
+      }
+    }
+  }
+  return { coordTimes, ids };
+}
+
+function surviving(events: CalendarEvent[], index: DeletionIndex): CalendarEvent[] {
   return events.filter((event) => {
-    const coord = coordinate(event.kind, event.user, event.id);
-    return !indexes.some((index) => isDeleted(index, { id: event.eventId, coordinate: coord }));
+    if (event.eventId && index.ids.has(`${event.user}:${event.eventId}`)) return false;
+    const deletedAt = index.coordTimes.get(coordinate(event.kind, event.user, event.id));
+    return deletedAt === undefined || event.createdAt > deletedAt;
   });
 }
 
@@ -50,10 +83,8 @@ function surviving(events: CalendarEvent[], indexes: DeletionIndex[]): CalendarE
  *  1. A direct-by-author public-event query, so an authored event that was
  *     never linked into any calendar list is still discoverable — the SDK's
  *     only read path otherwise is through list refs.
- *  2. A NIP-09 deletion sweep (fanned out per collected author, since
- *     `fetchDeletions` is scoped to one author's own deletions): no SDK read
- *     path filters these, so a deleted event would otherwise resurface on
- *     every refresh.
+ *  2. A NIP-09 deletion sweep: no SDK read path filters these, so a deleted
+ *     event would otherwise resurface on every refresh.
  *
  * Author defaulting: with no `since`/`until` window and no explicit
  * `authors`, this defaults to the signed-in user's own events. With a window
@@ -73,11 +104,21 @@ function surviving(events: CalendarEvent[], indexes: DeletionIndex[]): CalendarE
  * into the SDK — see docs/sdk/calendar-sdk-followups.md item 1.
  */
 export async function fetchEventsForUser(options: DiscoveryOptions = {}): Promise<CalendarEvent[]> {
-  const sdk = await getCalendarSdk();
   const calendars = options.calendars ?? [];
   // A window (even since:0, the epoch) means "browse public events broadly" —
   // only default to self when neither bound was given.
   const windowed = options.since !== undefined || options.until !== undefined;
+
+  // Public browsing must work logged out. `getCalendarSdk()` resolves a signer,
+  // which in the app routes to the login modal — a promise that never rejects,
+  // so requiring it here would hang the "show all public" view for a visitor.
+  // Decrypting list members or defaulting authors to self genuinely needs one.
+  const needsSigner = !windowed || calendars.length > 0;
+  const sdk =
+    needsSigner || signerManager.getSignerIfAvailable()
+      ? await getCalendarSdk()
+      : await getAnonymousCalendarSdk();
+
   const authors = options.authors ?? (windowed ? [] : [(await selfPubkey()) ?? ""].filter(Boolean));
 
   const [fromLists, publicEvents] = await Promise.all([
@@ -97,15 +138,23 @@ export async function fetchEventsForUser(options: DiscoveryOptions = {}): Promis
   }
   const merged = [...byCoordinate.values()];
 
-  return surviving(merged, await deletionsFor(new Set(merged.map((e) => e.user))));
+  return surviving(merged, await fetchDeletions([...new Set(merged.map((e) => e.user))]));
 }
 
 /**
- * Direct query only, no calendar-list refs. The MCP `list_calendar_events` tool
- * has no list context to pass, matching the former `fetchCalendarEventsSync`.
+ * No calendar-list context supplied by the caller — the MCP `list_calendar_events`
+ * tool has none to pass — so load the caller's own lists here. Without them the
+ * only reachable events are public ones: a private event's view key lives in a
+ * list ref, matching the former `fetchCalendarEventsSync`.
  */
 export async function fetchEventsDirect(
   options: Omit<DiscoveryOptions, "calendars"> = {},
 ): Promise<CalendarEvent[]> {
-  return fetchEventsForUser({ ...options, calendars: [] });
+  let calendars: CalendarList[] = [];
+  try {
+    calendars = await (await getCalendarSdk()).fetchCalendars();
+  } catch {
+    // Logged out or the list query failed — public events are still worth returning.
+  }
+  return fetchEventsForUser({ ...options, calendars });
 }

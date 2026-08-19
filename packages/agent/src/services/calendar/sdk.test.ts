@@ -8,7 +8,7 @@ vi.mock("@formstr/core", () => ({
 
 import { signerManager, relayManager } from "@formstr/core";
 
-import { getCalendarSdk, resetCalendarSdk } from "./sdk";
+import { getAnonymousCalendarSdk, getCalendarSdk, resetCalendarSdk } from "./sdk";
 
 function signer(pubkey: string) {
   return {
@@ -64,5 +64,23 @@ describe("getCalendarSdk", () => {
       signEvent: vi.fn(),
     });
     await expect(getCalendarSdk()).rejects.toThrow(/NIP-44/);
+  });
+});
+
+describe("getAnonymousCalendarSdk", () => {
+  it("builds an instance without resolving a signer", async () => {
+    (signerManager.getSigner as any).mockRejectedValue(new Error("no signer"));
+    expect(await getAnonymousCalendarSdk()).toBeDefined();
+    expect(signerManager.getSigner).not.toHaveBeenCalled();
+  });
+
+  it("reuses one instance for the same relay set", async () => {
+    expect(await getAnonymousCalendarSdk()).toBe(await getAnonymousCalendarSdk());
+  });
+
+  it("rebuilds when the relay set changes", async () => {
+    const first = await getAnonymousCalendarSdk();
+    (relayManager.getRelaysForModule as any).mockReturnValue(["wss://b.test"]);
+    expect(await getAnonymousCalendarSdk()).not.toBe(first);
   });
 });
