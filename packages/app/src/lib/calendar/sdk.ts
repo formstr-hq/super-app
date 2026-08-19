@@ -72,7 +72,60 @@ export async function getCalendarSdk(): Promise<CalendarSDK> {
   return sdk;
 }
 
-/** Drops the cached instance. Call on logout, and from tests. */
+/**
+ * A second `CalendarSDK` whose relay set is the module relays unioned with the
+ * user's own NIP-65 **read** relays — the invitation inbox.
+ *
+ * Senders publish each gift wrap to the recipient's relay list (that is what
+ * `outboxRelaysFor` does, here and in calendar.formstr.app), so an inbox
+ * limited to the module set silently misses invitations from anyone whose
+ * client honours NIP-65. Dismissals are published through this instance too,
+ * so the deletions land where the wraps are read back from.
+ */
+let cachedInbox: {
+  signer: NostrSigner;
+  pubkey: string;
+  relayKey: string;
+  sdk: CalendarSDK;
+} | null = null;
+
+async function inboxRelays(pubkey: string): Promise<string[]> {
+  const relays = calendarRelays();
+  try {
+    const configs = await relayManager.fetchUserRelays(pubkey);
+    return [...new Set([...relays, ...configs.filter((c) => c.read).map((c) => c.url)])];
+  } catch {
+    return relays; // An unreadable relay list must not close the inbox.
+  }
+}
+
+export async function getInvitationInboxSdk(): Promise<CalendarSDK> {
+  const signer = await signerManager.getSigner();
+  const pubkey = await signer.getPublicKey();
+  const relays = await inboxRelays(pubkey);
+  const relayKey = relays.join(",");
+
+  if (
+    cachedInbox &&
+    cachedInbox.signer === signer &&
+    cachedInbox.pubkey === pubkey &&
+    cachedInbox.relayKey === relayKey
+  ) {
+    return cachedInbox.sdk;
+  }
+
+  const sdk = new CalendarSDK({
+    signer: toCalendarSigner(signer),
+    runtime: nostrRuntime,
+    relays,
+    appBaseUrl: window.location.origin,
+  });
+  cachedInbox = { signer, pubkey, relayKey, sdk };
+  return sdk;
+}
+
+/** Drops the cached instances. Call on logout, and from tests. */
 export function resetCalendarSdk(): void {
   cached = null;
+  cachedInbox = null;
 }
