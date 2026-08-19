@@ -138,6 +138,14 @@ calendar.formstr.app, which writes none. The super-app used to write them and
 uses them for timezone-correct ICS export. Post-integration the app recovers
 them by reading `CalendarEvent.event`'s raw tags, and new events carry none.
 
+That recovery reaches **public** pre-migration events only. On a private event
+the rows went inside the encrypted payload, and `CalendarEvent` exposes the
+decrypted rows nowhere — only the fields the codec lifted out — so the raw-tag
+read finds nothing and the export falls back to UTC. Private is the default, so
+that is most of them. A `ParseEventOptions` that returned the decrypted tag
+rows, or explicit `startTzid`/`endTzid` fields on `CalendarEvent`, would close
+it without changing anything on the wire.
+
 Restoring this means changing what both clients publish, so it is an upstream
 conversation before it is an SDK change. The SDK's own README already lists
 tzid/DST recurrence drift as a known parity limitation.

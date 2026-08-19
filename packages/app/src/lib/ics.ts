@@ -50,10 +50,15 @@ function foldLine(line: string): string {
  * `start_tzid` / `end_tzid`, read off the raw wire event.
  *
  * The SDK neither writes nor parses those rows, matching what
- * calendar.formstr.app publishes. Events written by older super-app builds
- * still carry them, and `CalendarEvent.event` keeps the wire event, so
- * exporting one of those stays timezone-correct. Events created from here on
- * export as UTC. See docs/sdk/calendar-sdk-followups.md item 5.
+ * calendar.formstr.app publishes, so events created from here on export as UTC.
+ *
+ * Older super-app builds did write them, but only a **public** event carries
+ * them as wire tags: on a private event they went inside the encrypted payload,
+ * which `CalendarEvent` does not expose — recovering one would mean decrypting
+ * the content again with the view key, and export is synchronous. Private is
+ * the default, so most pre-migration events export as UTC too. That is lossy,
+ * not wrong: the UTC form is the same instant, it just forgets which timezone
+ * the event was authored in. See docs/sdk/calendar-sdk-followups.md item 5.
  */
 function tzid(event: AppCalendarEvent, row: "start_tzid" | "end_tzid"): string | undefined {
   return event.event?.tags.find((t) => t[0] === row)?.[1];

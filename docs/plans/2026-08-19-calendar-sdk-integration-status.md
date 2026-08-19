@@ -67,14 +67,18 @@ Two smaller ones came along with the same rewrite: the kind-5 sweep is one
 query for all authors again (was one per author), and the republish rule is
 back.
 
-Still open from that review, both minor:
+The last two findings needed no code:
 
-- `create_calendar_event` mints a "My Calendar" when handed an unknown
-  `calendarId`, where every other calendar-scoped tool returns `NOT_FOUND`.
-- `ics.ts` reads `start_tzid` off the wire tags, but pre-migration **private**
-  events carried it inside the encrypted payload, so those exports become UTC
-  despite the comment promising otherwise. Private is the default, so this is
-  most of them.
+- The claim that `create_calendar_event` mints a calendar for an unknown
+  `calendarId` was wrong — it returns `NOT_FOUND` at `tools/calendar.ts:166`,
+  before the minting branch the finding pointed at, and a test has covered it
+  since the tool was written.
+- `ics.ts` really does miss `start_tzid` on pre-migration **private** events,
+  because those rows lived inside the encrypted payload and `CalendarEvent`
+  exposes no decrypted rows; a synchronous export cannot decrypt again. The UTC
+  fallback is the same instant, just without the authoring timezone, so the
+  comment was corrected to say so and follow-up item 5 now records what the SDK
+  would have to expose.
 
 ## Gates (all green at `cf6625c`)
 
