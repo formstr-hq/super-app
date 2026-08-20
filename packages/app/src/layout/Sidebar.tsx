@@ -13,8 +13,8 @@ import { useTheme } from "@mui/material/styles";
 import { FileText, Calendar, HardDrive, SquareKanban, LogIn } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import formstrLogo from "../assets/formstr.png";
 import { AccountMenu } from "../components/AccountMenu";
+import { Wordmark } from "../components/Wordmark";
 import { useAuthStore } from "../stores";
 
 export const SIDEBAR_WIDTH = 240;
@@ -53,23 +53,9 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
           flexShrink: 0,
         }}
       >
-        {!collapsed && (
-          <Box
-            component="img"
-            src={formstrLogo}
-            alt="Formstr"
-            sx={{ height: 20, display: "block" }}
-          />
-        )}
+        {!collapsed && <Wordmark height={20} />}
 
-        {collapsed && (
-          <Box
-            component="img"
-            src={formstrLogo}
-            alt="Formstr"
-            sx={{ height: 20, display: "block" }}
-          />
-        )}
+        {collapsed && <Wordmark height={20} />}
       </Box>
 
       {/* Navigation */}
@@ -91,7 +77,7 @@ export function Sidebar({ collapsed, onLoginClick }: SidebarProps) {
               <ListItemIcon
                 sx={{
                   minWidth: collapsed ? 0 : 32,
-                  color: active ? "text.primary" : "text.secondary",
+                  color: active ? "var(--fs-accent)" : "text.secondary",
                 }}
               >
                 <Icon size={16} />

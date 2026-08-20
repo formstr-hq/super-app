@@ -3,9 +3,12 @@ import { useTheme } from "@mui/material/styles";
 import { Menu as MenuIcon, Moon, Search, Sparkles, Sun } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
-import formstrLogo from "../assets/formstr.png";
 import { AccountMenu } from "../components/AccountMenu";
+import { RelayStatus } from "../components/RelayStatus";
+import { Wordmark } from "../components/Wordmark";
+import { moduleForPath } from "../lib/moduleAccent";
 import { useAuthStore, useSettingsStore } from "../stores";
+import { MONO_FONT } from "../theme";
 
 const NAV_ITEMS = [
   { label: "Forms", path: "/forms" },
@@ -36,6 +39,7 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
   const routeLabel =
     Object.entries(ROUTE_LABELS).find(([path]) => location.pathname.startsWith(path))?.[1] ??
     "Formstr";
+  const activeModule = moduleForPath(location.pathname);
 
   return (
     <AppBar
@@ -43,7 +47,7 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
       elevation={0}
       sx={{
         bgcolor: "background.default",
-        borderBottom: `1px solid ${theme.palette.divider}`,
+        borderBottom: "1px solid var(--fs-accent-line)",
         color: "text.primary",
         zIndex: theme.zIndex.appBar,
       }}
@@ -59,13 +63,8 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
           <MenuIcon size={18} />
         </IconButton>
 
-        {/* Brand */}
-        <Box
-          component="img"
-          src={formstrLogo}
-          alt="Formstr"
-          sx={{ height: 32, display: "block", flexShrink: 0 }}
-        />
+        {/* Brand — the asterisk carries the active module's ink */}
+        <Wordmark height={30} />
 
         {/* Module tabs (desktop) */}
         <Box sx={{ display: { xs: "none", md: "flex" }, alignItems: "center", gap: 0.25, ml: 1 }}>
@@ -79,9 +78,9 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
                     borderRadius: "7px",
                     fontSize: 13.5,
                     fontWeight: isActive ? 600 : 500,
-                    color: isActive ? "text.primary" : "text.secondary",
-                    bgcolor: isActive ? "action.selected" : "transparent",
-                    "&:hover": { bgcolor: "action.hover" },
+                    color: isActive ? "var(--fs-accent)" : "text.secondary",
+                    bgcolor: isActive ? "var(--fs-accent-tint)" : "transparent",
+                    "&:hover": { bgcolor: isActive ? "var(--fs-accent-tint)" : "action.hover" },
                   }}
                 >
                   {label}
@@ -99,6 +98,9 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
         )}
 
         <Box sx={{ flex: 1 }} />
+
+        {/* Relay asterisk — one arm per relay this module publishes to */}
+        {activeModule && <RelayStatus module={activeModule} />}
 
         {/* Search pill */}
         {onOpenCommandPalette && (
@@ -133,7 +135,7 @@ export function Header({ onLoginClick, onOpenCommandPalette, isMobile }: HeaderP
                   px: 0.75,
                   py: 0.25,
                   borderRadius: "3px",
-                  fontFamily: "monospace",
+                  fontFamily: MONO_FONT,
                 }}
               >
                 ⌘K
