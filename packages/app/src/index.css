@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap");
 
 /* ── Scrollbar ─────────────────────────────────────────────── */
 ::-webkit-scrollbar {
@@ -9,11 +9,8 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d4d4d4;
+  background: var(--fs-accent-line, #d4d4d4);
   border-radius: 3px;
-}
-.dark ::-webkit-scrollbar-thumb {
-  background: #3a3a3a;
 }
 ::-webkit-scrollbar-thumb:hover {
   opacity: 0.7;
@@ -135,12 +132,9 @@
   border-top-color: #2a2a2a;
 }
 .rich-editor .ProseMirror a {
-  color: #2563eb;
+  color: var(--fs-accent, #2563eb);
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-.dark .rich-editor .ProseMirror a {
-  color: #60a5fa;
 }
 .rich-editor .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
@@ -151,4 +145,13 @@
 }
 .rich-editor .ProseMirror .suggestion {
   font-weight: 500;
+}
+
+/* ── Data role ───────────────────────────────────────────────
+   npubs, event ids, coordinates, relay URLs and view keys. Mono so an
+   identifier never reads as prose. */
+.fs-data {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-feature-settings: "zero" 1;
+  letter-spacing: -0.01em;
 }

@@ -10,6 +10,7 @@ import { LoginDialog } from "../components/LoginDialog";
 import { MigrationDialog } from "../components/MigrationDialog";
 import { ShortcutsDialog } from "../components/ShortcutsDialog";
 import { UnlockDialog } from "../components/UnlockDialog";
+import { accentVars, moduleForPath } from "../lib/moduleAccent";
 import { useAuthStore, useSettingsStore, useInvitationsStore } from "../stores";
 
 import { isFullBleedRoute } from "./fullBleed";
@@ -41,6 +42,7 @@ export function AppShell() {
   }, []);
 
   const theme = useTheme();
+  const pathname = useLocation().pathname;
   const pubkey = useAuthStore((s) => s.pubkey);
   useEffect(() => {
     if (!pubkey) return;
@@ -48,6 +50,15 @@ export function AppShell() {
     void useInvitationsStore.getState().start();
     return () => useInvitationsStore.getState().stop();
   }, [pubkey]);
+
+  // The active module's ink, published to the document root so every surface
+  // can read it without the route being threaded through the MUI theme.
+  const mode = theme.palette.mode;
+  useEffect(() => {
+    const root = document.documentElement;
+    const vars = accentVars(moduleForPath(pathname), mode);
+    for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
+  }, [pathname, mode]);
 
   useEffect(() => {
     const check = () => {
@@ -62,7 +73,7 @@ export function AppShell() {
   // Module switching lives in the navbar (Header). On smaller screens the nav
   // collapses into an overlay drawer; on desktop there is no module rail.
   const isDesktop = !isMobile && !isTablet;
-  const fullBleed = isFullBleedRoute(useLocation().pathname);
+  const fullBleed = isFullBleedRoute(pathname);
 
   const sidebarContent = (
     <Sidebar
