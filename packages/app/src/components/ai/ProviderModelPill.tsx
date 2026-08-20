@@ -13,7 +13,7 @@ import { useAIStore, useSettingsStore } from "../../stores";
 
 export function ProviderModelPill() {
   const { aiProvider, aiModels, apiKeys, compatBaseUrl, setActiveProvider } = useSettingsStore();
-  const { availableModels, setModel, initProvider } = useAIStore();
+  const { availableModels, setModel, initProvider, providerStatus, errorMessage } = useAIStore();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -21,7 +21,16 @@ export function ProviderModelPill() {
   const configured = AI_PROVIDERS.filter((p) =>
     isProviderConfigured({ apiKeys, compatBaseUrl }, p),
   );
-  const models = availableModels.length > 0 ? availableModels : [activeModel];
+  const models = availableModels;
+  const noModelsReason =
+    providerStatus === "connecting"
+      ? "Checking…"
+      : (errorMessage ??
+        (providerStatus === "connected"
+          ? aiProvider === "ollama"
+            ? "No models installed. Pull one with \u2018ollama pull\u2019."
+            : "This provider returned no models."
+          : "Not connected. Open Settings to configure this provider."));
 
   const close = () => setAnchorEl(null);
 
@@ -50,7 +59,12 @@ export function ProviderModelPill() {
           component="span"
           sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
         >
-          {PROVIDER_LABELS[aiProvider]} · {activeModel.replace(/:latest$/, "")}
+          {PROVIDER_LABELS[aiProvider]}
+          {providerStatus === "error"
+            ? " · unavailable"
+            : availableModels.length === 0 && providerStatus !== "connected"
+              ? ""
+              : ` · ${activeModel.replace(/:latest$/, "")}`}
         </Box>
         <ChevronDown size={12} style={{ flexShrink: 0 }} />
       </Box>
@@ -87,6 +101,13 @@ export function ProviderModelPill() {
         <ListSubheader sx={{ fontSize: 11, lineHeight: "28px", bgcolor: "transparent" }}>
           Model
         </ListSubheader>
+        {models.length === 0 && (
+          <Box sx={{ px: 2, py: 1, maxWidth: 260 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.45 }}>
+              {noModelsReason}
+            </Typography>
+          </Box>
+        )}
         {models.map((m) => (
           <MenuItem
             key={m}

@@ -48,17 +48,35 @@ export function AISettingsSection() {
         compatBaseUrl: settings.compatBaseUrl,
         compatKey: settings.compatKey,
       });
-      if (!(await p.isAvailable())) {
+      const diagnosis = p.diagnose ? await p.diagnose() : null;
+      if (diagnosis && !diagnosis.ok) {
+        setTests((t) => ({
+          ...t,
+          [provider]: {
+            status: "error",
+            message: diagnosis.message ?? "Not configured or unreachable.",
+          },
+        }));
+        return;
+      }
+      if (!diagnosis && !(await p.isAvailable())) {
         setTests((t) => ({
           ...t,
           [provider]: { status: "error", message: "Not configured or unreachable." },
         }));
         return;
       }
-      const models = await p.getAvailableModels();
+      const models = diagnosis ? diagnosis.models : await p.getAvailableModels();
       setTests((t) => ({
         ...t,
-        [provider]: { status: "ok", models, message: `Connected · ${models.length} models` },
+        [provider]: {
+          status: "ok",
+          models,
+          message:
+            models.length > 0
+              ? `Connected · ${models.length} ${models.length === 1 ? "model" : "models"}`
+              : "Connected, but no models are installed.",
+        },
       }));
     } catch (e) {
       setTests((t) => ({
@@ -218,7 +236,13 @@ export function AISettingsSection() {
           value={model}
           onChange={(e) => settings.setProviderModel(provider, e.target.value || null)}
           placeholder={PROVIDER_DEFAULT_MODEL[provider]}
-          helperText={`Default: ${PROVIDER_DEFAULT_MODEL[provider]}`}
+          helperText={
+            test.models && test.models.length > 0
+              ? "Pick one below, or type a model name."
+              : provider === "ollama"
+                ? "Run Test connection to list the models installed on this machine."
+                : `Falls back to ${PROVIDER_DEFAULT_MODEL[provider]} when empty.`
+          }
         />
 
         {test.models && test.models.length > 0 && (

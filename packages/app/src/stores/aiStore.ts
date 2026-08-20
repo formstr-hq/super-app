@@ -133,12 +133,22 @@ export const useAIStore = create<AIStore>((set, get) => ({
         compatKey: settings.compatKey,
       });
 
-      if (!(await provider.isAvailable())) {
+      // A provider that can diagnose itself gives a message naming the fix,
+      // and hands back the model list from the same probe.
+      const diagnosis = provider.diagnose ? await provider.diagnose() : null;
+      if (diagnosis && !diagnosis.ok) {
+        set({
+          providerStatus: "error",
+          errorMessage: diagnosis.message ?? unavailableMessage(settings.aiProvider),
+        });
+        return;
+      }
+      if (!diagnosis && !(await provider.isAvailable())) {
         set({ providerStatus: "error", errorMessage: unavailableMessage(settings.aiProvider) });
         return;
       }
 
-      const models = await provider.getAvailableModels();
+      const models = diagnosis ? diagnosis.models : await provider.getAvailableModels();
       const context = get()._context;
       const agent = new Agent(provider, context);
 

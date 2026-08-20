@@ -60,6 +60,12 @@ export interface LLMProvider {
 
   getAvailableModels(): Promise<string[]>;
   isAvailable(): Promise<boolean>;
+  /**
+   * Optional richer probe: reachability, the installed models, and an
+   * actionable message when it fails. Providers that implement it save the
+   * caller a second round trip for the model list.
+   */
+  diagnose?(): Promise<ProviderDiagnosis>;
 }
 
 export interface EntityRef {
@@ -115,4 +121,11 @@ export interface AgentCallbacks {
   onWarning?: (message: string) => void;
   onDone: () => void;
   onError: (error: Error) => void;
+}
+
+/** Result of a provider reachability probe. */
+export interface ProviderDiagnosis {
+  ok: boolean;
+  models: string[];
+  message?: string;
 }
