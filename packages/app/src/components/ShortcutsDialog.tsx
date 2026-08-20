@@ -1,5 +1,7 @@
 import { Box, Dialog, Typography } from "@mui/material";
 
+import { DISPLAY_FONT } from "../theme";
+
 interface ShortcutsDialogProps {
   open: boolean;
   onClose: () => void;
@@ -15,7 +17,10 @@ export function ShortcutsDialog({ open, onClose }: ShortcutsDialogProps) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <Box sx={{ px: 2.5, py: 2 }}>
-        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1.5 }}>
+        <Typography
+          variant="subtitle1"
+          sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: "-0.025em", mb: 1.5 }}
+        >
           Keyboard shortcuts
         </Typography>
         {SHORTCUTS.map(([label, key]) => (

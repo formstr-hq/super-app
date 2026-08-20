@@ -36,7 +36,7 @@ export function FormCard({ form, onFill, onEdit, onViewResponses, onDelete, onCo
         flexDirection: "column",
         gap: 1,
         transition: "border-color 0.15s ease",
-        "&:hover": { borderColor: "text.disabled" },
+        "&:hover": { borderColor: "var(--fs-accent-line)" },
       }}
     >
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>

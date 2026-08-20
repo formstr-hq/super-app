@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { useState } from "react";
 
 import { useAuthStore } from "../stores";
+import { DISPLAY_FONT } from "../theme";
 
 interface LoginDialogProps {
   open: boolean;
@@ -93,7 +94,10 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
         >
           <Radio size={16} style={{ color: theme.palette.background.default }} />
         </Box>
-        <Typography variant="body1" fontWeight={600}>
+        <Typography
+          variant="body1"
+          sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: "-0.025em" }}
+        >
           Sign in to Formstr
         </Typography>
       </Box>

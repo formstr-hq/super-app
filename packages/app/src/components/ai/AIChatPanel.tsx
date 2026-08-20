@@ -11,15 +11,14 @@ import { EntityCard } from "./EntityCard";
 import { MessageBubble } from "./MessageBubble";
 import { ProviderModelPill } from "./ProviderModelPill";
 
+const STATUS_COLOR: Record<"light" | "dark", Record<string, string>> = {
+  light: { connected: "#2E7D57", connecting: "#B5811F", error: "#C4462F", idle: "#78817A" },
+  dark: { connected: "#4FB07A", connecting: "#D9A93F", error: "#E8705C", idle: "#96A09A" },
+};
+
 function StatusDot({ status }: { status: string }) {
-  const color =
-    status === "connected"
-      ? "#22c55e"
-      : status === "connecting"
-        ? "#eab308"
-        : status === "error"
-          ? "#ef4444"
-          : "#9ca3af";
+  const mode = useTheme().palette.mode;
+  const color = STATUS_COLOR[mode][status] ?? STATUS_COLOR[mode].idle;
   return (
     <Box
       component="span"
@@ -147,7 +146,7 @@ export function AIChatPanel() {
         height: "100%",
         width: 380,
         flexShrink: 0,
-        borderLeft: `1px solid ${theme.palette.divider}`,
+        borderLeft: "2px solid var(--fs-accent-line)",
         bgcolor: "background.default",
       }}
     >
@@ -164,7 +163,7 @@ export function AIChatPanel() {
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Sparkles size={16} />
+          <Sparkles size={16} color="var(--fs-accent)" />
           <Typography variant="body2" fontWeight={600}>
             AI Assistant
           </Typography>

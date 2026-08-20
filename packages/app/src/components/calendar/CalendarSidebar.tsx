@@ -78,7 +78,7 @@ export function CalendarSidebar({
         flexShrink: 0,
         height: "100%",
         borderRight: `1px solid ${theme.palette.divider}`,
-        bgcolor: theme.palette.mode === "dark" ? "background.default" : "grey.50",
+        bgcolor: theme.palette.mode === "dark" ? "background.default" : "background.paper",
         px: 1.25,
         py: 1.75,
         display: { xs: "none", sm: "flex" },
@@ -105,9 +105,11 @@ export function CalendarSidebar({
             cursor: "pointer",
             font: "inherit",
             textAlign: "left",
-            bgcolor: invitationsActive ? "text.primary" : "transparent",
-            color: invitationsActive ? "background.paper" : "text.primary",
-            "&:hover": { bgcolor: invitationsActive ? "text.primary" : "action.hover" },
+            bgcolor: invitationsActive ? "var(--fs-accent-tint)" : "transparent",
+            color: invitationsActive ? "var(--fs-accent)" : "text.primary",
+            "&:hover": {
+              bgcolor: invitationsActive ? "var(--fs-accent-tint)" : "var(--fs-accent-wash)",
+            },
           }}
         >
           <Inbox size={15} />
@@ -124,8 +126,8 @@ export function CalendarSidebar({
                 px: 0.85,
                 py: 0.4,
                 borderRadius: 5,
-                bgcolor: invitationsActive ? "background.paper" : "text.primary",
-                color: invitationsActive ? "text.primary" : "background.paper",
+                bgcolor: invitationsActive ? "var(--fs-accent)" : "text.primary",
+                color: invitationsActive ? "background.default" : "background.paper",
               }}
             >
               {pendingInvitations}
@@ -153,9 +155,11 @@ export function CalendarSidebar({
             cursor: "pointer",
             font: "inherit",
             textAlign: "left",
-            bgcolor: bookingsActive ? "text.primary" : "transparent",
-            color: bookingsActive ? "background.paper" : "text.primary",
-            "&:hover": { bgcolor: bookingsActive ? "text.primary" : "action.hover" },
+            bgcolor: bookingsActive ? "var(--fs-accent-tint)" : "transparent",
+            color: bookingsActive ? "var(--fs-accent)" : "text.primary",
+            "&:hover": {
+              bgcolor: bookingsActive ? "var(--fs-accent-tint)" : "var(--fs-accent-wash)",
+            },
           }}
         >
           <CalendarClock size={15} />
@@ -172,8 +176,8 @@ export function CalendarSidebar({
                 px: 0.85,
                 py: 0.4,
                 borderRadius: 5,
-                bgcolor: bookingsActive ? "background.paper" : "text.primary",
-                color: bookingsActive ? "text.primary" : "background.paper",
+                bgcolor: bookingsActive ? "var(--fs-accent)" : "text.primary",
+                color: bookingsActive ? "background.default" : "background.paper",
               }}
             >
               {pendingBookings}
@@ -201,9 +205,11 @@ export function CalendarSidebar({
             cursor: "pointer",
             font: "inherit",
             textAlign: "left",
-            bgcolor: availabilityActive ? "text.primary" : "transparent",
-            color: availabilityActive ? "background.paper" : "text.primary",
-            "&:hover": { bgcolor: availabilityActive ? "text.primary" : "action.hover" },
+            bgcolor: availabilityActive ? "var(--fs-accent-tint)" : "transparent",
+            color: availabilityActive ? "var(--fs-accent)" : "text.primary",
+            "&:hover": {
+              bgcolor: availabilityActive ? "var(--fs-accent-tint)" : "var(--fs-accent-wash)",
+            },
           }}
         >
           <CalendarRange size={15} />

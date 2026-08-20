@@ -2,6 +2,7 @@ import { Box, Button, Dialog, DialogContent, TextField, Typography } from "@mui/
 import { useState } from "react";
 
 import { useAuthStore } from "../stores";
+import { DISPLAY_FONT } from "../theme";
 
 /** One-time prompt for users upgrading from the old plaintext-key storage:
  *  encrypt the existing key with a passphrase (NIP-49). */
@@ -29,7 +30,10 @@ export function MigrationDialog() {
   return (
     <Dialog open={open} PaperProps={{ sx: { width: "100%", maxWidth: 380, borderRadius: 2 } }}>
       <DialogContent sx={{ px: 3, py: 2.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
-        <Typography variant="body1" fontWeight={600}>
+        <Typography
+          variant="body1"
+          sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: "-0.025em" }}
+        >
           Secure your key
         </Typography>
         <Typography variant="caption" sx={{ color: "text.secondary" }}>

@@ -36,7 +36,7 @@ export function KanbanCardItem({ card, disabled, onOpen }: KanbanCardItemProps) 
         display: "flex",
         flexDirection: "column",
         gap: 0.75,
-        "&:hover": { borderColor: "text.disabled" },
+        "&:hover": { borderColor: "var(--fs-accent-line)" },
       }}
     >
       <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.35 }}>

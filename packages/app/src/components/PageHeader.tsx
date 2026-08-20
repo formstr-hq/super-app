@@ -1,6 +1,8 @@
 import { Box, Typography } from "@mui/material";
 import type { ReactNode } from "react";
 
+import { DISPLAY_FONT } from "../theme";
+
 interface PageHeaderProps {
   title: string;
   /** One line; hidden on xs. */
@@ -24,7 +26,15 @@ export function PageHeader({ title, description, action }: PageHeaderProps) {
       }}
     >
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="subtitle1" fontWeight={600} sx={{ lineHeight: 1.3 }}>
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontFamily: DISPLAY_FONT,
+            fontWeight: 700,
+            letterSpacing: "-0.025em",
+            lineHeight: 1.3,
+          }}
+        >
           {title}
         </Typography>
         {description && (

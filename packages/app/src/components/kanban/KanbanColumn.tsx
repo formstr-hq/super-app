@@ -13,14 +13,14 @@ import { KanbanCardItem } from "./KanbanCardItem";
 /** Muted enough to sit beside the app's monochrome palette without shouting. */
 const ACCENTS: Record<"light" | "dark", Record<ColumnAccent, string>> = {
   light: {
-    neutral: "#8C95A3",
+    neutral: "#78817A",
     progress: "#3B72C4",
     review: "#B5811F",
     blocked: "#DC2626",
     done: "#2E8B57",
   },
   dark: {
-    neutral: "#9AA3B1",
+    neutral: "#96A09A",
     progress: "#6E9BE6",
     review: "#D9A93F",
     blocked: "#F87171",

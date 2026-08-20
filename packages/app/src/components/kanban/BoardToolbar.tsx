@@ -136,10 +136,10 @@ function FilterChip({ label, selected, onClick }: FilterChipProps) {
         flexShrink: 0,
         fontSize: 12,
         border: 1,
-        borderColor: selected ? "text.primary" : "divider",
-        bgcolor: selected ? "text.primary" : "transparent",
-        color: selected ? "background.default" : "text.secondary",
-        "&:hover": { bgcolor: selected ? "text.primary" : "action.hover" },
+        borderColor: selected ? "var(--fs-accent-line)" : "divider",
+        bgcolor: selected ? "var(--fs-accent-tint)" : "transparent",
+        color: selected ? "var(--fs-accent)" : "text.secondary",
+        "&:hover": { bgcolor: selected ? "var(--fs-accent-tint)" : "var(--fs-accent-wash)" },
       }}
     />
   );

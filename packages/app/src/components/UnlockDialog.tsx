@@ -2,6 +2,7 @@ import { Box, Button, Dialog, DialogContent, TextField, Typography } from "@mui/
 import { useState } from "react";
 
 import { useAuthStore } from "../stores";
+import { DISPLAY_FONT } from "../theme";
 
 interface UnlockDialogProps {
   open: boolean;
@@ -41,7 +42,10 @@ export function UnlockDialog({ open, onClose }: UnlockDialogProps) {
       PaperProps={{ sx: { width: "100%", maxWidth: 360, borderRadius: 2 } }}
     >
       <DialogContent sx={{ px: 3, py: 2.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
-        <Typography variant="body1" fontWeight={600}>
+        <Typography
+          variant="body1"
+          sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: "-0.025em" }}
+        >
           Unlock account
         </Typography>
         <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary" }}>

@@ -30,7 +30,7 @@ export function FormsSidebar({ active, myCount, onSelect, onNew }: FormsSidebarP
         flexShrink: 0,
         height: "100%",
         borderRight: `1px solid ${theme.palette.divider}`,
-        bgcolor: theme.palette.mode === "dark" ? "background.default" : "grey.50",
+        bgcolor: theme.palette.mode === "dark" ? "background.default" : "background.paper",
         px: 1.25,
         py: 1.75,
         display: { xs: "none", sm: "flex" },
@@ -65,9 +65,9 @@ export function FormsSidebar({ active, myCount, onSelect, onNew }: FormsSidebarP
               py: 0.85,
               borderRadius: 1,
               cursor: "pointer",
-              bgcolor: selected ? "text.primary" : "transparent",
-              color: selected ? "background.paper" : "text.primary",
-              "&:hover": { bgcolor: selected ? "text.primary" : "action.hover" },
+              bgcolor: selected ? "var(--fs-accent-tint)" : "transparent",
+              color: selected ? "var(--fs-accent)" : "text.primary",
+              "&:hover": { bgcolor: selected ? "var(--fs-accent-tint)" : "var(--fs-accent-wash)" },
             }}
           >
             <Icon size={15} style={{ flexShrink: 0, opacity: 0.8 }} />
