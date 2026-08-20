@@ -1,4 +1,4 @@
-import type { CalendarEvent } from "@formstr/agent/services/calendar/types";
+import type { AppCalendarEvent } from "./calendar/types";
 
 // ── ICS generation (RFC-5545) ───────────────────────────
 // Port of nostr-calendar/src/common/utils.ts `downloadIcs`, generalized so
@@ -46,16 +46,36 @@ function foldLine(line: string): string {
   return out.join("\r\n ");
 }
 
-function serializeEvent(event: CalendarEvent): string[] {
+/**
+ * `start_tzid` / `end_tzid`, read off the raw wire event.
+ *
+ * The SDK neither writes nor parses those rows, matching what
+ * calendar.formstr.app publishes, so events created from here on export as UTC.
+ *
+ * Older super-app builds did write them, but only a **public** event carries
+ * them as wire tags: on a private event they went inside the encrypted payload,
+ * which `CalendarEvent` does not expose — recovering one would mean decrypting
+ * the content again with the view key, and export is synchronous. Private is
+ * the default, so most pre-migration events export as UTC too. That is lossy,
+ * not wrong: the UTC form is the same instant, it just forgets which timezone
+ * the event was authored in. See docs/sdk/calendar-sdk-followups.md item 5.
+ */
+function tzid(event: AppCalendarEvent, row: "start_tzid" | "end_tzid"): string | undefined {
+  return event.event?.tags.find((t) => t[0] === row)?.[1];
+}
+
+function serializeEvent(event: AppCalendarEvent): string[] {
   const uid = `${event.id}@formstr`;
   const now = toIcsDate(Date.now());
-  const startParam = event.startTzid
-    ? `DTSTART;TZID=${event.startTzid}:${toIcsDate(event.begin, event.startTzid)}`
+  const startTzid = tzid(event, "start_tzid");
+  const endTzid = tzid(event, "end_tzid");
+  const startParam = startTzid
+    ? `DTSTART;TZID=${startTzid}:${toIcsDate(event.begin, startTzid)}`
     : `DTSTART:${toIcsDate(event.begin)}`;
-  const endParam = event.endTzid
-    ? `DTEND;TZID=${event.endTzid}:${toIcsDate(event.end, event.endTzid)}`
-    : event.startTzid
-      ? `DTEND;TZID=${event.startTzid}:${toIcsDate(event.end, event.startTzid)}`
+  const endParam = endTzid
+    ? `DTEND;TZID=${endTzid}:${toIcsDate(event.end, endTzid)}`
+    : startTzid
+      ? `DTEND;TZID=${startTzid}:${toIcsDate(event.end, startTzid)}`
       : `DTEND:${toIcsDate(event.end)}`;
 
   const lines: string[] = [
@@ -75,7 +95,7 @@ function serializeEvent(event: CalendarEvent): string[] {
   return lines;
 }
 
-export function buildIcs(events: CalendarEvent[]): string {
+export function buildIcs(events: AppCalendarEvent[]): string {
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -104,10 +124,10 @@ function safeFilename(value: string): string {
   return value.replace(/[^a-z0-9-_]+/gi, "_").slice(0, 60) || "event";
 }
 
-export function exportEvent(event: CalendarEvent) {
+export function exportEvent(event: AppCalendarEvent) {
   triggerDownload(`${safeFilename(event.title)}.ics`, buildIcs([event]));
 }
 
-export function exportCalendar(events: CalendarEvent[], name = "calendar") {
+export function exportCalendar(events: AppCalendarEvent[], name = "calendar") {
   triggerDownload(`${safeFilename(name)}.ics`, buildIcs(events));
 }

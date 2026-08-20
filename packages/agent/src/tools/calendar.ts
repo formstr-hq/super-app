@@ -1,17 +1,30 @@
+import type { RSVPStatus } from "@formstr/calendar-sdk";
+import {
+  CALENDAR_KINDS,
+  coordinate as buildCoordinate,
+  findCalendarForCoordinate,
+  parseCoordinate,
+  type CalendarEvent,
+  type CalendarEventDraft,
+  type CalendarList,
+  type EventRef,
+  type FormAttachment,
+} from "@formstr/calendar-sdk";
 import { signerManager } from "@formstr/core";
 import { z } from "zod";
 
 import { ok, fail } from "../result";
 import { requireConfirm } from "../safety";
-import { calendar, calendarBooking, calendarRsvp } from "../services";
+import { calendarBooking, calendarDiscovery } from "../services";
+import { getCalendarSdk } from "../services/calendar/sdk";
 
 import { normalizePubkeyList } from "./pubkey";
-import type { ToolEntry } from "./types";
+import type { ToolDef } from "./types";
 
 /**
  * Parse an ISO 8601 string to a Date, or null when unparseable. LLM callers
  * routinely pass junk ("next friday"); unchecked, an Invalid Date flows into
- * the service and publishes literal "NaN" start/end tags to relays.
+ * the SDK and publishes literal "NaN" start/end tags to relays.
  */
 function parseIsoDate(value: string): Date | null {
   const date = new Date(value);
@@ -25,16 +38,46 @@ function badDate(field: string, value: string) {
   );
 }
 
-export const calendarTools: ToolEntry[] = buildCalendarTools();
+/** The SDK models a registration form as a `forms` array; the tools expose one. */
+function formsFor(naddr: string | undefined, viewKey: string | undefined): FormAttachment[] {
+  return naddr ? [{ naddr, ...(viewKey ? { viewKey } : {}) }] : [];
+}
 
-function buildCalendarTools(): ToolEntry[] {
-  const tools: ToolEntry[] = [];
+function formRefOf(event: CalendarEvent): string | undefined {
+  return event.forms?.[0]?.naddr;
+}
+
+function formViewKeyOf(event: CalendarEvent): string | undefined {
+  return event.forms?.[0]?.viewKey;
+}
+
+/** Rebuild an edit draft from the event as it stands, before applying changes. */
+function draftFrom(event: CalendarEvent): CalendarEventDraft & { id: string } {
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    begin: event.begin,
+    end: event.end,
+    location: event.location,
+    participants: event.participants,
+    rrule: event.repeat.rrule ?? undefined,
+    notificationPreference: event.notificationPreference,
+    forms: event.forms,
+    image: event.image,
+  };
+}
+
+export const calendarTools: ToolDef[] = buildCalendarTools();
+
+function buildCalendarTools(): ToolDef[] {
+  const tools: ToolDef[] = [];
   let write = false;
   const server = {
     registerTool(
       name: string,
-      config: Pick<ToolEntry, "description" | "inputSchema">,
-      handler: ToolEntry["handler"],
+      config: Pick<ToolDef, "description" | "inputSchema">,
+      handler: ToolDef["handler"],
     ) {
       tools.push({ name, ...config, handler, ...(write ? { write: true } : {}) });
     },
@@ -52,7 +95,7 @@ function buildCalendarTools(): ToolEntry[] {
       const untilDate = until ? parseIsoDate(until) : undefined;
       if (until && !untilDate) return badDate("until", until);
       const pubkey = signerManager.getPublicKey();
-      const events = await calendar.fetchCalendarEventsSync({
+      const events = await calendarDiscovery.fetchEventsDirect({
         authors: pubkey ? [pubkey] : undefined,
         since: sinceDate ? Math.floor(sinceDate.getTime() / 1000) : undefined,
         until: untilDate ? Math.floor(untilDate.getTime() / 1000) : undefined,
@@ -94,7 +137,6 @@ function buildCalendarTools(): ToolEntry[] {
         calendarId: z.string().optional(),
         participants: z.array(z.string()).optional(),
         rrule: z.string().optional(),
-        startTzid: z.string().optional(),
         registrationFormRef: z.string().optional(),
         registrationFormViewKey: z.string().optional(),
       },
@@ -107,11 +149,12 @@ function buildCalendarTools(): ToolEntry[] {
       // Default to private: only private events referenced (with their viewKey)
       // in a calendar list are discoverable on calendar.formstr.app.
       const isPrivate = args.isPrivate ?? true;
-      const calendars = await calendar.fetchCalendarLists();
+      const sdk = await getCalendarSdk();
+      const calendars = await sdk.fetchCalendars();
 
       // Ask which calendar when the event needs one but none was chosen. A
-      // private event with no calendars has nothing to ask about — the service
-      // auto-creates a default "My Calendar".
+      // private event with no calendars has nothing to ask about — we
+      // auto-create a default "My Calendar" below.
       if (isPrivate && !args.calendarId && calendars.length > 0) {
         const choices = calendars.map((c) => `${c.title} (${c.id})`).join("; ");
         return fail(
@@ -128,37 +171,59 @@ function buildCalendarTools(): ToolEntry[] {
         );
       }
 
-      const draft = {
+      // Accept npub OR hex for each participant — the wire (["p"] rows, NIP-59
+      // invitation wraps, relay-list query) needs hex, so convert here.
+      const participants = normalizePubkeyList(args.participants);
+      const draft: CalendarEventDraft = {
         title: args.title,
         description: args.description ?? "",
-        begin,
-        end,
-        location: args.location,
-        // Accept npub OR hex for each participant — the wire (["p"] tags, NIP-59
-        // invitation wraps, relay-list query) needs hex, so convert here.
-        participants: normalizePubkeyList(args.participants),
-        isPrivate,
-        calendarId: args.calendarId,
+        begin: begin.getTime(),
+        end: end.getTime(),
+        location: args.location ? [args.location] : undefined,
+        participants,
         rrule: args.rrule,
-        startTzid: args.startTzid,
-        registrationFormRef: args.registrationFormRef,
-        registrationFormViewKey: args.registrationFormViewKey,
+        forms: formsFor(args.registrationFormRef, args.registrationFormViewKey),
       };
-      const { event, calendar: list } = await calendar.createCalendarEvent(draft, { calendars });
-      const coordinate = `${event.kind}:${event.user}:${event.id}`;
-      // Private events gift-wrap one NIP-59 invitation per participant (published
-      // to that participant's NIP-65 relays) — echo the count so callers can
-      // verify the invites went out instead of guessing.
-      const invitationsSent = isPrivate ? (draft.participants?.length ?? 0) : 0;
-      return ok(
-        `Created ${isPrivate ? "private" : "public"} event "${args.title}"` +
-          `${list ? ` in calendar "${list.title}"` : ""}` +
-          `${invitationsSent ? ` — sent ${invitationsSent} invitation(s)` : ""}.`,
-        {
+
+      if (!isPrivate) {
+        const { event } = await sdk.publishPublicEvent(draft);
+        return ok(`Created public event "${args.title}".`, {
           id: event.id,
           eventId: event.eventId,
-          coordinate,
-          calendarId: list?.id,
+          coordinate: buildCoordinate(event.kind, event.user, event.id),
+          calendarId: undefined,
+          invitationsSent: 0,
+        });
+      }
+
+      // A private event's per-event viewKey only survives a refresh if it is
+      // stored in a list's eventRef — that is also how calendar.formstr.app
+      // discovers and decrypts it — so a private event MUST land in a calendar.
+      let list: CalendarList | undefined = args.calendarId
+        ? calendars.find((c) => c.id === args.calendarId)
+        : calendars[0];
+      let known = calendars;
+      if (!list) {
+        list = await sdk.createCalendar({ title: "My Calendar", color: "#334155" });
+        known = [...calendars, list];
+      }
+
+      const published = await sdk.publishPrivateEvent(draft, {
+        calendarId: list.id,
+        calendars: known,
+      });
+      // One NIP-59 invitation per participant, published to that participant's
+      // NIP-65 relays — echo the count so callers can verify the invites went
+      // out instead of guessing.
+      const invitationsSent = published.invitations.length;
+      return ok(
+        `Created private event "${args.title}" in calendar "${list.title}"` +
+          `${invitationsSent ? ` — sent ${invitationsSent} invitation(s)` : ""}.`,
+        {
+          id: published.event.id,
+          eventId: published.event.eventId,
+          coordinate: published.eventRef[0],
+          calendarId: list.id,
           invitationsSent,
         },
       );
@@ -172,10 +237,12 @@ function buildCalendarTools(): ToolEntry[] {
       inputSchema: { coordinate: z.string() },
     },
     async ({ coordinate }) => {
+      const sdk = await getCalendarSdk();
       // Recover the per-event viewKey from the user's lists so a private event
       // decrypts (without it it comes back "Untitled" with no times/participants).
-      const viewKey = await calendar.lookupEventViewKey(coordinate);
-      const event = await calendar.fetchCalendarEventByCoordinate(coordinate, viewKey);
+      const calendars = await sdk.fetchCalendars();
+      const viewKey = await sdk.lookupEventViewKey(coordinate, calendars);
+      const event = await sdk.fetchEventByCoordinate(coordinate, { viewKey });
       if (!event) return fail(`No event found for ${coordinate}.`, "NOT_FOUND");
       return ok(`Event "${event.title}".`, {
         event: {
@@ -187,13 +254,12 @@ function buildCalendarTools(): ToolEntry[] {
           location: event.location,
           isPrivate: event.isPrivate,
           rrule: event.repeat?.rrule ?? null,
-          startTzid: event.startTzid ?? null,
           participants: event.participants,
-          calendarId: event.calendarId ?? null,
+          calendarId: findCalendarForCoordinate(calendars, coordinate)?.id ?? null,
           // The attached form ref is surfaced so a write can be verified; the
           // form's viewKey itself is never returned (no key material in results).
-          registrationFormRef: event.registrationFormRef ?? null,
-          registrationFormHasViewKey: Boolean(event.registrationFormViewKey),
+          registrationFormRef: formRefOf(event) ?? null,
+          registrationFormHasViewKey: Boolean(formViewKeyOf(event)),
         },
       });
     },
@@ -203,7 +269,8 @@ function buildCalendarTools(): ToolEntry[] {
     "list_calendars",
     { description: "List the user's calendar lists.", inputSchema: {} },
     async () => {
-      const lists = await calendar.fetchCalendarLists();
+      const sdk = await getCalendarSdk();
+      const lists = await sdk.fetchCalendars();
       return ok(`Found ${lists.length} calendar(s).`, {
         calendars: lists.map((c) => ({
           id: c.id,
@@ -226,7 +293,12 @@ function buildCalendarTools(): ToolEntry[] {
       },
     },
     async ({ title, color, description }) => {
-      const list = await calendar.createCalendarList(title, color ?? "#334155", description ?? "");
+      const sdk = await getCalendarSdk();
+      const list = await sdk.createCalendar({
+        title,
+        color: color ?? "#334155",
+        description: description ?? "",
+      });
       return ok(`Created calendar "${title}".`, { id: list.id });
     },
   );
@@ -234,11 +306,15 @@ function buildCalendarTools(): ToolEntry[] {
   server.registerTool(
     "fetch_event_rsvps",
     {
-      description: "List public RSVPs for an event coordinate kind:pubkey:d.",
+      description: "List RSVPs for an event coordinate kind:pubkey:d.",
       inputSchema: { coordinate: z.string() },
     },
     async ({ coordinate }) => {
-      const rsvps = await calendarRsvp.fetchRsvpsForEvent(coordinate);
+      const sdk = await getCalendarSdk();
+      // A private event's RSVPs are encrypted to its viewKey; look it up so the
+      // tool works for private and public events alike.
+      const viewKey = await sdk.lookupEventViewKey(coordinate);
+      const rsvps = await sdk.fetchRsvps(coordinate, { viewKey });
       return ok(`Found ${rsvps.length} RSVP(s).`, {
         rsvps: rsvps.map((r) => ({
           pubkey: r.pubkey,
@@ -258,10 +334,11 @@ function buildCalendarTools(): ToolEntry[] {
       inputSchema: {},
     },
     async () => {
-      const invitations = await calendar.fetchInvitationsSync();
+      const sdk = await getCalendarSdk();
+      const invitations = await sdk.fetchInvitationsWithEvents();
       return ok(`Found ${invitations.length} invitation(s).`, {
         invitations: invitations.map((i) => ({
-          coordinate: i.eventCoordinate,
+          coordinate: i.coordinate,
           title: i.event?.title ?? null,
           begin: i.event?.begin ?? null,
         })),
@@ -337,12 +414,13 @@ function buildCalendarTools(): ToolEntry[] {
       const requests = await calendarBooking.fetchBookingRequests();
       const request = requests.find((r) => r.id === requestId);
       if (!request) return fail(`No booking request found for id ${requestId}.`, "NOT_FOUND");
-      const lists = await calendar.fetchCalendarLists();
+      const sdk = await getCalendarSdk();
+      const lists = await sdk.fetchCalendars();
       const list = lists.find((c) => c.id === calendarId);
       if (!list) return fail(`No calendar found for id ${calendarId}.`, "NOT_FOUND");
       const { event } = await calendarBooking.approveBookingRequest(request, list);
       return ok(`Approved booking "${request.title}".`, {
-        coordinate: `${event.kind}:${event.user}:${event.id}`,
+        coordinate: buildCoordinate(event.kind, event.user, event.id),
       });
     },
   );
@@ -390,7 +468,19 @@ function buildCalendarTools(): ToolEntry[] {
         `deletes event ${eventId}`,
       );
       if (blocked) return blocked;
-      await calendar.deleteCalendarEvent(eventId, coordinate);
+      const sdk = await getCalendarSdk();
+      // NIP-09 wants the target's kind. Take it from the coordinate when one
+      // was supplied; a bare event id can only be a public event.
+      const kind =
+        (coordinate ? parseCoordinate(coordinate)?.kind : undefined) ?? CALENDAR_KINDS.publicEvent;
+      await sdk.deleteEvent({
+        kind,
+        coordinate,
+        // A nostr event id is 64 hex chars; the tool's `eventId` is often the
+        // d-tag instead, which must not go out as an `e` row.
+        eventId: /^[0-9a-f]{64}$/i.test(eventId) ? eventId : undefined,
+        reason: "Deleted via Formstr",
+      });
       return ok(`Deleted event ${eventId}.`);
     },
   );
@@ -414,7 +504,6 @@ function buildCalendarTools(): ToolEntry[] {
     async ({
       eventCoordinate,
       status,
-      isPrivate,
       viewKey,
       suggestedStart,
       suggestedEnd,
@@ -423,17 +512,18 @@ function buildCalendarTools(): ToolEntry[] {
     }) => {
       const blocked = requireConfirm("rsvp_event", { confirm }, `sends "${status}" RSVP`);
       if (blocked) return blocked;
+      const sdk = await getCalendarSdk();
       // Private RSVPs need the event viewKey to take the standalone-compatible
       // kind-32069 path — calendar.formstr.app never reads the gift-wrap
-      // fallback. The user's calendar lists carry it in their eventRefs.
-      let key = viewKey;
-      if (isPrivate && !key) {
-        key = await calendar.lookupEventViewKey(eventCoordinate);
-      }
-      const hasExtra =
-        suggestedStart !== undefined || suggestedEnd !== undefined || comment !== undefined;
-      const extra = hasExtra ? { suggestedStart, suggestedEnd, comment } : undefined;
-      await calendarRsvp.rsvpToEvent(eventCoordinate, status, Boolean(isPrivate), extra, key);
+      // fallback. The user's calendar lists carry it in their eventRefs. The
+      // SDK picks the public or private path from the coordinate's own kind, so
+      // the `isPrivate` argument is no longer consulted.
+      const key = viewKey ?? (await sdk.lookupEventViewKey(eventCoordinate));
+      await sdk.rsvp({
+        coordinate: eventCoordinate,
+        payload: { status: status as RSVPStatus, suggestedStart, suggestedEnd, comment },
+        viewKey: key,
+      });
       return ok(`RSVP "${status}" sent.`);
     },
   );
@@ -453,7 +543,6 @@ function buildCalendarTools(): ToolEntry[] {
         end: z.string().optional(),
         location: z.string().optional(),
         rrule: z.string().optional(),
-        startTzid: z.string().optional(),
         registrationFormRef: z.string().optional(),
         registrationFormViewKey: z.string().optional(),
         confirm: z.boolean().optional(),
@@ -470,48 +559,39 @@ function buildCalendarTools(): ToolEntry[] {
       if (args.start && !newBegin) return badDate("start", args.start);
       const newEnd = args.end ? parseIsoDate(args.end) : undefined;
       if (args.end && !newEnd) return badDate("end", args.end);
+      const sdk = await getCalendarSdk();
+      const calendars = await sdk.fetchCalendars();
       // Recover the per-event viewKey from the user's calendar lists so the
       // private event decrypts (without it the fields are lost) AND the republish
       // reuses the SAME key — minting a fresh one would orphan the calendar-list
       // ref's viewKey, making the event un-decryptable (invalid MAC) everywhere.
-      const viewKey = await calendar.lookupEventViewKey(args.coordinate);
-      const existing = await calendar.fetchCalendarEventByCoordinate(args.coordinate, viewKey);
+      const viewKey = await sdk.lookupEventViewKey(args.coordinate, calendars);
+      const existing = await sdk.fetchEventByCoordinate(args.coordinate, { viewKey });
       if (!existing) return fail(`No event found for ${args.coordinate}.`, "NOT_FOUND");
       // Registration form: undefined keeps the current one, "" detaches it.
       // The old form's viewKey is kept only when the ref is unchanged — carried
       // over to a different form it would be the wrong key (see attach_form_to_event).
+      const currentRef = formRefOf(existing);
       const formRef =
-        args.registrationFormRef === undefined
-          ? existing.registrationFormRef
-          : args.registrationFormRef || undefined;
+        args.registrationFormRef === undefined ? currentRef : args.registrationFormRef || undefined;
       const formViewKey = !formRef
         ? undefined
         : (args.registrationFormViewKey ??
-          (formRef === existing.registrationFormRef
-            ? existing.registrationFormViewKey
-            : undefined));
+          (formRef === currentRef ? formViewKeyOf(existing) : undefined));
       const draft = {
+        ...draftFrom(existing),
         title: args.title ?? existing.title,
         description: args.description ?? existing.description,
-        begin: newBegin ?? new Date(existing.begin),
-        end: newEnd ?? new Date(existing.end),
-        location: args.location ?? existing.location[0],
-        participants: existing.participants,
-        isPrivate: existing.isPrivate,
+        begin: newBegin ? newBegin.getTime() : existing.begin,
+        end: newEnd ? newEnd.getTime() : existing.end,
+        location: args.location ? [args.location] : existing.location,
         rrule: args.rrule ?? existing.repeat.rrule ?? undefined,
-        startTzid: args.startTzid ?? existing.startTzid,
-        registrationFormRef: formRef,
-        registrationFormViewKey: formViewKey,
-        notificationPreference: existing.notificationPreference,
-        viewKey: existing.viewKey,
-        existingId: existing.id,
+        forms: formsFor(formRef, formViewKey),
       };
-      const event = existing.isPrivate
-        ? await calendar.publishPrivateCalendarEvent(draft, existing.calendarId ?? "default")
-        : await calendar.publishPublicCalendarEvent(draft);
+      const event = await republish(sdk, existing, draft, calendars, viewKey);
       return ok(`Updated event "${event.title}".`, {
         id: event.id,
-        coordinate: `${event.kind}:${event.user}:${event.id}`,
+        coordinate: buildCoordinate(event.kind, event.user, event.id),
       });
     },
   );
@@ -537,37 +617,24 @@ function buildCalendarTools(): ToolEntry[] {
         `attaches a form to ${coordinate}`,
       );
       if (blocked) return blocked;
+      const sdk = await getCalendarSdk();
+      const calendars = await sdk.fetchCalendars();
       // See update_calendar_event: recover the viewKey first so the private
       // event decrypts and the republish keeps the calendar-list ref valid.
-      const viewKey = await calendar.lookupEventViewKey(coordinate);
-      const existing = await calendar.fetchCalendarEventByCoordinate(coordinate, viewKey);
+      const viewKey = await sdk.lookupEventViewKey(coordinate, calendars);
+      const existing = await sdk.fetchEventByCoordinate(coordinate, { viewKey });
       if (!existing) return fail(`No event found for ${coordinate}.`, "NOT_FOUND");
       // Keep the old form's viewKey only when re-attaching the SAME form —
       // carried over to a different form it would be the wrong key.
-      const registrationFormViewKey =
-        formViewKey ??
-        (formRef === existing.registrationFormRef ? existing.registrationFormViewKey : undefined);
+      const keptViewKey =
+        formViewKey ?? (formRef === formRefOf(existing) ? formViewKeyOf(existing) : undefined);
       const draft = {
-        title: existing.title,
-        description: existing.description,
-        begin: new Date(existing.begin),
-        end: new Date(existing.end),
-        location: existing.location[0],
-        participants: existing.participants,
-        isPrivate: existing.isPrivate,
-        rrule: existing.repeat.rrule ?? undefined,
-        startTzid: existing.startTzid,
-        registrationFormRef: formRef,
-        registrationFormViewKey,
-        notificationPreference: existing.notificationPreference,
-        viewKey: existing.viewKey,
-        existingId: existing.id,
+        ...draftFrom(existing),
+        forms: formsFor(formRef, keptViewKey),
       };
-      const event = existing.isPrivate
-        ? await calendar.publishPrivateCalendarEvent(draft, existing.calendarId ?? "default")
-        : await calendar.publishPublicCalendarEvent(draft);
+      const event = await republish(sdk, existing, draft, calendars, viewKey);
       return ok(`Attached form to "${event.title}".`, {
-        coordinate: `${event.kind}:${event.user}:${event.id}`,
+        coordinate: buildCoordinate(event.kind, event.user, event.id),
       });
     },
   );
@@ -588,16 +655,16 @@ function buildCalendarTools(): ToolEntry[] {
     async ({ id, title, color, description, confirm }) => {
       const blocked = requireConfirm("update_calendar", { confirm }, `updates calendar ${id}`);
       if (blocked) return blocked;
-      const lists = await calendar.fetchCalendarLists();
+      const sdk = await getCalendarSdk();
+      const lists = await sdk.fetchCalendars();
       const existing = lists.find((c) => c.id === id);
       if (!existing) return fail(`No calendar found for id ${id}.`, "NOT_FOUND");
-      const merged = {
+      const saved = await sdk.updateCalendar({
         ...existing,
         title: title ?? existing.title,
         color: color ?? existing.color,
         description: description ?? existing.description,
-      };
-      const saved = await calendar.updateCalendarList(merged);
+      });
       return ok(`Updated calendar "${saved.title}".`, { id: saved.id });
     },
   );
@@ -619,7 +686,13 @@ function buildCalendarTools(): ToolEntry[] {
         `deletes calendar ${coordinate}`,
       );
       if (blocked) return blocked;
-      await calendar.deleteCalendarList(coordinate);
+      const sdk = await getCalendarSdk();
+      const parsed = parseCoordinate(coordinate);
+      if (!parsed) return fail(`Not a calendar coordinate: ${coordinate}.`, "BAD_INPUT");
+      const lists = await sdk.fetchCalendars();
+      const list = lists.find((c) => c.id === parsed.dTag);
+      if (!list) return fail(`No calendar found for ${coordinate}.`, "NOT_FOUND");
+      await sdk.deleteCalendar(list);
       return ok(`Deleted calendar ${coordinate}.`);
     },
   );
@@ -644,14 +717,12 @@ function buildCalendarTools(): ToolEntry[] {
         `adds ${coordinate} to calendar ${calendarId}`,
       );
       if (blocked) return blocked;
-      const lists = await calendar.fetchCalendarLists();
+      const sdk = await getCalendarSdk();
+      const lists = await sdk.fetchCalendars();
       const list = lists.find((c) => c.id === calendarId);
       if (!list) return fail(`No calendar found for id ${calendarId}.`, "NOT_FOUND");
-      const saved = await calendar.addEventToCalendarList(list, [
-        coordinate,
-        relayHint ?? "",
-        viewKey ?? "",
-      ]);
+      const ref: EventRef = [coordinate, relayHint ?? "", viewKey ?? ""];
+      const saved = await sdk.linkEventToCalendar(list, ref);
       return ok(`Added ${coordinate} to "${saved.title}".`, { id: saved.id });
     },
   );
@@ -674,13 +745,48 @@ function buildCalendarTools(): ToolEntry[] {
         `removes ${coordinate} from calendar ${calendarId}`,
       );
       if (blocked) return blocked;
-      const lists = await calendar.fetchCalendarLists();
+      const sdk = await getCalendarSdk();
+      const lists = await sdk.fetchCalendars();
       const list = lists.find((c) => c.id === calendarId);
       if (!list) return fail(`No calendar found for id ${calendarId}.`, "NOT_FOUND");
-      const saved = await calendar.removeEventFromCalendarList(list, coordinate);
+      const saved = await sdk.unlinkEventFromCalendar(list, coordinate);
       return ok(`Removed ${coordinate} from "${saved.title}".`, { id: saved.id });
     },
   );
 
   return tools;
+}
+
+/**
+ * Republish an edited event on whichever path its kind demands.
+ *
+ * The private path must be told who already holds an invitation: the SDK
+ * re-wraps every participant missing from `previousParticipants`, so passing
+ * the event's current list is what stops an edit from spamming a fresh
+ * invitation at everyone.
+ */
+async function republish(
+  sdk: Awaited<ReturnType<typeof getCalendarSdk>>,
+  existing: CalendarEvent,
+  draft: CalendarEventDraft & { id: string },
+  calendars: readonly CalendarList[],
+  viewKey: string | undefined,
+): Promise<CalendarEvent> {
+  if (!existing.isPrivate) {
+    const { event } = await sdk.publishPublicEvent(draft, {
+      previousCreatedAt: existing.createdAt,
+    });
+    return event;
+  }
+  const published = await sdk.updatePrivateEvent(draft, {
+    previousParticipants: existing.participants,
+    calendarId: findCalendarForCoordinate(
+      calendars,
+      buildCoordinate(existing.kind, existing.user, existing.id),
+    )?.id,
+    calendars,
+    viewKey,
+    previousCreatedAt: existing.createdAt,
+  });
+  return published.event;
 }

@@ -1,4 +1,3 @@
-export * from "./types";
-export * from "./service";
+export * from "./sdk";
+export * from "./discovery";
 export * from "./booking";
-export * from "./busyList";

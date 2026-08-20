@@ -134,8 +134,8 @@ export function AIChatPanel() {
       ? [
           "Create a feedback form",
           "Schedule a meeting for tomorrow at 3pm",
-          "Create a poll about lunch options",
-          "Write a project update page",
+          "Show me responses to my latest form",
+          "What files are in my drive?",
         ]
       : [];
 
@@ -205,8 +205,7 @@ export function AIChatPanel() {
           >
             <Sparkles size={32} style={{ color: theme.palette.text.secondary, opacity: 0.4 }} />
             <Typography variant="body2" sx={{ color: "text.secondary" }}>
-              Ask me to create forms, schedule events, write pages, create polls, or browse your
-              files.
+              Ask me to create forms, schedule events, or browse your files.
             </Typography>
           </Box>
         )}

@@ -1,5 +1,3 @@
-import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
-import { CALENDAR_KINDS } from "@formstr/agent/services/calendar";
 import { Box, Button, Typography } from "@mui/material";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -16,6 +14,7 @@ import { EventDialog } from "../components/calendar/EventDialog";
 import { InvitationsView } from "../components/calendar/InvitationsView";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { PageHeader } from "../components/PageHeader";
+import type { AppCalendarEvent, CalendarList } from "../lib/calendar/types";
 import { filterEventsByCalendarVisibility } from "../lib/calendarMembership";
 import { useAuthStore, useBookingStore, useCalendarStore } from "../stores";
 import { useInvitationsStore } from "../stores/invitationsStore";
@@ -52,8 +51,8 @@ export function CalendarPage() {
   );
   const [viewMode, setViewMode] = useState<"month" | "list">("month");
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
-  const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
-  const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null);
+  const [editEvent, setEditEvent] = useState<AppCalendarEvent | null>(null);
+  const [detailEvent, setDetailEvent] = useState<AppCalendarEvent | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [editCalendar, setEditCalendar] = useState<CalendarList | null>(null);
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<Set<string>>(new Set());
@@ -98,7 +97,7 @@ export function CalendarPage() {
 
   const filteredEvents = filterEventsByCalendarVisibility(events, calendars, visibleCalendarIds);
 
-  const handleDelete = (event: CalendarEvent) => {
+  const handleDelete = (event: AppCalendarEvent) => {
     deleteEvent(event.id, `${event.kind}:${event.user}:${event.id}`);
     setDetailEvent(null);
   };
@@ -107,7 +106,7 @@ export function CalendarPage() {
     setEditEvent(null);
     setEventDialogOpen(true);
   };
-  const openEdit = (event: CalendarEvent) => {
+  const openEdit = (event: AppCalendarEvent) => {
     setDetailEvent(null);
     setEditEvent(event);
     setEventDialogOpen(true);
@@ -236,7 +235,9 @@ export function CalendarPage() {
       <EventDialog
         open={eventDialogOpen}
         onClose={() => setEventDialogOpen(false)}
-        onSubmit={(draft) => (draft.existingId ? updateEvent(draft) : createEvent(draft))}
+        onSubmit={(draft) =>
+          draft.id ? updateEvent({ ...draft, id: draft.id }) : createEvent(draft)
+        }
         calendars={calendars}
         event={editEvent}
       />
@@ -252,7 +253,7 @@ export function CalendarPage() {
         onDelete={
           editCalendar
             ? (cal) => {
-                deleteCalendar(`${CALENDAR_KINDS.calendarList}:${pubkey}:${cal.id}`, cal.id);
+                deleteCalendar(cal);
                 setManageOpen(false);
               }
             : undefined

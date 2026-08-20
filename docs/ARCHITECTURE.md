@@ -157,7 +157,8 @@ singleton, made of three parts.
   applies NIP-09 kind-5 deletions on load with a same-author forgery guard on both `e` and
   `a` targets, and keeps tombstones keyed by deletion time so that an `a`-deletion arriving
   before its target still sticks while a legitimate re-publish survives. It also honors the
-  calendar's kind-84 participant removals.
+  calendar's legacy kind-84 participant removals; the calendar itself now writes kind-5
+  deletions instead.
 - **`SubscriptionManager`** deduplicates identical `(relays, filters)` subscriptions by
   hash with reference counting, replays already-received events to late listeners, fires
   EOSE per listener, and auto-chunks filters with more than 1000 authors into batches.
@@ -462,8 +463,23 @@ invitations, RSVP with counter-proposals, shared calendar lists, Calendly-style
 appointment scheduling, recurrence, and delete-that-sticks. The wire target is
 `calendar.formstr.app`.
 
-- Services: `packages/agent/src/services/calendar/` (`service.ts`, `rsvp.ts`,
-  `booking.ts`, `busyList.ts`, `viewKey.ts`, `calendarListCodec.ts`)
+**The protocol itself lives in `@formstr/calendar-sdk`, not in this repo.** Both the app
+and the agent build a `CalendarSDK` from the singletons they already have — the signer
+from `signerManager`, the injected runtime from `nostrRuntime`, and the relay set from
+`relayManager.getRelaysForModule("calendar")` — so the SDK shares core's pool rather than
+opening its own. The SDK's README is the authority on wire format; the sections below
+summarise it.
+
+- SDK factory: `packages/app/src/lib/calendar/sdk.ts` and
+  `packages/agent/src/services/calendar/sdk.ts`
+- App types: `packages/app/src/lib/calendar/types.ts` (`AppCalendarEvent` adds the two
+  fields the app derives locally and the wire never holds — `calendarId` and
+  `isInvitation`)
+- Still in the agent, because the SDK does not implement them:
+  `booking.ts` (scheduling pages, kinds 31927/32680/1057/1058) and `discovery.ts`
+  (direct-by-author query plus the NIP-09 deletion sweep, neither of which any SDK read
+  path does). Both are tracked for upstreaming in
+  [sdk/calendar-sdk-followups.md](sdk/calendar-sdk-followups.md).
 - Stores: `calendarStore`, `invitationsStore`, `bookingStore`
 
 ### Public events (kind 31923)
@@ -482,9 +498,17 @@ interop requirement: `calendar.formstr.app` replaces the event's tags with the d
 array and reads the id from that inner `d` row. Anyone holding the view-key `nsec` decrypts
 the event, which is what makes private events shareable with invitees.
 
-Invitations are NIP-59 gift wraps (wrap kind 1052, rumor kind 52) that carry
-`["a", coordinate, relayHint]` and `["viewKey", nsec]`, published to each participant's
-NIP-65 relays.
+Invitations are NIP-59 gift wraps carrying `["a", coordinate, relayHint]` and
+`["viewKey", nsec]`, published to each participant's NIP-65 relays. The wrap is **kind
+1059 tagged `["k", "1052"]`**, with the rumor as NIP-17's kind 14 — matching
+calendar.formstr.app v2.1.0. Wraps written by super-app builds before this migration were
+bare kind 1052 with a kind-52 rumor; the app still reads those
+(`packages/app/src/lib/calendar/legacyInvitations.ts`) because the SDK's inbox filter does
+not.
+
+Dismissing an invitation publishes a NIP-09 kind-5 deletion of the wrap, which is what the
+SDK's inbox honours. Older super-app builds wrote a kind-84 participant removal instead;
+those are not read, so an invitation dismissed before this migration can resurface once.
 
 ### Calendar lists (kind 32123)
 

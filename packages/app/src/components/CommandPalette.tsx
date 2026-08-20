@@ -14,8 +14,6 @@ import { useTheme } from "@mui/material/styles";
 import {
   Calendar,
   ClipboardList,
-  FileEdit,
-  FileText,
   FolderOpen,
   Keyboard,
   LogOut,
@@ -24,7 +22,7 @@ import {
   Search,
   Sparkles,
   Sun,
-  Vote,
+  SquareKanban,
 } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -89,12 +87,12 @@ export function CommandPalette({
       action: () => run(() => navigate("/calendar")),
     },
     {
-      id: "nav-pages",
+      id: "nav-kanban",
       group: "Navigate",
-      label: "Pages",
-      shortcut: "G P",
-      icon: FileText,
-      action: () => run(() => navigate("/pages")),
+      label: "Kanban",
+      shortcut: "G K",
+      icon: SquareKanban,
+      action: () => run(() => navigate("/kanban")),
     },
     {
       id: "nav-drive",
@@ -103,14 +101,6 @@ export function CommandPalette({
       shortcut: "G D",
       icon: FolderOpen,
       action: () => run(() => navigate("/drive")),
-    },
-    {
-      id: "nav-polls",
-      group: "Navigate",
-      label: "Polls",
-      shortcut: "G V",
-      icon: Vote,
-      action: () => run(() => navigate("/polls")),
     },
     {
       id: "new-form",
@@ -127,11 +117,11 @@ export function CommandPalette({
       action: () => run(() => navigate("/calendar?action=new")),
     },
     {
-      id: "new-page",
+      id: "new-board",
       group: "Create",
-      label: "New page",
-      icon: FileEdit,
-      action: () => run(() => navigate("/pages?action=new")),
+      label: "New board",
+      icon: Plus,
+      action: () => run(() => navigate("/kanban?action=new")),
     },
     {
       id: "new-file",
@@ -139,13 +129,6 @@ export function CommandPalette({
       label: "Upload file",
       icon: Plus,
       action: () => run(() => navigate("/drive?action=new")),
-    },
-    {
-      id: "new-poll",
-      group: "Create",
-      label: "New poll",
-      icon: Plus,
-      action: () => run(() => navigate("/polls?action=new")),
     },
     {
       id: "toggle-ai",

@@ -23,13 +23,16 @@ describe("linking parseRef", () => {
     expect(ref?.params.identifier).toBe("my-form");
   });
 
-  it("maps each module's real event kinds (pages 33457, drive 34578, calendar 32678/32123)", () => {
+  it("maps each module's real event kinds (drive 34578, calendar 32678/32123, kanban 30301/32301)", () => {
     const cases: Array<[number, string]> = [
-      [33457, "pages"], // encrypted markdown doc (nostr-docs)
       [34578, "drive"], // file metadata (formstr-drive)
       [31923, "calendar"], // public time-based event
       [32678, "calendar"], // private event
       [32123, "calendar"], // calendar list
+      [30301, "kanban"], // public board (NIP-100)
+      [30302, "kanban"], // public card
+      [32301, "kanban"], // private board (NIP-100E)
+      [32302, "kanban"], // private card
     ];
     for (const [kind, module] of cases) {
       const naddr = nip19.naddrEncode({
@@ -42,9 +45,18 @@ describe("linking parseRef", () => {
     }
   });
 
-  it("maps a polls nevent (kind 1068)", () => {
-    const nevent = nip19.neventEncode({ id: "00".repeat(32), kind: 1068, relays: [] });
-    expect(parseRef(nevent)?.module).toBe("polls");
+  it("no longer resolves the removed pages and polls kinds", () => {
+    // The agent still implements both for the MCP server, but this app has no
+    // route to send a 33457 or 1068 deep link to.
+    const page = nip19.naddrEncode({
+      kind: 33457,
+      pubkey: "00".repeat(32),
+      identifier: "x",
+      relays: [],
+    });
+    expect(parseRef(page)).toBeNull();
+    const poll = nip19.neventEncode({ id: "00".repeat(32), kind: 1068, relays: [] });
+    expect(parseRef(poll)).toBeNull();
   });
 
   it("no longer claims kinds the modules don't read (30023/30024 NIP-23, 30563)", () => {
@@ -122,8 +134,8 @@ describe("linking tag-ref form", () => {
       module: "forms",
       identifier: "abcd",
     });
-    expect(parseTagRef("formstr:polls:naddr1xyz")).toEqual({
-      module: "polls",
+    expect(parseTagRef("formstr:kanban:naddr1xyz")).toEqual({
+      module: "kanban",
       identifier: "naddr1xyz",
     });
   });
@@ -137,7 +149,7 @@ describe("linking tag-ref form", () => {
 
 describe("MODULE_ROUTES", () => {
   it("has an entry for every module type", () => {
-    for (const m of ["forms", "calendar", "pages", "drive", "polls"] as const) {
+    for (const m of ["forms", "calendar", "kanban", "drive"] as const) {
       expect(MODULE_ROUTES[m]).toMatch(/^\/\w+/);
     }
   });

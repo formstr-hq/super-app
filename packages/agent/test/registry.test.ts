@@ -17,6 +17,17 @@ describe("toolRegistry", () => {
     }
   });
 
+  it("every entry is stamped with the module that owns it", () => {
+    // Hosts expose a subset of the registry by module — the web app ships
+    // Forms/Calendar/Drive while the MCP server ships everything. An untagged
+    // tool would be filtered out of every host silently, so `module` is
+    // required and stamped where the per-module arrays are combined.
+    const modules = new Set(["forms", "calendar", "pages", "polls", "drive"]);
+    for (const t of toolRegistry) {
+      expect(modules, `${t.name} has an unknown module: ${t.module}`).toContain(t.module);
+    }
+  });
+
   it("gated tools and write tools are the same set", () => {
     // Every tool that enforces requireConfirm is marked `write`, so write ⟺ gated.
     // This is the drift catcher: a write tool missing from GATED_TOOLS bypasses the

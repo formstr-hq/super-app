@@ -1,16 +1,6 @@
 import { Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import {
-  Calendar,
-  Check,
-  ClipboardList,
-  FileText,
-  FolderOpen,
-  Loader2,
-  Vote,
-  Wrench,
-  X,
-} from "lucide-react";
+import { Calendar, Check, ClipboardList, FolderOpen, Loader2, Wrench, X } from "lucide-react";
 
 import type { ToolCall } from "../../ai/types";
 import { moduleForTool } from "../../stores/aiPendingStore";
@@ -18,25 +8,19 @@ import { moduleForTool } from "../../stores/aiPendingStore";
 const MODULE_ICONS = {
   forms: ClipboardList,
   calendar: Calendar,
-  pages: FileText,
   drive: FolderOpen,
-  polls: Vote,
 } as const;
 
 const MODULE_COLORS: Record<string, { light: string; dark: string }> = {
   forms: { light: "#2563eb22", dark: "#1d4ed822" },
   calendar: { light: "#ea580c22", dark: "#c2410c22" },
-  pages: { light: "#16a34a22", dark: "#15803d22" },
   drive: { light: "#9333ea22", dark: "#7e22ce22" },
-  polls: { light: "#db277722", dark: "#be185d22" },
 };
 
 const MODULE_TEXT: Record<string, { light: string; dark: string }> = {
   forms: { light: "#1d4ed8", dark: "#93c5fd" },
   calendar: { light: "#c2410c", dark: "#fdba74" },
-  pages: { light: "#15803d", dark: "#86efac" },
   drive: { light: "#7e22ce", dark: "#d8b4fe" },
-  polls: { light: "#be185d", dark: "#f9a8d4" },
 };
 
 function humanize(toolName: string) {

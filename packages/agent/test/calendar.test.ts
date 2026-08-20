@@ -1,26 +1,32 @@
 import { nip19 } from "nostr-tools";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const sdk = vi.hoisted(() => ({
+  fetchCalendars: vi.fn(),
+  createCalendar: vi.fn(),
+  updateCalendar: vi.fn(),
+  deleteCalendar: vi.fn(),
+  linkEventToCalendar: vi.fn(),
+  unlinkEventFromCalendar: vi.fn(),
+  lookupEventViewKey: vi.fn(),
+  publishPrivateEvent: vi.fn(),
+  updatePrivateEvent: vi.fn(),
+  publishPublicEvent: vi.fn(),
+  fetchEventByCoordinate: vi.fn(),
+  deleteEvent: vi.fn(),
+  fetchInvitationsWithEvents: vi.fn(),
+  rsvp: vi.fn(),
+  fetchRsvps: vi.fn(),
+}));
+
+vi.mock("../src/services/calendar/sdk", () => ({
+  getCalendarSdk: vi.fn(async () => sdk),
+}));
+
 vi.mock("../src/services", () => ({
-  calendar: {
-    fetchCalendarEventsSync: vi.fn(),
-    fetchCalendarEventByCoordinate: vi.fn(),
-    publishPublicCalendarEvent: vi.fn(),
-    publishPrivateCalendarEvent: vi.fn(),
-    createCalendarEvent: vi.fn(),
-    deleteCalendarEvent: vi.fn(),
-    fetchCalendarLists: vi.fn(),
-    createCalendarList: vi.fn(),
-    updateCalendarList: vi.fn(),
-    deleteCalendarList: vi.fn(),
-    addEventToCalendarList: vi.fn(),
-    removeEventFromCalendarList: vi.fn(),
-    fetchInvitationsSync: vi.fn(),
-    lookupEventViewKey: vi.fn(),
-  },
-  calendarRsvp: {
-    rsvpToEvent: vi.fn(),
-    fetchRsvpsForEvent: vi.fn(),
+  calendarDiscovery: {
+    fetchEventsForUser: vi.fn(),
+    fetchEventsDirect: vi.fn(),
   },
   calendarBooking: {
     fetchSchedulingPages: vi.fn(),
@@ -31,7 +37,7 @@ vi.mock("../src/services", () => ({
   },
 }));
 
-import { calendar, calendarBooking, calendarRsvp } from "../src/services";
+import { calendarBooking, calendarDiscovery } from "../src/services";
 import { calendarTools } from "../src/tools/calendar";
 import type { ToolCtx } from "../src/tools/types";
 
@@ -52,7 +58,12 @@ function registerCalendar(server: { tools: FakeTools }, ctx: ToolCtx) {
 }
 
 describe("calendar tools", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Most tools resolve the user's lists before acting; default to none so a
+    // test only has to say so when the lists matter.
+    (sdk.fetchCalendars as any).mockResolvedValue([]);
+  });
 
   it("gates delete/rsvp behind allowWrites", () => {
     const ro = fakeServer();
@@ -77,51 +88,54 @@ describe("calendar tools", () => {
       .handler({ title: "T", start: "next friday" });
     expect(created.ok).toBe(false);
     expect(created.errorCode).toBe("BAD_INPUT");
-    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+    expect(sdk.publishPrivateEvent).not.toHaveBeenCalled();
 
     const badEnd = await tools
       .get("create_calendar_event")!
       .handler({ title: "T", start: "2026-07-02T15:00:00Z", end: "later" });
     expect(badEnd.ok).toBe(false);
     expect(badEnd.errorCode).toBe("BAD_INPUT");
-    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+    expect(sdk.publishPrivateEvent).not.toHaveBeenCalled();
 
     const listed = await tools.get("list_calendar_events")!.handler({ since: "garbage" });
     expect(listed.ok).toBe(false);
     expect(listed.errorCode).toBe("BAD_INPUT");
-    expect(calendar.fetchCalendarEventsSync).not.toHaveBeenCalled();
+    expect(calendarDiscovery.fetchEventsDirect).not.toHaveBeenCalled();
 
     const updated = await tools
       .get("update_calendar_event")!
       .handler({ coordinate: "31923:pk:d1", start: "whenever", confirm: true });
     expect(updated.ok).toBe(false);
     expect(updated.errorCode).toBe("BAD_INPUT");
-    expect(calendar.lookupEventViewKey).not.toHaveBeenCalled();
+    expect(sdk.lookupEventViewKey).not.toHaveBeenCalled();
   });
 
-  it("rsvp_event requires confirm then calls rsvpToEvent", async () => {
+  it("rsvp_event requires confirm then sends the RSVP", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
     const blocked = await tools
       .get("rsvp_event")!
       .handler({ eventCoordinate: "31923:pk:d", status: "accepted" });
     expect(blocked.ok).toBe(false);
-    expect(calendarRsvp.rsvpToEvent).not.toHaveBeenCalled();
+    expect(sdk.rsvp).not.toHaveBeenCalled();
 
     const okRes = await tools
       .get("rsvp_event")!
       .handler({ eventCoordinate: "31923:pk:d", status: "accepted", confirm: true });
-    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith(
-      "31923:pk:d",
-      "accepted",
-      false,
-      undefined,
-      undefined,
-    );
+    expect(sdk.rsvp).toHaveBeenCalledWith({
+      coordinate: "31923:pk:d",
+      payload: {
+        status: "accepted",
+        suggestedStart: undefined,
+        suggestedEnd: undefined,
+        comment: undefined,
+      },
+      viewKey: undefined,
+    });
     expect(okRes.ok).toBeTruthy();
   });
 
-  it("rsvp_event passes an explicit viewKey through to the service", async () => {
+  it("rsvp_event passes an explicit viewKey straight through", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
     await tools.get("rsvp_event")!.handler({
@@ -131,13 +145,9 @@ describe("calendar tools", () => {
       viewKey: "nsec1explicit",
       confirm: true,
     });
-    expect(calendar.lookupEventViewKey).not.toHaveBeenCalled();
-    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith(
-      "32678:pk:d",
-      "accepted",
-      true,
-      undefined,
-      "nsec1explicit",
+    expect(sdk.lookupEventViewKey).not.toHaveBeenCalled();
+    expect(sdk.rsvp).toHaveBeenCalledWith(
+      expect.objectContaining({ coordinate: "32678:pk:d", viewKey: "nsec1explicit" }),
     );
   });
 
@@ -145,7 +155,7 @@ describe("calendar tools", () => {
     // Without the viewKey a private RSVP falls back to the gift-wrap path,
     // which calendar.formstr.app never reads — the standalone-compatible
     // kind-32069 path needs the event's viewKey from the user's lists.
-    (calendar.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
+    (sdk.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
     await tools.get("rsvp_event")!.handler({
@@ -154,32 +164,35 @@ describe("calendar tools", () => {
       isPrivate: true,
       confirm: true,
     });
-    expect(calendar.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d");
-    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith(
-      "32678:pk:d",
-      "declined",
-      true,
-      undefined,
-      "nsec1fromlist",
+    expect(sdk.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d");
+    expect(sdk.rsvp).toHaveBeenCalledWith(
+      expect.objectContaining({ coordinate: "32678:pk:d", viewKey: "nsec1fromlist" }),
     );
   });
 
   it("create_calendar_event defaults to PRIVATE and auto-lists when no calendars exist", async () => {
-    // No calendars yet → nothing to ask; the service auto-creates a default list.
-    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
-    (calendar.createCalendarEvent as any).mockResolvedValue({
+    // No calendars yet → nothing to ask; the tool auto-creates a default list,
+    // because a private event's viewKey only survives inside a list's eventRef.
+    (sdk.fetchCalendars as any).mockResolvedValue([]);
+    (sdk.createCalendar as any).mockResolvedValue({ id: "auto", title: "My Calendar" });
+    (sdk.publishPrivateEvent as any).mockResolvedValue({
       event: { id: "d1", eventId: "ev1", kind: 32678, user: "pk" },
-      calendar: { id: "auto", title: "My Calendar" },
+      eventRef: ["32678:pk:d1", "wss://r.test", "nsec1k"],
+      viewKey: "nsec1k",
+      invitations: [],
     });
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
     const res = await tools
       .get("create_calendar_event")!
       .handler({ title: "Standup", start: "2026-06-10T10:00:00Z" });
-    // Defaulted to private (no isPrivate passed).
-    expect((calendar.createCalendarEvent as any).mock.calls[0][0]).toMatchObject({
-      isPrivate: true,
-    });
+    // Defaulted to private (no isPrivate passed): the private publish path ran,
+    // the public one did not, and a default calendar was minted to hold it.
+    expect(sdk.publishPrivateEvent).toHaveBeenCalled();
+    expect(sdk.publishPublicEvent).not.toHaveBeenCalled();
+    expect(sdk.createCalendar).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "My Calendar" }),
+    );
     expect(res.ok).toBeTruthy();
     expect(res.data.coordinate).toBe("32678:pk:d1");
   });
@@ -190,10 +203,13 @@ describe("calendar tools", () => {
     const hexA = "a".repeat(64);
     const npubA = nip19.npubEncode(hexA);
     const hexB = "b".repeat(64);
-    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
-    (calendar.createCalendarEvent as any).mockResolvedValue({
+    (sdk.fetchCalendars as any).mockResolvedValue([]);
+    (sdk.createCalendar as any).mockResolvedValue({ id: "auto", title: "My Calendar" });
+    (sdk.publishPrivateEvent as any).mockResolvedValue({
       event: { id: "d1", eventId: "ev1", kind: 32678, user: "pk" },
-      calendar: { id: "auto", title: "My Calendar" },
+      eventRef: ["32678:pk:d1", "wss://r.test", "nsec1k"],
+      viewKey: "nsec1k",
+      invitations: [],
     });
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
@@ -202,14 +218,11 @@ describe("calendar tools", () => {
       start: "2026-06-10T10:00:00Z",
       participants: [npubA, hexB],
     });
-    expect((calendar.createCalendarEvent as any).mock.calls[0][0].participants).toEqual([
-      hexA,
-      hexB,
-    ]);
+    expect((sdk.publishPrivateEvent as any).mock.calls[0][0].participants).toEqual([hexA, hexB]);
   });
 
   it("create_calendar_event ASKS which calendar when calendars exist and none was chosen", async () => {
-    (calendar.fetchCalendarLists as any).mockResolvedValue([
+    (sdk.fetchCalendars as any).mockResolvedValue([
       { id: "c1", title: "Work" },
       { id: "c2", title: "Personal" },
     ]);
@@ -223,17 +236,19 @@ describe("calendar tools", () => {
     // Lists the choices so the agent can ask the user.
     expect(res.text).toContain("c1");
     expect(res.text).toContain("c2");
-    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+    expect(sdk.publishPrivateEvent).not.toHaveBeenCalled();
   });
 
   it("create_calendar_event uses the chosen calendarId without asking", async () => {
-    (calendar.fetchCalendarLists as any).mockResolvedValue([
+    (sdk.fetchCalendars as any).mockResolvedValue([
       { id: "c1", title: "Work" },
       { id: "c2", title: "Personal" },
     ]);
-    (calendar.createCalendarEvent as any).mockResolvedValue({
+    (sdk.publishPrivateEvent as any).mockResolvedValue({
       event: { id: "d9", eventId: "ev9", kind: 32678, user: "pk" },
-      calendar: { id: "c2", title: "Personal" },
+      eventRef: ["32678:pk:d9", "wss://r.test", "nsec1k"],
+      viewKey: "nsec1k",
+      invitations: [],
     });
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
@@ -243,15 +258,16 @@ describe("calendar tools", () => {
       calendarId: "c2",
       participants: ["pubA"],
     });
-    expect((calendar.createCalendarEvent as any).mock.calls[0][0]).toMatchObject({
+    // The chosen calendar is a publish OPTION now, not a draft field.
+    expect((sdk.publishPrivateEvent as any).mock.calls[0][1]).toMatchObject({
       calendarId: "c2",
-      isPrivate: true,
     });
+    expect(sdk.createCalendar).not.toHaveBeenCalled();
     expect(res.data.coordinate).toBe("32678:pk:d9");
   });
 
   it("create_calendar_event returns NOT_FOUND for an unknown calendarId", async () => {
-    (calendar.fetchCalendarLists as any).mockResolvedValue([{ id: "c1", title: "Work" }]);
+    (sdk.fetchCalendars as any).mockResolvedValue([{ id: "c1", title: "Work" }]);
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
     const res = await tools.get("create_calendar_event")!.handler({
@@ -261,14 +277,14 @@ describe("calendar tools", () => {
     });
     expect(res.ok).toBe(false);
     expect(res.errorCode).toBe("NOT_FOUND");
-    expect(calendar.createCalendarEvent).not.toHaveBeenCalled();
+    expect(sdk.publishPrivateEvent).not.toHaveBeenCalled();
   });
 
   it("create_calendar_event allows an explicit public event without asking", async () => {
-    (calendar.fetchCalendarLists as any).mockResolvedValue([{ id: "c1", title: "Work" }]);
-    (calendar.createCalendarEvent as any).mockResolvedValue({
+    (sdk.fetchCalendars as any).mockResolvedValue([{ id: "c1", title: "Work" }]);
+    (sdk.publishPublicEvent as any).mockResolvedValue({
       event: { id: "d2", eventId: "ev2", kind: 31923, user: "pk" },
-      calendar: undefined,
+      relayHint: "wss://r.test",
     });
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
@@ -277,18 +293,18 @@ describe("calendar tools", () => {
       .handler({ title: "Townhall", start: "2026-06-10T10:00:00Z", isPrivate: false });
     expect(res.ok).toBeTruthy();
     expect(res.data.coordinate).toBe("31923:pk:d2");
-    expect((calendar.createCalendarEvent as any).mock.calls[0][0]).toMatchObject({
-      isPrivate: false,
-    });
+    // A public event takes the public path and is never linked into a calendar.
+    expect(sdk.publishPrivateEvent).not.toHaveBeenCalled();
+    expect(res.data.calendarId).toBeUndefined();
   });
 
   it("get_calendar_event returns the event or NOT_FOUND", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValueOnce(null);
+    (sdk.fetchEventByCoordinate as any).mockResolvedValueOnce(null);
     const miss = await tools.get("get_calendar_event")!.handler({ coordinate: "31923:p:d" });
     expect(miss.ok).toBe(false);
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValueOnce({
+    (sdk.fetchEventByCoordinate as any).mockResolvedValueOnce({
       id: "d",
       title: "Found",
       kind: 31923,
@@ -303,8 +319,8 @@ describe("calendar tools", () => {
     // times/participants — get must look it up like update/attach/rsvp do.
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
-    (calendar.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+    (sdk.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
+    (sdk.fetchEventByCoordinate as any).mockResolvedValue({
       id: "d",
       title: "Match",
       kind: 32678,
@@ -317,35 +333,34 @@ describe("calendar tools", () => {
       repeat: { rrule: null },
     });
     const res = await tools.get("get_calendar_event")!.handler({ coordinate: "32678:pk:d" });
-    expect(calendar.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d");
-    expect(calendar.fetchCalendarEventByCoordinate).toHaveBeenCalledWith(
-      "32678:pk:d",
-      "nsec1fromlist",
-    );
+    expect(sdk.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d", []);
+    expect(sdk.fetchEventByCoordinate).toHaveBeenCalledWith("32678:pk:d", {
+      viewKey: "nsec1fromlist",
+    });
     expect(res.ok).toBeTruthy();
   });
 
   it("list_calendars and create_calendar are available without writes", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
-    (calendar.fetchCalendarLists as any).mockResolvedValue([
-      { id: "c1", title: "Work", color: "#fff" },
-    ]);
+    (sdk.fetchCalendars as any).mockResolvedValue([{ id: "c1", title: "Work", color: "#fff" }]);
     const list = await tools.get("list_calendars")!.handler({});
     expect(list.data.calendars).toHaveLength(1);
 
-    (calendar.createCalendarList as any).mockResolvedValue({ id: "c2" });
+    (sdk.createCalendar as any).mockResolvedValue({ id: "c2" });
     const created = await tools.get("create_calendar")!.handler({ title: "Personal" });
-    expect(calendar.createCalendarList).toHaveBeenCalledWith("Personal", "#334155", "");
+    expect(sdk.createCalendar).toHaveBeenCalledWith({
+      title: "Personal",
+      color: "#334155",
+      description: "",
+    });
     expect(created.ok).toBeTruthy();
   });
 
   it("fetch_event_rsvps returns public RSVPs", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
-    (calendarRsvp.fetchRsvpsForEvent as any).mockResolvedValue([
-      { pubkey: "p1", status: "accepted" },
-    ]);
+    (sdk.fetchRsvps as any).mockResolvedValue([{ pubkey: "p1", status: "accepted" }]);
     const res = await tools.get("fetch_event_rsvps")!.handler({ coordinate: "31923:p:d" });
     expect(res.data.rsvps).toEqual([{ pubkey: "p1", status: "accepted" }]);
   });
@@ -353,13 +368,13 @@ describe("calendar tools", () => {
   it("list_invitations summarizes received invitations", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
-    (calendar.fetchInvitationsSync as any).mockResolvedValue([
+    (sdk.fetchInvitationsWithEvents as any).mockResolvedValue([
       {
-        wrapId: "w1",
-        eventCoordinate: "32678:a:d",
+        giftWrapId: "w1",
+        coordinate: "32678:a:d",
         authorPubkey: "a",
         kind: 32678,
-        receivedAt: 0,
+        createdAt: 0,
         event: { title: "P", begin: 123 },
       },
     ]);
@@ -378,7 +393,7 @@ describe("calendar tools", () => {
 
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+    (sdk.fetchEventByCoordinate as any).mockResolvedValue({
       id: "d",
       title: "Old",
       description: "",
@@ -391,12 +406,9 @@ describe("calendar tools", () => {
       isPrivate: false,
       repeat: { rrule: null },
     });
-    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
-      id: "d",
-      eventId: "ev",
-      kind: 31923,
-      user: "pk",
-      title: "New",
+    (sdk.publishPublicEvent as any).mockResolvedValue({
+      event: { id: "d", eventId: "ev", kind: 31923, user: "pk", title: "New" },
+      relayHint: "wss://r.test",
     });
 
     const blocked = await tools
@@ -406,8 +418,9 @@ describe("calendar tools", () => {
     const okRes = await tools
       .get("update_calendar_event")!
       .handler({ coordinate: "31923:pk:d", title: "New", confirm: true });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ existingId: "d", title: "New" }),
+    expect(sdk.publishPublicEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "d", title: "New" }),
+      expect.anything(),
     );
     expect(okRes.ok).toBeTruthy();
   });
@@ -415,7 +428,7 @@ describe("calendar tools", () => {
   it("attach_form_to_event republishes with the form ref", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+    (sdk.fetchEventByCoordinate as any).mockResolvedValue({
       id: "d",
       title: "T",
       description: "",
@@ -428,18 +441,16 @@ describe("calendar tools", () => {
       isPrivate: false,
       repeat: { rrule: null },
     });
-    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
-      id: "d",
-      eventId: "ev",
-      kind: 31923,
-      user: "pk",
-      title: "T",
+    (sdk.publishPublicEvent as any).mockResolvedValue({
+      event: { id: "d", eventId: "ev", kind: 31923, user: "pk", title: "T" },
+      relayHint: "wss://r.test",
     });
     await tools
       .get("attach_form_to_event")!
       .handler({ coordinate: "31923:pk:d", formRef: "naddr1abc", confirm: true });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ registrationFormRef: "naddr1abc", existingId: "d" }),
+    expect(sdk.publishPublicEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ forms: [{ naddr: "naddr1abc" }], id: "d" }),
+      expect.anything(),
     );
   });
 
@@ -458,16 +469,12 @@ describe("calendar tools", () => {
       participants: [],
       isPrivate: false,
       repeat: { rrule: null },
-      registrationFormRef: "naddr1old",
-      registrationFormViewKey: "vk-old",
+      forms: [{ naddr: "naddr1old", viewKey: "vk-old" }],
     };
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue(existing);
-    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
-      id: "d",
-      eventId: "ev",
-      kind: 31923,
-      user: "pk",
-      title: "T",
+    (sdk.fetchEventByCoordinate as any).mockResolvedValue(existing);
+    (sdk.publishPublicEvent as any).mockResolvedValue({
+      event: { id: "d", eventId: "ev", kind: 31923, user: "pk", title: "T" },
+      relayHint: "wss://r.test",
     });
 
     await tools.get("attach_form_to_event")!.handler({
@@ -476,39 +483,34 @@ describe("calendar tools", () => {
       formViewKey: "vk-new",
       confirm: true,
     });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        registrationFormRef: "naddr1enc",
-        registrationFormViewKey: "vk-new",
-      }),
+    expect(sdk.publishPublicEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ forms: [{ naddr: "naddr1enc", viewKey: "vk-new" }] }),
+      expect.anything(),
     );
 
     // Attaching a DIFFERENT form without a key must not carry the old form's key.
-    (calendar.publishPublicCalendarEvent as any).mockClear();
+    (sdk.publishPublicEvent as any).mockClear();
     await tools.get("attach_form_to_event")!.handler({
       coordinate: "31923:pk:d",
       formRef: "naddr1other",
       confirm: true,
     });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        registrationFormRef: "naddr1other",
-        registrationFormViewKey: undefined,
-      }),
+    expect(sdk.publishPublicEvent).toHaveBeenCalledWith(
+      // A DIFFERENT form with no key supplied carries no key at all.
+      expect.objectContaining({ forms: [{ naddr: "naddr1other" }] }),
+      expect.anything(),
     );
 
     // Re-attaching the SAME form without a key keeps its existing key.
-    (calendar.publishPublicCalendarEvent as any).mockClear();
+    (sdk.publishPublicEvent as any).mockClear();
     await tools.get("attach_form_to_event")!.handler({
       coordinate: "31923:pk:d",
       formRef: "naddr1old",
       confirm: true,
     });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        registrationFormRef: "naddr1old",
-        registrationFormViewKey: "vk-old",
-      }),
+    expect(sdk.publishPublicEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ forms: [{ naddr: "naddr1old", viewKey: "vk-old" }] }),
+      expect.anything(),
     );
   });
 
@@ -517,7 +519,7 @@ describe("calendar tools", () => {
     // tool omitted the form field entirely, so callers couldn't confirm the write.
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+    (sdk.fetchEventByCoordinate as any).mockResolvedValue({
       id: "d",
       title: "Conf",
       description: "Annual meetup",
@@ -529,10 +531,13 @@ describe("calendar tools", () => {
       participants: [],
       isPrivate: true,
       repeat: { rrule: null },
-      calendarId: "c1",
-      registrationFormRef: "naddr1form",
-      registrationFormViewKey: "vk-secret",
+      forms: [{ naddr: "naddr1form", viewKey: "vk-secret" }],
     });
+    // `calendarId` is no longer carried on the event — it is resolved from the
+    // list whose eventRefs name this coordinate.
+    (sdk.fetchCalendars as any).mockResolvedValue([
+      { id: "c1", title: "Work", eventRefs: [["32678:pk:d", "", ""]] },
+    ]);
     const res = await tools.get("get_calendar_event")!.handler({ coordinate: "32678:pk:d" });
     expect(res.ok).toBeTruthy();
     expect(res.data.event.registrationFormRef).toBe("naddr1form");
@@ -561,16 +566,12 @@ describe("calendar tools", () => {
       participants: [],
       isPrivate: false,
       repeat: { rrule: null },
-      registrationFormRef: "naddr1old",
-      registrationFormViewKey: "vk-old",
+      forms: [{ naddr: "naddr1old", viewKey: "vk-old" }],
     };
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue(existing);
-    (calendar.publishPublicCalendarEvent as any).mockResolvedValue({
-      id: "d",
-      eventId: "ev",
-      kind: 31923,
-      user: "pk",
-      title: "T",
+    (sdk.fetchEventByCoordinate as any).mockResolvedValue(existing);
+    (sdk.publishPublicEvent as any).mockResolvedValue({
+      event: { id: "d", eventId: "ev", kind: 31923, user: "pk", title: "T" },
+      relayHint: "wss://r.test",
     });
 
     // Replace with a different form + its key.
@@ -580,11 +581,9 @@ describe("calendar tools", () => {
       registrationFormViewKey: "vk-new",
       confirm: true,
     });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        registrationFormRef: "naddr1new",
-        registrationFormViewKey: "vk-new",
-      }),
+    expect(sdk.publishPublicEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ forms: [{ naddr: "naddr1new", viewKey: "vk-new" }] }),
+      expect.anything(),
     );
 
     // A different form WITHOUT a key must not inherit the old form's key.
@@ -593,11 +592,10 @@ describe("calendar tools", () => {
       registrationFormRef: "naddr1other",
       confirm: true,
     });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        registrationFormRef: "naddr1other",
-        registrationFormViewKey: undefined,
-      }),
+    expect(sdk.publishPublicEvent).toHaveBeenLastCalledWith(
+      // A DIFFERENT form with no key supplied carries no key at all.
+      expect.objectContaining({ forms: [{ naddr: "naddr1other" }] }),
+      expect.anything(),
     );
 
     // Re-sending the SAME ref keeps its existing key.
@@ -606,22 +604,18 @@ describe("calendar tools", () => {
       registrationFormRef: "naddr1old",
       confirm: true,
     });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        registrationFormRef: "naddr1old",
-        registrationFormViewKey: "vk-old",
-      }),
+    expect(sdk.publishPublicEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ forms: [{ naddr: "naddr1old", viewKey: "vk-old" }] }),
+      expect.anything(),
     );
 
     // Omitting the field keeps the current form untouched.
     await tools
       .get("update_calendar_event")!
       .handler({ coordinate: "31923:pk:d", title: "T2", confirm: true });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        registrationFormRef: "naddr1old",
-        registrationFormViewKey: "vk-old",
-      }),
+    expect(sdk.publishPublicEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ forms: [{ naddr: "naddr1old", viewKey: "vk-old" }] }),
+      expect.anything(),
     );
 
     // Empty string detaches the form (and drops its key).
@@ -630,19 +624,22 @@ describe("calendar tools", () => {
       registrationFormRef: "",
       confirm: true,
     });
-    expect(calendar.publishPublicCalendarEvent).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        registrationFormRef: undefined,
-        registrationFormViewKey: undefined,
-      }),
+    expect(sdk.publishPublicEvent).toHaveBeenLastCalledWith(
+      // Detached: an empty `forms` array, carrying no key.
+      expect.objectContaining({ forms: [] }),
+      expect.anything(),
     );
   });
 
   it("create_calendar_event echoes how many invitations were sent", async () => {
-    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
-    (calendar.createCalendarEvent as any).mockResolvedValue({
+    (sdk.fetchCalendars as any).mockResolvedValue([]);
+    (sdk.createCalendar as any).mockResolvedValue({ id: "auto", title: "My Calendar" });
+    (sdk.publishPrivateEvent as any).mockResolvedValue({
       event: { id: "d1", eventId: "ev1", kind: 32678, user: "pk" },
-      calendar: { id: "auto", title: "My Calendar" },
+      eventRef: ["32678:pk:d1", "wss://r.test", "nsec1k"],
+      viewKey: "nsec1k",
+      // One gift wrap per participant, as the SDK actually published them.
+      invitations: [{ id: "w1" }, { id: "w2" }],
     });
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
@@ -663,8 +660,8 @@ describe("calendar tools", () => {
     // event becomes un-decryptable (invalid MAC) on calendar.formstr.app.
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
-    (calendar.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+    (sdk.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
+    (sdk.fetchEventByCoordinate as any).mockResolvedValue({
       id: "d",
       title: "Match",
       description: "",
@@ -679,34 +676,73 @@ describe("calendar tools", () => {
       viewKey: "nsec1fromlist",
       repeat: { rrule: null },
     });
-    (calendar.publishPrivateCalendarEvent as any).mockResolvedValue({
-      id: "d",
-      eventId: "ev",
-      kind: 32678,
-      user: "pk",
-      title: "Match",
+    (sdk.updatePrivateEvent as any).mockResolvedValue({
+      event: { id: "d", eventId: "ev", kind: 32678, user: "pk", title: "Match" },
+      eventRef: ["32678:pk:d", "wss://r.test", "nsec1fromlist"],
+      viewKey: "nsec1fromlist",
+      invitations: [],
     });
 
     await tools
       .get("update_calendar_event")!
       .handler({ coordinate: "32678:pk:d", title: "Match", confirm: true });
 
-    expect(calendar.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d");
-    expect(calendar.fetchCalendarEventByCoordinate).toHaveBeenCalledWith(
-      "32678:pk:d",
-      "nsec1fromlist",
+    expect(sdk.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d", []);
+    expect(sdk.fetchEventByCoordinate).toHaveBeenCalledWith("32678:pk:d", {
+      viewKey: "nsec1fromlist",
+    });
+    expect(sdk.updatePrivateEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "d" }),
+      expect.objectContaining({
+        viewKey: "nsec1fromlist",
+        // Everyone already invited, so the edit re-wraps nobody.
+        previousParticipants: ["pubA"],
+      }),
     );
-    expect(calendar.publishPrivateCalendarEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ existingId: "d", viewKey: "nsec1fromlist" }),
-      "c1",
+  });
+
+  it("update_calendar_event does not re-invite participants who already hold one", async () => {
+    // `updatePrivateEvent` gift-wraps a fresh invitation at every participant
+    // missing from `previousParticipants`. Omitting it would spam everyone on
+    // the event with a duplicate invite on every edit.
+    const { server, tools } = fakeServer();
+    registerCalendar(server, { allowWrites: true });
+    (sdk.lookupEventViewKey as any).mockResolvedValue("nsec1k");
+    (sdk.fetchEventByCoordinate as any).mockResolvedValue({
+      id: "d1",
+      title: "Standup",
+      description: "",
+      begin: 1,
+      end: 2,
+      kind: 32678,
+      user: "me",
+      location: [],
+      participants: ["bob", "carol"],
+      isPrivate: true,
+      repeat: { rrule: null },
+    });
+    (sdk.updatePrivateEvent as any).mockResolvedValue({
+      event: { id: "d1", eventId: "ev", kind: 32678, user: "me", title: "Renamed" },
+      eventRef: ["32678:me:d1", "wss://r.test", "nsec1k"],
+      viewKey: "nsec1k",
+      invitations: [],
+    });
+
+    await tools
+      .get("update_calendar_event")!
+      .handler({ coordinate: "32678:me:d1", title: "Renamed", confirm: true });
+
+    expect(sdk.updatePrivateEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ previousParticipants: ["bob", "carol"] }),
     );
   });
 
   it("attach_form_to_event recovers a private event's viewKey and reuses it on republish", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
-    (calendar.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
-    (calendar.fetchCalendarEventByCoordinate as any).mockResolvedValue({
+    (sdk.lookupEventViewKey as any).mockResolvedValue("nsec1fromlist");
+    (sdk.fetchEventByCoordinate as any).mockResolvedValue({
       id: "d",
       title: "Match",
       description: "",
@@ -721,30 +757,24 @@ describe("calendar tools", () => {
       viewKey: "nsec1fromlist",
       repeat: { rrule: null },
     });
-    (calendar.publishPrivateCalendarEvent as any).mockResolvedValue({
-      id: "d",
-      eventId: "ev",
-      kind: 32678,
-      user: "pk",
-      title: "Match",
+    (sdk.updatePrivateEvent as any).mockResolvedValue({
+      event: { id: "d", eventId: "ev", kind: 32678, user: "pk", title: "Match" },
+      eventRef: ["32678:pk:d", "wss://r.test", "nsec1fromlist"],
+      viewKey: "nsec1fromlist",
+      invitations: [],
     });
 
     await tools
       .get("attach_form_to_event")!
       .handler({ coordinate: "32678:pk:d", formRef: "naddr1abc", confirm: true });
 
-    expect(calendar.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d");
-    expect(calendar.fetchCalendarEventByCoordinate).toHaveBeenCalledWith(
-      "32678:pk:d",
-      "nsec1fromlist",
-    );
-    expect(calendar.publishPrivateCalendarEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        existingId: "d",
-        viewKey: "nsec1fromlist",
-        registrationFormRef: "naddr1abc",
-      }),
-      "c1",
+    expect(sdk.lookupEventViewKey).toHaveBeenCalledWith("32678:pk:d", []);
+    expect(sdk.fetchEventByCoordinate).toHaveBeenCalledWith("32678:pk:d", {
+      viewKey: "nsec1fromlist",
+    });
+    expect(sdk.updatePrivateEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "d", forms: [{ naddr: "naddr1abc" }] }),
+      expect.objectContaining({ viewKey: "nsec1fromlist" }),
     );
   });
 
@@ -765,7 +795,7 @@ describe("calendar tools", () => {
   it("update_calendar requires confirm then merges and republishes the list", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
-    (calendar.fetchCalendarLists as any).mockResolvedValue([
+    (sdk.fetchCalendars as any).mockResolvedValue([
       {
         id: "c1",
         eventId: "e1",
@@ -777,16 +807,16 @@ describe("calendar tools", () => {
         isVisible: true,
       },
     ]);
-    (calendar.updateCalendarList as any).mockResolvedValue({ id: "c1", title: "New" });
+    (sdk.updateCalendar as any).mockResolvedValue({ id: "c1", title: "New" });
 
     const blocked = await tools.get("update_calendar")!.handler({ id: "c1", title: "New" });
     expect(blocked.ok).toBe(false);
-    expect(calendar.updateCalendarList).not.toHaveBeenCalled();
+    expect(sdk.updateCalendar).not.toHaveBeenCalled();
 
     const okRes = await tools
       .get("update_calendar")!
       .handler({ id: "c1", title: "New", color: "#fff", confirm: true });
-    expect(calendar.updateCalendarList).toHaveBeenCalledWith(
+    expect(sdk.updateCalendar).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "c1",
         title: "New",
@@ -801,26 +831,29 @@ describe("calendar tools", () => {
   it("update_calendar returns NOT_FOUND when the list is missing", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
-    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
+    (sdk.fetchCalendars as any).mockResolvedValue([]);
     const res = await tools
       .get("update_calendar")!
       .handler({ id: "zzz", title: "x", confirm: true });
     expect(res.ok).toBe(false);
-    expect(calendar.updateCalendarList).not.toHaveBeenCalled();
+    expect(sdk.updateCalendar).not.toHaveBeenCalled();
   });
 
-  it("delete_calendar requires confirm then calls deleteCalendarList", async () => {
+  it("delete_calendar requires confirm then deletes the resolved list", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
 
     const blocked = await tools.get("delete_calendar")!.handler({ coordinate: "32123:pk:c1" });
     expect(blocked.ok).toBe(false);
-    expect(calendar.deleteCalendarList).not.toHaveBeenCalled();
+    expect(sdk.deleteCalendar).not.toHaveBeenCalled();
 
+    // The SDK deletes a list object, not a coordinate, so the tool resolves the
+    // coordinate's d-tag against the user's lists first.
+    (sdk.fetchCalendars as any).mockResolvedValue([{ id: "c1", title: "Work" }]);
     const okRes = await tools
       .get("delete_calendar")!
       .handler({ coordinate: "32123:pk:c1", confirm: true });
-    expect(calendar.deleteCalendarList).toHaveBeenCalledWith("32123:pk:c1");
+    expect(sdk.deleteCalendar).toHaveBeenCalledWith(expect.objectContaining({ id: "c1" }));
     expect(okRes.ok).toBeTruthy();
   });
 
@@ -841,8 +874,8 @@ describe("calendar tools", () => {
   it("add_event_to_calendar resolves the list and calls addEventToCalendarList", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
-    (calendar.fetchCalendarLists as any).mockResolvedValue([{ id: "c1", eventRefs: [] }]);
-    (calendar.addEventToCalendarList as any).mockResolvedValue({
+    (sdk.fetchCalendars as any).mockResolvedValue([{ id: "c1", eventRefs: [] }]);
+    (sdk.linkEventToCalendar as any).mockResolvedValue({
       id: "c1",
       eventRefs: [["31923:pk:d", "wss://r", "nsec1view"]],
     });
@@ -851,7 +884,7 @@ describe("calendar tools", () => {
       .get("add_event_to_calendar")!
       .handler({ calendarId: "c1", coordinate: "31923:pk:d" });
     expect(blocked.ok).toBe(false);
-    expect(calendar.addEventToCalendarList).not.toHaveBeenCalled();
+    expect(sdk.linkEventToCalendar).not.toHaveBeenCalled();
 
     const okRes = await tools.get("add_event_to_calendar")!.handler({
       calendarId: "c1",
@@ -860,36 +893,37 @@ describe("calendar tools", () => {
       viewKey: "nsec1view",
       confirm: true,
     });
-    expect(calendar.addEventToCalendarList).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "c1" }),
-      ["31923:pk:d", "wss://r", "nsec1view"],
-    );
+    expect(sdk.linkEventToCalendar).toHaveBeenCalledWith(expect.objectContaining({ id: "c1" }), [
+      "31923:pk:d",
+      "wss://r",
+      "nsec1view",
+    ]);
     expect(okRes.ok).toBeTruthy();
   });
 
   it("add_event_to_calendar returns NOT_FOUND when the calendar is missing", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
-    (calendar.fetchCalendarLists as any).mockResolvedValue([]);
+    (sdk.fetchCalendars as any).mockResolvedValue([]);
     const res = await tools
       .get("add_event_to_calendar")!
       .handler({ calendarId: "nope", coordinate: "31923:pk:d", confirm: true });
     expect(res.ok).toBe(false);
-    expect(calendar.addEventToCalendarList).not.toHaveBeenCalled();
+    expect(sdk.linkEventToCalendar).not.toHaveBeenCalled();
   });
 
   it("remove_event_from_calendar resolves the list and calls removeEventFromCalendarList", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
-    (calendar.fetchCalendarLists as any).mockResolvedValue([
+    (sdk.fetchCalendars as any).mockResolvedValue([
       { id: "c1", eventRefs: [["31923:pk:d", "", ""]] },
     ]);
-    (calendar.removeEventFromCalendarList as any).mockResolvedValue({ id: "c1", eventRefs: [] });
+    (sdk.unlinkEventFromCalendar as any).mockResolvedValue({ id: "c1", eventRefs: [] });
 
     const okRes = await tools
       .get("remove_event_from_calendar")!
       .handler({ calendarId: "c1", coordinate: "31923:pk:d", confirm: true });
-    expect(calendar.removeEventFromCalendarList).toHaveBeenCalledWith(
+    expect(sdk.unlinkEventFromCalendar).toHaveBeenCalledWith(
       expect.objectContaining({ id: "c1" }),
       "31923:pk:d",
     );
@@ -898,7 +932,7 @@ describe("calendar tools", () => {
 
   // ── Task 20: RSVP suggested-time + note ────────────────────
 
-  it("rsvp_event forwards suggested times and comment as the 4th arg", async () => {
+  it("rsvp_event forwards suggested times and comment in the payload", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: true });
     await tools.get("rsvp_event")!.handler({
@@ -909,19 +943,23 @@ describe("calendar tools", () => {
       comment: "running late",
       confirm: true,
     });
-    expect(calendarRsvp.rsvpToEvent).toHaveBeenCalledWith(
-      "31923:pk:d",
-      "tentative",
-      false,
-      { suggestedStart: 1000, suggestedEnd: 2000, comment: "running late" },
-      undefined,
+    expect(sdk.rsvp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        coordinate: "31923:pk:d",
+        payload: {
+          status: "tentative",
+          suggestedStart: 1000,
+          suggestedEnd: 2000,
+          comment: "running late",
+        },
+      }),
     );
   });
 
   it("fetch_event_rsvps includes suggested times and comment", async () => {
     const { server, tools } = fakeServer();
     registerCalendar(server, { allowWrites: false });
-    (calendarRsvp.fetchRsvpsForEvent as any).mockResolvedValue([
+    (sdk.fetchRsvps as any).mockResolvedValue([
       {
         pubkey: "p1",
         status: "tentative",
@@ -1012,9 +1050,7 @@ describe("calendar tools", () => {
         schedulingPageRef: "31927:pk:p1",
       },
     ]);
-    (calendar.fetchCalendarLists as any).mockResolvedValue([
-      { id: "c1", title: "Work", eventRefs: [] },
-    ]);
+    (sdk.fetchCalendars as any).mockResolvedValue([{ id: "c1", title: "Work", eventRefs: [] }]);
     (calendarBooking.approveBookingRequest as any).mockResolvedValue({
       event: { id: "d1", kind: 32678, user: "pk" },
       calendar: { id: "c1" },

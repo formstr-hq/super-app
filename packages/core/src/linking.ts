@@ -7,7 +7,7 @@
 
 import { nip19 } from "nostr-tools";
 
-export type ModuleType = "forms" | "calendar" | "pages" | "drive" | "polls";
+export type ModuleType = "forms" | "calendar" | "kanban" | "drive";
 
 export interface ModuleRef {
   module: ModuleType;
@@ -20,9 +20,8 @@ export interface ModuleRef {
 export const MODULE_ROUTES: Record<ModuleType, string> = {
   forms: "/forms",
   calendar: "/calendar",
-  pages: "/pages",
+  kanban: "/kanban",
   drive: "/drive",
-  polls: "/polls",
 } as const;
 
 /**
@@ -38,12 +37,13 @@ const KIND_MODULE_MAP: Record<number, ModuleType> = {
   32678: "calendar", // Private event
   32679: "calendar", // Private event (legacy recurring variant, read-only)
   32123: "calendar", // Calendar list
-  // Pages
-  33457: "pages", // Encrypted markdown doc (nostr-docs)
+  // Kanban (NIP-100 public, NIP-100E private)
+  30301: "kanban", // Public board
+  30302: "kanban", // Public card
+  32301: "kanban", // Private board
+  32302: "kanban", // Private card
   // Drive
   34578: "drive", // File metadata (formstr-drive)
-  // Polls
-  1068: "polls", // Poll event (NIP-88)
 };
 
 /**
@@ -127,13 +127,7 @@ export function resolveRef(bech32: string): string | null {
   return ref?.route ?? null;
 }
 
-const MODULE_TYPES: readonly ModuleType[] = [
-  "forms",
-  "calendar",
-  "pages",
-  "drive",
-  "polls",
-] as const;
+const MODULE_TYPES: readonly ModuleType[] = ["forms", "calendar", "kanban", "drive"] as const;
 
 /** Format a cross-module reference as `formstr:<module>:<identifier>` (event-tag form). */
 export function createTagRef(module: ModuleType, identifier: string): string {

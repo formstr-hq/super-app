@@ -1,10 +1,4 @@
-import {
-  signerManager,
-  nostrRuntime,
-  nip44SelfDecrypt,
-  wrapEvent,
-  unwrapEvent,
-} from "@formstr/core";
+import { signerManager, nostrRuntime, nip44SelfDecrypt, wrapEvent } from "@formstr/core";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@formstr/core", () => ({
@@ -13,17 +7,23 @@ vi.mock("@formstr/core", () => ({
   relayManager: { getRelaysForModule: vi.fn(() => ["wss://relay.test"]) },
   nip44SelfDecrypt: vi.fn(),
   wrapEvent: vi.fn(),
+}));
+
+vi.mock("@formstr/calendar-sdk", () => ({
+  decryptWithViewKey: vi.fn(),
   unwrapEvent: vi.fn(),
 }));
 
-vi.mock("./service", () => ({
-  publishPrivateCalendarEvent: vi.fn(),
-  addEventToCalendarList: vi.fn(),
+const sdk = vi.hoisted(() => ({
+  publishPrivateEvent: vi.fn(),
+  addBusyRange: vi.fn(),
+}));
+vi.mock("./sdk", () => ({
+  getCalendarSdk: vi.fn(async () => sdk),
+  toCalendarSigner: (signer: unknown) => signer,
 }));
 
-vi.mock("./viewKey", () => ({ decryptWithViewKey: vi.fn() }));
-
-vi.mock("./busyList", () => ({ addBusyRange: vi.fn() }));
+import { decryptWithViewKey, unwrapEvent, type CalendarList } from "@formstr/calendar-sdk";
 
 import {
   approveBookingRequest,
@@ -33,10 +33,6 @@ import {
   fetchSchedulingPages,
   type BookingRequest,
 } from "./booking";
-import { addBusyRange } from "./busyList";
-import { publishPrivateCalendarEvent, addEventToCalendarList } from "./service";
-import type { CalendarList } from "./types";
-import { decryptWithViewKey } from "./viewKey";
 
 const mockSigner = { getPublicKey: vi.fn().mockResolvedValue("host") };
 
@@ -63,12 +59,10 @@ describe("fetchSchedulingPages", () => {
     (nip44SelfDecrypt as any).mockResolvedValue(
       JSON.stringify({ viewKey: "nsec1abc", dTag: "p1" }),
     );
-    (decryptWithViewKey as any).mockResolvedValue(
-      JSON.stringify([
-        ["title", "Intro call"],
-        ["description", "30m"],
-      ]),
-    );
+    (decryptWithViewKey as any).mockReturnValue([
+      ["title", "Intro call"],
+      ["description", "30m"],
+    ]);
 
     const pages = await fetchSchedulingPages();
     expect(pages).toHaveLength(1);
@@ -136,6 +130,12 @@ describe("fetchBookingRequests", () => {
     (unwrapEvent as any).mockResolvedValue({ kind: 9, pubkey: "x", tags: [] });
     expect(await fetchBookingRequests()).toEqual([]);
   });
+
+  it("skips a wrap that fails gift-wrap verification instead of failing the whole fetch", async () => {
+    (nostrRuntime.querySync as any).mockResolvedValue([{ id: "w1", created_at: 5 }]);
+    (unwrapEvent as any).mockRejectedValue(new Error("seal signature invalid"));
+    expect(await fetchBookingRequests()).toEqual([]);
+  });
 });
 
 const calendar: CalendarList = {
@@ -146,7 +146,6 @@ const calendar: CalendarList = {
   color: "#000",
   eventRefs: [],
   createdAt: 0,
-  isVisible: true,
 };
 
 const request: BookingRequest = {
@@ -166,64 +165,74 @@ const request: BookingRequest = {
 
 describe("approveBookingRequest", () => {
   it("publishes the appointment with the booker's d-tag + viewKey and notifies the booker", async () => {
-    (publishPrivateCalendarEvent as any).mockResolvedValue({
-      id: "appt1",
-      eventId: "ev",
-      kind: 32678,
-      user: "host",
+    sdk.publishPrivateEvent.mockResolvedValue({
+      event: { id: "appt1", eventId: "ev", kind: 32678, user: "host", viewKey: "nsec1view" },
+      signedEvent: { id: "ev" },
+      eventRef: ["32678:host:appt1", "", "nsec1view"],
       viewKey: "nsec1view",
+      invitations: [],
+      relayHint: "",
     });
-    (addEventToCalendarList as any).mockResolvedValue({
-      ...calendar,
-      eventRefs: [["32678:host:appt1", "", "nsec1view"]],
-    });
+    sdk.addBusyRange.mockResolvedValue([]);
     (wrapEvent as any).mockResolvedValue({ id: "wrap" });
 
     const result = await approveBookingRequest(request, calendar);
 
-    expect(publishPrivateCalendarEvent).toHaveBeenCalledWith(
+    expect(sdk.publishPrivateEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        existingId: "appt1",
-        viewKey: "nsec1view",
+        title: "Coffee",
+        begin: 100000,
+        end: 200000,
         participants: ["booker"],
       }),
-      "c1",
+      expect.objectContaining({
+        dTag: "appt1",
+        viewKey: "nsec1view",
+        calendarId: "c1",
+      }),
     );
-    expect(addEventToCalendarList).toHaveBeenCalled();
     // The approval response gift wrap is published.
     expect(wrapEvent).toHaveBeenCalled();
     expect(nostrRuntime.publish).toHaveBeenCalled();
     expect(result.event.id).toBe("appt1");
+    expect(result.calendar.eventRefs).toEqual([["32678:host:appt1", "", "nsec1view"]]);
   });
 
   it("publishes a public busy entry so future bookers see the slot taken", async () => {
-    (publishPrivateCalendarEvent as any).mockResolvedValue({
-      id: "appt1",
-      eventId: "ev",
-      kind: 32678,
-      user: "host",
+    sdk.publishPrivateEvent.mockResolvedValue({
+      event: {
+        id: "appt1",
+        eventId: "ev",
+        kind: 32678,
+        user: "host",
+        viewKey: "nsec1view",
+        begin: 100000,
+        end: 200000,
+      },
+      signedEvent: { id: "ev" },
+      eventRef: ["32678:host:appt1", "", "nsec1view"],
       viewKey: "nsec1view",
-      begin: 100000,
-      end: 200000,
+      invitations: [],
+      relayHint: "",
     });
-    (addEventToCalendarList as any).mockResolvedValue(calendar);
+    sdk.addBusyRange.mockResolvedValue([]);
     (wrapEvent as any).mockResolvedValue({ id: "wrap" });
 
     await approveBookingRequest(request, calendar);
-    expect(addBusyRange).toHaveBeenCalledWith({ start: 100000, end: 200000 });
+    expect(sdk.addBusyRange).toHaveBeenCalledWith({ start: 100000, end: 200000 });
   });
 
   it("does not fail the approval when the busy-entry publish fails", async () => {
-    (publishPrivateCalendarEvent as any).mockResolvedValue({
-      id: "appt1",
-      eventId: "ev",
-      kind: 32678,
-      user: "host",
+    sdk.publishPrivateEvent.mockResolvedValue({
+      event: { id: "appt1", eventId: "ev", kind: 32678, user: "host", viewKey: "nsec1view" },
+      signedEvent: { id: "ev" },
+      eventRef: ["32678:host:appt1", "", "nsec1view"],
       viewKey: "nsec1view",
+      invitations: [],
+      relayHint: "",
     });
-    (addEventToCalendarList as any).mockResolvedValue(calendar);
+    sdk.addBusyRange.mockRejectedValue(new Error("relay down"));
     (wrapEvent as any).mockResolvedValue({ id: "wrap" });
-    (addBusyRange as any).mockRejectedValue(new Error("relay down"));
 
     const result = await approveBookingRequest(request, calendar);
     expect(result.event.id).toBe("appt1");

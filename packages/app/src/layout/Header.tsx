@@ -10,17 +10,15 @@ import { useAuthStore, useSettingsStore } from "../stores";
 const NAV_ITEMS = [
   { label: "Forms", path: "/forms" },
   { label: "Calendar", path: "/calendar" },
-  { label: "Pages", path: "/pages" },
+  { label: "Kanban", path: "/kanban" },
   { label: "Drive", path: "/drive" },
-  { label: "Polls", path: "/polls" },
 ] as const;
 
 const ROUTE_LABELS: Record<string, string> = {
   "/forms": "Forms",
   "/calendar": "Calendar",
-  "/pages": "Pages",
+  "/kanban": "Kanban",
   "/drive": "Drive",
-  "/polls": "Polls",
 };
 
 interface HeaderProps {

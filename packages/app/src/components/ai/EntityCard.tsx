@@ -1,7 +1,7 @@
 import { resolveRef } from "@formstr/core";
 import { Box, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { Calendar, ClipboardList, FileText, FolderOpen, Vote } from "lucide-react";
+import { Calendar, ClipboardList, FileText, FolderOpen } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import type { EntityRef } from "../../ai/types";
@@ -9,17 +9,13 @@ import type { EntityRef } from "../../ai/types";
 const MODULE_ICONS: Record<string, typeof FileText> = {
   forms: ClipboardList,
   calendar: Calendar,
-  pages: FileText,
   drive: FolderOpen,
-  polls: Vote,
 };
 
 const MODULE_TEXT: Record<string, { light: string; dark: string }> = {
   forms: { light: "#1d4ed8", dark: "#93c5fd" },
   calendar: { light: "#c2410c", dark: "#fdba74" },
-  pages: { light: "#15803d", dark: "#86efac" },
   drive: { light: "#7e22ce", dark: "#d8b4fe" },
-  polls: { light: "#be185d", dark: "#f9a8d4" },
 };
 
 export function EntityCard({ entity }: { entity: EntityRef }) {

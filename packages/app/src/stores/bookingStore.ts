@@ -6,8 +6,9 @@ import {
   type BookingRequest,
   type SchedulingPage,
 } from "@formstr/agent/services/calendar/booking";
-import type { CalendarList } from "@formstr/agent/services/calendar/types";
 import { create } from "zustand";
+
+import type { CalendarList } from "../lib/calendar/types";
 
 import { useCalendarStore } from "./calendarStore";
 

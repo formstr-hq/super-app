@@ -1,9 +1,9 @@
-import type { CalendarEvent, CalendarList } from "@formstr/agent/services/calendar";
 import { describe, it, expect } from "vitest";
 
+import type { AppCalendarEvent, CalendarList, EventRef } from "./calendar/types";
 import { filterEventsByCalendarVisibility } from "./calendarMembership";
 
-function evt(over: Partial<CalendarEvent> = {}): CalendarEvent {
+function evt(over: Partial<AppCalendarEvent> = {}): AppCalendarEvent {
   return {
     id: "d1",
     eventId: "e1",
@@ -21,10 +21,10 @@ function evt(over: Partial<CalendarEvent> = {}): CalendarEvent {
     isPrivate: false,
     repeat: { rrule: null },
     ...over,
-  } as CalendarEvent;
+  } as AppCalendarEvent;
 }
 
-function cal(id: string, refs: string[][]): CalendarList {
+function cal(id: string, refs: EventRef[]): CalendarList {
   return {
     id,
     eventId: `evt-${id}`,
@@ -33,7 +33,6 @@ function cal(id: string, refs: string[][]): CalendarList {
     color: "#000",
     eventRefs: refs,
     createdAt: 0,
-    isVisible: true,
   };
 }
 

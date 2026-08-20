@@ -1,8 +1,3 @@
-import type {
-  CalendarEvent,
-  CalendarEventDraft,
-  CalendarList,
-} from "@formstr/agent/services/calendar";
 import {
   Box,
   Button,
@@ -22,6 +17,11 @@ import {
 import { ChevronDown, ChevronUp, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import type {
+  AppCalendarEvent,
+  AppCalendarEventDraft,
+  CalendarList,
+} from "../../lib/calendar/types";
 import { npubToHex } from "../../lib/npub";
 import { buildRRuleString, parseRRuleString, type RRuleParts } from "../../lib/rrule";
 
@@ -37,10 +37,10 @@ function toLocalInput(ms: number): string {
 interface EventDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (draft: CalendarEventDraft) => Promise<unknown>;
+  onSubmit: (draft: AppCalendarEventDraft) => Promise<unknown>;
   calendars: CalendarList[];
   /** When provided, the dialog is in edit mode and prefills from this event. */
-  event?: CalendarEvent | null;
+  event?: AppCalendarEvent | null;
   defaultDate?: Date;
 }
 
@@ -82,9 +82,9 @@ export function EventDialog({
       setIsPrivate(event.isPrivate);
       setParticipantsText(event.participants.join(", "));
       setRruleParts(parseRRuleString(event.repeat.rrule));
-      setFormRef(event.registrationFormRef ?? "");
+      setFormRef(event.forms?.[0]?.naddr ?? "");
       setAdvancedOpen(
-        !!event.repeat.rrule || !!event.registrationFormRef || event.participants.length > 0,
+        !!event.repeat.rrule || !!event.forms?.length || event.participants.length > 0,
       );
     } else {
       const base = defaultDate ?? new Date();
@@ -118,27 +118,28 @@ export function EventDialog({
         .filter(Boolean)
         .map(npubToHex)
         .filter((p): p is string => !!p);
+      // The form's read-only viewKey survives only when the ref is unchanged —
+      // carried over to a DIFFERENT form it would be the wrong key entirely.
+      const keptFormViewKey =
+        formRef && formRef === event?.forms?.[0]?.naddr ? event.forms[0].viewKey : undefined;
       await onSubmit({
         title,
         description,
-        begin: beginDate,
-        end: endDate,
-        location: location || undefined,
+        // The SDK's draft takes millisecond numbers, not Dates.
+        begin: beginDate.getTime(),
+        end: endDate.getTime(),
+        location: location ? [location] : undefined,
         calendarId: calendarId === "none" ? undefined : calendarId,
         isPrivate,
         participants: participants.length ? participants : undefined,
         rrule: buildRRuleString(rruleParts),
-        registrationFormRef: formRef || undefined,
-        // Preserve fields the dialog doesn't edit so an edit round-trip keeps
-        // them on the wire (form viewKey, reminder pref, the event's own
-        // viewKey so prior invitees keep decryption access).
-        registrationFormViewKey:
-          formRef && formRef === event?.registrationFormRef
-            ? event?.registrationFormViewKey
-            : undefined,
+        forms: formRef
+          ? [{ naddr: formRef, ...(keptFormViewKey ? { viewKey: keptFormViewKey } : {}) }]
+          : [],
+        // Preserve the reminder preference the dialog doesn't edit, so an edit
+        // round-trip keeps it on the wire.
         notificationPreference: event?.notificationPreference,
-        viewKey: event?.viewKey,
-        existingId: event?.id,
+        id: event?.id,
       });
       onClose();
     } catch {

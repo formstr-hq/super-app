@@ -4,7 +4,7 @@ import { ok, fail } from "../result";
 import { requireConfirm } from "../safety";
 import { drive } from "../services";
 
-import type { ToolEntry } from "./types";
+import type { ToolDef } from "./types";
 
 /** Metadata shape returned by the drive service (kept local — never imported into the AI surface). */
 interface DriveFile {
@@ -46,16 +46,16 @@ async function resolveFile(
   return { file: matches[0] };
 }
 
-export const driveTools: ToolEntry[] = buildDriveTools();
+export const driveTools: ToolDef[] = buildDriveTools();
 
-function buildDriveTools(): ToolEntry[] {
-  const tools: ToolEntry[] = [];
+function buildDriveTools(): ToolDef[] {
+  const tools: ToolDef[] = [];
   let write = false;
   const server = {
     registerTool(
       name: string,
-      config: Pick<ToolEntry, "description" | "inputSchema">,
-      handler: ToolEntry["handler"],
+      config: Pick<ToolDef, "description" | "inputSchema">,
+      handler: ToolDef["handler"],
     ) {
       tools.push({ name, ...config, handler, ...(write ? { write: true } : {}) });
     },

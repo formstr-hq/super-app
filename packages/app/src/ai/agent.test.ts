@@ -12,61 +12,77 @@ import type {
 // ── Mock the shared registry so tools are deterministic ──────────────────
 // vi.hoisted so the spies exist when the hoisted vi.mock factory runs.
 const handlerSpies = vi.hoisted(() => ({
-  create_poll: vi.fn(async () => ({ ok: true, text: "Created poll.", data: { id: "p1" } })),
+  create_form: vi.fn(async () => ({ ok: true, text: "Created form.", data: { naddr: "f1" } })),
   create_calendar_event: vi.fn(async () => ({
     ok: true,
     text: "Created event.",
     data: { eventId: "e1" },
   })),
-  list_polls: vi.fn(async () => ({ ok: true, text: "0 polls.", data: { polls: [] } })),
-  delete_poll: vi.fn(async (args: { confirm?: boolean }) => {
+  list_forms: vi.fn(async () => ({ ok: true, text: "0 forms.", data: { forms: [] } })),
+  delete_form: vi.fn(async (args: { confirm?: boolean }) => {
     if (args.confirm !== true) {
-      return { ok: false, text: 'Confirmation required for "delete_poll". ... deletes poll p1.' };
+      return { ok: false, text: 'Confirmation required for "delete_form". ... deletes form f1.' };
     }
-    return { ok: true, text: "Deleted poll p1." };
+    return { ok: true, text: "Deleted form f1." };
   }),
+  // A module the app does not surface. It must never reach a handler.
+  create_poll: vi.fn(async () => ({ ok: true, text: "Created poll.", data: { id: "p1" } })),
 }));
 
 vi.mock("@formstr/agent", () => {
   const registry = [
     {
-      name: "create_poll",
-      description: "Create a poll",
+      name: "create_form",
+      description: "Create a form",
+      module: "forms",
       inputSchema: {},
       write: false,
-      handler: handlerSpies.create_poll,
+      handler: handlerSpies.create_form,
     },
     {
       name: "create_calendar_event",
       description: "Create event",
+      module: "calendar",
       inputSchema: {},
       write: false,
       handler: handlerSpies.create_calendar_event,
     },
     {
-      name: "list_polls",
-      description: "List polls",
+      name: "list_forms",
+      description: "List forms",
+      module: "forms",
       inputSchema: {},
-      handler: handlerSpies.list_polls,
+      handler: handlerSpies.list_forms,
     },
     {
-      name: "delete_poll",
-      description: "Delete a poll",
+      name: "delete_form",
+      description: "Delete a form",
+      module: "forms",
       inputSchema: {},
       write: true,
-      handler: handlerSpies.delete_poll,
+      handler: handlerSpies.delete_form,
+    },
+    {
+      name: "create_poll",
+      description: "Create a poll",
+      module: "polls",
+      inputSchema: {},
+      write: false,
+      handler: handlerSpies.create_poll,
     },
   ];
   return {
     toolRegistry: registry,
-    isGated: (n: string) => n === "delete_poll",
+    isGated: (n: string) => n === "delete_form",
     CONFIRM_REQUIRED_PREFIX: "Confirmation required",
-    getToolSchemas: () =>
-      registry.map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: { type: "object", properties: {} },
-      })),
+    getToolSchemas: (options?: { modules?: string[] }) =>
+      registry
+        .filter((t) => !options?.modules || options.modules.includes(t.module))
+        .map((t) => ({
+          name: t.name,
+          description: t.description,
+          parameters: { type: "object", properties: {} },
+        })),
   };
 });
 
@@ -157,20 +173,20 @@ describe("Agent (core loop)", () => {
     await agent.run("hi", "pk", c.cb);
     expect(c.tokens.join("")).toBe("Hello there.");
     expect(c.done).toBe(true);
-    expect(handlerSpies.create_poll).not.toHaveBeenCalled();
+    expect(handlerSpies.create_form).not.toHaveBeenCalled();
   });
 
   it("executes a single tool call then concludes on the next round", async () => {
     const provider = new FakeProvider([
-      { toolCalls: [{ name: "create_poll", arguments: { question: "Lunch?" } }] },
-      { text: "Done — created your poll." },
+      { toolCalls: [{ name: "create_form", arguments: { question: "Lunch?" } }] },
+      { text: "Done — created your form." },
     ]);
     const agent = new Agent(provider, new ConversationContext());
     const c = collectCallbacks();
-    await agent.run("make a poll", "pk", c.cb);
-    expect(handlerSpies.create_poll).toHaveBeenCalledOnce();
-    expect(c.entities).toContain("p1"); // entity mapped from data.id
-    expect(c.steps.some((s) => s.toolName === "create_poll" && s.status === "success")).toBe(true);
+    await agent.run("make a form", "pk", c.cb);
+    expect(handlerSpies.create_form).toHaveBeenCalledOnce();
+    expect(c.entities).toContain("f1"); // entity mapped from data.naddr
+    expect(c.steps.some((s) => s.toolName === "create_form" && s.status === "success")).toBe(true);
     expect(c.tokens.join("")).toContain("Done");
     expect(c.done).toBe(true);
   });
@@ -179,27 +195,27 @@ describe("Agent (core loop)", () => {
     const provider = new FakeProvider([
       {
         toolCalls: [
-          { name: "create_poll", arguments: { question: "Lunch?" } },
+          { name: "create_form", arguments: { question: "Lunch?" } },
           {
             name: "create_calendar_event",
             arguments: { title: "Lunch", start: "2026-06-10T12:00:00Z" },
           },
         ],
       },
-      { text: "Created the poll and the event." },
+      { text: "Created the form and the event." },
     ]);
     const agent = new Agent(provider, new ConversationContext());
     const c = collectCallbacks();
-    await agent.run("poll + event", "pk", c.cb);
-    expect(handlerSpies.create_poll).toHaveBeenCalledOnce();
+    await agent.run("form + event", "pk", c.cb);
+    expect(handlerSpies.create_form).toHaveBeenCalledOnce();
     expect(handlerSpies.create_calendar_event).toHaveBeenCalledOnce();
-    expect(c.entities).toEqual(["p1", "e1"]);
+    expect(c.entities).toEqual(["f1", "e1"]);
   });
 
   it("stops after MAX_STEPS when the model never concludes", async () => {
     // Every round asks for another tool call → would loop forever without the cap.
     const provider = new FakeProvider(
-      Array.from({ length: 20 }, () => ({ toolCalls: [{ name: "list_polls" }] })),
+      Array.from({ length: 20 }, () => ({ toolCalls: [{ name: "list_forms" }] })),
     );
     const agent = new Agent(provider, new ConversationContext());
     let warned = "";
@@ -210,16 +226,47 @@ describe("Agent (core loop)", () => {
     expect(c.done).toBe(true);
   });
 
-  it("reports a thrown handler as an error step, not a crash", async () => {
-    handlerSpies.create_poll.mockRejectedValueOnce(new Error("relay down"));
+  it("refuses to execute a tool from a module the app does not surface", async () => {
+    // Pages and Polls still live in the shared registry for the MCP server.
+    // If the model calls one anyway, it must not run: the write would land on
+    // relays with no surface in this app to show, undo, or even mention it.
     const provider = new FakeProvider([
-      { toolCalls: [{ name: "create_poll", arguments: {} }] },
-      { text: "Sorry, that failed." },
+      { toolCalls: [{ name: "create_poll", arguments: { question: "Lunch?" } }] },
+      { text: "I cannot do that here." },
     ]);
     const agent = new Agent(provider, new ConversationContext());
     const c = collectCallbacks();
     await agent.run("make a poll", "pk", c.cb);
+
+    expect(handlerSpies.create_poll).not.toHaveBeenCalled();
     expect(c.steps.some((s) => s.toolName === "create_poll" && s.status === "error")).toBe(true);
+    expect(c.done).toBe(true);
+  });
+
+  it("does not advertise filtered-out modules to the provider", async () => {
+    let advertised: string[] = [];
+    const provider = new FakeProvider([{ text: "hi" }]);
+    const original = provider.generateStream.bind(provider);
+    provider.generateStream = async (messages, tools, cb, options) => {
+      advertised = tools.map((t) => t.function.name);
+      return original(messages, tools, cb, options);
+    };
+    await new Agent(provider, new ConversationContext()).run("hi", "pk", collectCallbacks().cb);
+
+    expect(advertised).toContain("create_form");
+    expect(advertised).not.toContain("create_poll");
+  });
+
+  it("reports a thrown handler as an error step, not a crash", async () => {
+    handlerSpies.create_form.mockRejectedValueOnce(new Error("relay down"));
+    const provider = new FakeProvider([
+      { toolCalls: [{ name: "create_form", arguments: {} }] },
+      { text: "Sorry, that failed." },
+    ]);
+    const agent = new Agent(provider, new ConversationContext());
+    const c = collectCallbacks();
+    await agent.run("make a form", "pk", c.cb);
+    expect(c.steps.some((s) => s.toolName === "create_form" && s.status === "error")).toBe(true);
     expect(c.error).toBeNull();
     expect(c.done).toBe(true);
   });
@@ -232,7 +279,7 @@ describe("Agent (gated confirm gate)", () => {
 
   function provider() {
     return new FakeProvider([
-      { toolCalls: [{ name: "delete_poll", arguments: { pollId: "p1" } }] },
+      { toolCalls: [{ name: "delete_form", arguments: { formId: "f1" } }] },
       { text: "Okay." },
     ]);
   }
@@ -248,21 +295,21 @@ describe("Agent (gated confirm gate)", () => {
       },
     });
     await agent.run("delete it", "pk", c.cb);
-    expect(seen).toEqual(["delete_poll"]);
-    expect(handlerSpies.delete_poll).toHaveBeenLastCalledWith(
+    expect(seen).toEqual(["delete_form"]);
+    expect(handlerSpies.delete_form).toHaveBeenLastCalledWith(
       expect.objectContaining({ confirm: true }),
       expect.anything(),
     );
-    expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "success")).toBe(true);
+    expect(c.steps.some((s) => s.toolName === "delete_form" && s.status === "success")).toBe(true);
   });
 
   it("does not execute the tool when the user declines", async () => {
     const agent = new Agent(provider(), new ConversationContext());
     const c = collectCallbacks({ onConfirmRequired: async () => false });
     await agent.run("delete it", "pk", c.cb);
-    expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "declined")).toBe(true);
+    expect(c.steps.some((s) => s.toolName === "delete_form" && s.status === "declined")).toBe(true);
     // only the no-confirm preview call ran; never with confirm:true
-    expect(handlerSpies.delete_poll).not.toHaveBeenCalledWith(
+    expect(handlerSpies.delete_form).not.toHaveBeenCalledWith(
       expect.objectContaining({ confirm: true }),
       expect.anything(),
     );
@@ -272,7 +319,7 @@ describe("Agent (gated confirm gate)", () => {
     const agent = new Agent(provider(), new ConversationContext());
     const c = collectCallbacks(); // no onConfirmRequired
     await agent.run("delete it", "pk", c.cb);
-    expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "declined")).toBe(true);
+    expect(c.steps.some((s) => s.toolName === "delete_form" && s.status === "declined")).toBe(true);
   });
 
   it("ignores the model's own confirm:true — the human still decides", async () => {
@@ -280,14 +327,14 @@ describe("Agent (gated confirm gate)", () => {
     // send it unprompted. The preview must strip it or the side effect runs
     // before onConfirmRequired ever fires.
     const selfConfirming = new FakeProvider([
-      { toolCalls: [{ name: "delete_poll", arguments: { pollId: "p1", confirm: true } }] },
+      { toolCalls: [{ name: "delete_form", arguments: { formId: "f1", confirm: true } }] },
       { text: "Okay." },
     ]);
     const agent = new Agent(selfConfirming, new ConversationContext());
     const c = collectCallbacks({ onConfirmRequired: async () => false });
     await agent.run("delete it", "pk", c.cb);
-    expect(c.steps.some((s) => s.toolName === "delete_poll" && s.status === "declined")).toBe(true);
-    expect(handlerSpies.delete_poll).not.toHaveBeenCalledWith(
+    expect(c.steps.some((s) => s.toolName === "delete_form" && s.status === "declined")).toBe(true);
+    expect(handlerSpies.delete_form).not.toHaveBeenCalledWith(
       expect.objectContaining({ confirm: true }),
       expect.anything(),
     );
@@ -301,14 +348,14 @@ describe("Agent (text-JSON tool-call fallback)", () => {
 
   it("parses a tool call embedded as plain-text JSON", async () => {
     const provider = new FakeProvider([
-      { text: '{"name": "create_poll", "parameters": {"question": "Lunch?"}}' },
-      { text: "Created your poll." },
+      { text: '{"name": "create_form", "parameters": {"name": "Survey"}}' },
+      { text: "Created your form." },
     ]);
     const agent = new Agent(provider, new ConversationContext());
     const c = collectCallbacks();
-    await agent.run("make a poll", "pk", c.cb);
-    expect(handlerSpies.create_poll).toHaveBeenCalledOnce();
-    expect(c.entities).toContain("p1");
+    await agent.run("make a form", "pk", c.cb);
+    expect(handlerSpies.create_form).toHaveBeenCalledOnce();
+    expect(c.entities).toContain("f1");
   });
 
   it("ignores JSON that is not a known tool", async () => {
@@ -316,7 +363,7 @@ describe("Agent (text-JSON tool-call fallback)", () => {
     const agent = new Agent(provider, new ConversationContext());
     const c = collectCallbacks();
     await agent.run("hi", "pk", c.cb);
-    expect(handlerSpies.create_poll).not.toHaveBeenCalled();
+    expect(handlerSpies.create_form).not.toHaveBeenCalled();
     expect(c.tokens.join("")).toContain("not a tool");
   });
 });

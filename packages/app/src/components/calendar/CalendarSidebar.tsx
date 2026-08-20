@@ -1,4 +1,3 @@
-import type { CalendarList } from "@formstr/agent/services/calendar";
 import { bookingLinkUrl, type SchedulingPage } from "@formstr/agent/services/calendar/booking";
 import { Box, Checkbox, Divider, IconButton, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -13,6 +12,7 @@ import {
 } from "lucide-react";
 import { useSnackbar } from "notistack";
 
+import type { CalendarList } from "../../lib/calendar/types";
 import { copyText } from "../../lib/clipboard";
 
 interface CalendarSidebarProps {

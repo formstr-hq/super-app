@@ -8,7 +8,11 @@ export interface ToolCtx {
   allowWrites: boolean;
 }
 
-export interface ToolEntry {
+/** The module a tool belongs to. Hosts use it to expose a subset of the registry. */
+export type ToolModule = "forms" | "calendar" | "pages" | "polls" | "drive";
+
+/** A tool as its own module file declares it, before the registry stamps `module`. */
+export interface ToolDef {
   name: string;
   description: string;
   /** zod raw shape — same value MCP's registerTool takes as `inputSchema`. */
@@ -17,4 +21,14 @@ export interface ToolEntry {
   handler: (args: any, ctx: ToolCtx) => Promise<ToolResult>;
   /** Mutating/outward tool — stdio MCP registers it only when allowWrites. */
   write?: boolean;
+}
+
+export interface ToolEntry extends ToolDef {
+  /**
+   * Which module owns this tool. Required, and stamped in `tools/index.ts` at
+   * the one place the per-module arrays are combined — so a host that exposes
+   * only some modules (the web app ships Forms/Calendar/Drive, while the MCP
+   * server ships everything) can filter without a tool ever going untagged.
+   */
+  module: ToolModule;
 }

@@ -1,15 +1,10 @@
-import {
-  toolRegistry,
-  isGated,
-  CONFIRM_REQUIRED_PREFIX,
-  type ToolCtx,
-  type ToolResult,
-} from "@formstr/agent";
+import { isGated, CONFIRM_REQUIRED_PREFIX, type ToolCtx, type ToolResult } from "@formstr/agent";
 
 import { moduleForTool, useAIPendingStore } from "../stores/aiPendingStore";
 
 import type { ConversationContext } from "./context";
 import { entityFromTool } from "./entityMap";
+import { appToolRegistry } from "./registry";
 import { buildToolDefinitions } from "./toolSchemas";
 import type {
   AgentCallbacks,
@@ -27,7 +22,7 @@ function msg(role: Message["role"], content: string, toolCallId?: string): Messa
   return { id: crypto.randomUUID(), role, content, timestamp: Date.now(), toolCallId };
 }
 
-const VALID_TOOL_NAMES = new Set(toolRegistry.map((t) => t.name));
+const VALID_TOOL_NAMES = new Set(appToolRegistry.map((t) => t.name));
 
 /** Detect tool calls a small model embedded as plain-text JSON in its content. */
 function extractTextToolCalls(text: string): ToolCall[] {
@@ -217,7 +212,7 @@ export class Agent {
 
   /** Look up + invoke the registry handler, gating irreversible tools behind a confirm. */
   private async execTool(tc: ToolCall, cb: AgentCallbacks): Promise<ToolResult> {
-    const entry = toolRegistry.find((t) => t.name === tc.name);
+    const entry = appToolRegistry.find((t) => t.name === tc.name);
     if (!entry) return { ok: false, text: `Unknown tool: ${tc.name}` };
 
     if (!isGated(tc.name)) return entry.handler(tc.arguments, this.ctx);
