@@ -1,42 +1,23 @@
 import { parseRef, resolveRef, type ModuleType } from "@formstr/core";
 import { Box, Chip, CircularProgress, Tooltip, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { Calendar, ClipboardList, FolderOpen, SquareKanban, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { accentInk } from "../lib/moduleAccent";
 import { useCalendarStore } from "../stores/calendarStore";
 import { useFormsStore } from "../stores/formsStore";
 import { useKanbanStore } from "../stores/kanbanStore";
 
-const MODULE_META: Record<
-  ModuleType,
-  {
-    icon: LucideIcon;
-    label: string;
-    color: "primary" | "secondary" | "info" | "success" | "warning";
-  }
-> = {
-  forms: {
-    icon: ClipboardList,
-    label: "Form",
-    color: "info",
-  },
-  calendar: {
-    icon: Calendar,
-    label: "Event",
-    color: "warning",
-  },
-  kanban: {
-    icon: SquareKanban,
-    label: "Board",
-    color: "success",
-  },
-  drive: {
-    icon: FolderOpen,
-    label: "File",
-    color: "secondary",
-  },
+import { DataText } from "./DataText";
+
+const MODULE_META: Record<ModuleType, { icon: LucideIcon; label: string }> = {
+  forms: { icon: ClipboardList, label: "Form" },
+  calendar: { icon: Calendar, label: "Event" },
+  kanban: { icon: SquareKanban, label: "Board" },
+  drive: { icon: FolderOpen, label: "File" },
 };
 
 interface EntityPillProps {
@@ -54,6 +35,7 @@ interface EntityPillProps {
  */
 export function EntityPill({ naddr, onRemove, size = "sm", readOnly = false }: EntityPillProps) {
   const navigate = useNavigate();
+  const mode = useTheme().palette.mode;
   const ref = useMemo(() => parseRef(naddr), [naddr]);
   const [label, resolving] = useResolveLabel(ref?.module, ref?.params);
 
@@ -61,7 +43,7 @@ export function EntityPill({ naddr, onRemove, size = "sm", readOnly = false }: E
     return (
       <Chip
         size="small"
-        label={`${naddr.slice(0, 10)}…`}
+        label={<DataText variant="caption">{`${naddr.slice(0, 10)}…`}</DataText>}
         variant="outlined"
         sx={{ verticalAlign: "baseline", cursor: "default" }}
       />
@@ -69,6 +51,7 @@ export function EntityPill({ naddr, onRemove, size = "sm", readOnly = false }: E
   }
 
   const meta = MODULE_META[ref.module];
+  const ink = accentInk(ref.module, mode);
   const Icon = meta.icon;
   const route = resolveRef(naddr) ?? `/${ref.module}`;
 
@@ -90,7 +73,7 @@ export function EntityPill({ naddr, onRemove, size = "sm", readOnly = false }: E
       <Chip
         size={size === "sm" ? "small" : "medium"}
         label={content}
-        color={meta.color}
+        variant="outlined"
         onClick={readOnly ? undefined : () => navigate(route)}
         onDelete={onRemove ? () => onRemove() : undefined}
         deleteIcon={onRemove ? <X size={12} /> : undefined}
@@ -98,6 +81,11 @@ export function EntityPill({ naddr, onRemove, size = "sm", readOnly = false }: E
           verticalAlign: "baseline",
           cursor: readOnly ? "default" : "pointer",
           fontWeight: 500,
+          color: ink,
+          borderColor: ink,
+          bgcolor: "transparent",
+          "& .MuiChip-deleteIcon": { color: ink, opacity: 0.7 },
+          "&:hover": { bgcolor: `${ink}14` },
           "& .MuiChip-label": { px: 1 },
         }}
       />

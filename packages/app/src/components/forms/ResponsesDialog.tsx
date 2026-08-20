@@ -34,6 +34,7 @@ import {
   responsesToJson,
 } from "../../lib/exportResponses";
 import { formatNpub } from "../../lib/npub";
+import { DataText } from "../DataText";
 import { EmptyState } from "../EmptyState";
 
 import { FormAnalytics } from "./FormAnalytics";
@@ -152,9 +153,7 @@ export function ResponsesDialog({ open, form, responses, isLoading, onClose }: P
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                          <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
-                            {formatNpub(r.pubkey)}
-                          </Typography>
+                          <DataText variant="caption">{formatNpub(r.pubkey)}</DataText>
                           <IconButton
                             size="small"
                             onClick={() => void handleCopyNpub(r.pubkey)}

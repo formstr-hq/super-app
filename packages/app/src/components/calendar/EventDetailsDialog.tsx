@@ -16,6 +16,7 @@ import { getCalendarSdk } from "../../lib/calendar/sdk";
 import type { AppCalendarEvent, CalendarList, RSVPResponse } from "../../lib/calendar/types";
 import { calendarForEvent } from "../../lib/calendarMembership";
 import { formatNpub } from "../../lib/npub";
+import { DataText } from "../DataText";
 
 import { RSVPBar, type RSVPBarPayload, type RSVPBarStatus } from "./RSVPBar";
 
@@ -229,7 +230,7 @@ export function EventDetailsDialog({
                     >
                       {initials(r.pubkey)}
                     </Box>
-                    <Typography variant="body2" sx={{ flex: 1, fontSize: 13.5 }}>
+                    <DataText variant="body2" sx={{ flex: 1, fontSize: 13 }}>
                       {formatNpub(r.pubkey)}
                       {r.pubkey === event.user && (
                         <Typography
@@ -241,7 +242,7 @@ export function EventDetailsDialog({
                           (organiser)
                         </Typography>
                       )}
-                    </Typography>
+                    </DataText>
                     <StatusPill status={r.status} />
                   </Box>
                   {r.comment && (

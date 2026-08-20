@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 
 import { copyText } from "../lib/clipboard";
 import { useAuthStore } from "../stores";
+import { MONO_FONT } from "../theme";
 
 function npubOf(pubkey: string): string {
   try {
@@ -111,7 +112,7 @@ export function AccountMenu({ variant = "header" }: AccountMenuProps) {
               "&:hover": { color: "text.primary" },
             }}
           >
-            <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+            <Typography variant="caption" sx={{ fontFamily: MONO_FONT }}>
               {shorten(npub)}
             </Typography>
             {copied ? <Check size={11} /> : <Copy size={11} />}
@@ -129,7 +130,7 @@ export function AccountMenu({ variant = "header" }: AccountMenuProps) {
                 if (acc.pubkey !== pubkey) void switchAccount(acc.pubkey);
                 close();
               }}
-              sx={{ gap: 1, fontSize: 12.5, fontFamily: "monospace" }}
+              sx={{ gap: 1, fontSize: 12.5, fontFamily: MONO_FONT }}
             >
               {acc.locked && <Lock size={12} />}
               {shorten(acc.npub)}

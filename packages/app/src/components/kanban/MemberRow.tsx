@@ -6,6 +6,7 @@ import { assignableRoles, roleHelp, roleLabel } from "../../kanban/roles";
 import { formatNpub } from "../../lib/npub";
 import { useProfileName } from "../../lib/profileCache";
 import type { AssignableRole } from "../../stores/kanbanMembersStore";
+import { DataText } from "../DataText";
 
 import { AssigneeAvatar } from "./AssigneeAvatar";
 
@@ -50,9 +51,9 @@ export function MemberRow({
           )}
         </Typography>
         {name !== npub && (
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
+          <DataText variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
             {npub}
-          </Typography>
+          </DataText>
         )}
       </Box>
 
