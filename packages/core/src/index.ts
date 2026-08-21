@@ -10,6 +10,7 @@ export {
   DeferredSigner,
   createDriveSignerAdapter,
   SignerUnavailableError,
+  signerPool,
 } from "./signer";
 export type {
   NostrSigner,
@@ -23,8 +24,17 @@ export type {
 } from "./signer";
 
 // Runtime
-export { NostrRuntime, nostrRuntime, EventStore, SubscriptionManager } from "./runtime";
-export type { SubscriptionHandle } from "./runtime";
+export {
+  NostrRuntime,
+  defaultNostrRuntime,
+  nostrRuntime,
+  setNostrRuntime,
+  getNostrRuntime,
+  resetNostrRuntime,
+  EventStore,
+  SubscriptionManager,
+} from "./runtime";
+export type { SubscriptionHandle, NostrRuntimeContract, SubscribeOptions } from "./runtime";
 
 // Relay
 export {

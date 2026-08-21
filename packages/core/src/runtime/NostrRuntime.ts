@@ -217,5 +217,11 @@ export class NostrRuntime {
   }
 }
 
-/** Singleton runtime instance */
-export const nostrRuntime = new NostrRuntime();
+/**
+ * The default runtime: a SimplePool over real sockets.
+ *
+ * Not what the app imports — that is the delegating `nostrRuntime` in
+ * `installed.ts`, which starts out pointing here and can be swapped for a
+ * different backend at boot.
+ */
+export const defaultNostrRuntime = new NostrRuntime();

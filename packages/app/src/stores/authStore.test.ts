@@ -19,7 +19,7 @@ vi.hoisted(() => {
 // ── Mock the @formstr/signer-backed appSigner ────────────────────────────────
 // Hoisted so the (hoisted) vi.mock factories below can reference them safely.
 type Account = { pubkey: string; npub: string; method: string; nip46?: any; ncryptsec?: string };
-const { signerState, emit, mgr, pool } = vi.hoisted(() => {
+const { signerState, emit, mgr, signerPool } = vi.hoisted(() => {
   const signerState: {
     accounts: Account[];
     active: string | null;
@@ -33,10 +33,12 @@ const { signerState, emit, mgr, pool } = vi.hoisted(() => {
     registerLoginModal: vi.fn(),
     getSignerIfAvailable: vi.fn(() => null),
   };
-  // Stand-in for nostrRuntime.pool — the SimplePool the nip46 silent resume
-  // (appSigner.unlock({ pool })) needs to subscribe for bunker responses.
-  const pool = { tag: "nostr-runtime-pool" };
-  return { signerState, emit, mgr, pool };
+  // Stand-in for core's signerPool — the SimplePool the nip46 silent resume
+  // (appSigner.unlock({ pool })) needs to subscribe for bunker responses. Signer
+  // transport has its own pool precisely so swapping the app's network runtime
+  // cannot take bunker logins down with it.
+  const signerPool = { tag: "signer-pool" };
+  return { signerState, emit, mgr, signerPool };
 });
 
 vi.mock("../auth/appSigner", () => ({
@@ -100,7 +102,7 @@ vi.mock("../auth/appSigner", () => ({
 }));
 
 // ── Mock the core signerManager (capture injections) ─────────────────────────
-vi.mock("@formstr/core", () => ({ signerManager: mgr, nostrRuntime: { pool } }));
+vi.mock("@formstr/core", () => ({ signerManager: mgr, signerPool }));
 
 vi.mock("@formstr/agent/services/profile", () => ({
   fetchProfile: vi.fn(async (pubkey: string) => ({
@@ -204,7 +206,7 @@ describe("authStore bridge", () => {
     await useAuthStore.getState().init();
     const { appSigner } = await import("../auth/appSigner");
     expect(appSigner.unlock).toHaveBeenCalledTimes(1);
-    expect(appSigner.unlock).toHaveBeenCalledWith({ pool });
+    expect(appSigner.unlock).toHaveBeenCalledWith({ pool: signerPool });
     expect(appSigner.loginWithBunkerUri).not.toHaveBeenCalled();
     expect(useAuthStore.getState().locked).toBe(false);
   });
@@ -216,7 +218,7 @@ describe("authStore bridge", () => {
     await useAuthStore.getState().unlock("rsPk", "");
     const { appSigner } = await import("../auth/appSigner");
     expect(appSigner.unlock).toHaveBeenCalledTimes(1);
-    expect(appSigner.unlock).toHaveBeenCalledWith({ pool });
+    expect(appSigner.unlock).toHaveBeenCalledWith({ pool: signerPool });
     expect(appSigner.loginWithBunkerUri).not.toHaveBeenCalled();
   });
 

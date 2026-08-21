@@ -1,6 +1,6 @@
 import type { Filter } from "nostr-tools";
 
-import { nostrRuntime } from "../runtime/NostrRuntime";
+import { nostrRuntime } from "../runtime/installed";
 
 import { relayManager } from "./RelayManager";
 

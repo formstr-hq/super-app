@@ -1,4 +1,4 @@
-import { relayManager, signerManager, nostrRuntime } from "@formstr/core";
+import { defaultNostrRuntime, relayManager, signerManager, signerPool } from "@formstr/core";
 import { type Signer, type StoredAccount } from "@formstr/signer";
 import type { AbstractSimplePool } from "nostr-tools/abstract-pool";
 import { useWebSocketImplementation as setWebSocketImplementation } from "nostr-tools/pool";
@@ -80,10 +80,14 @@ export async function bootstrap(
   setWebSocketImplementation(WebSocket);
   // When bundled into a single CJS file, nostr-tools/pool's module-level _WebSocket
   // variable (used by SimplePool's constructor) is a different binding than the one
-  // setWebSocketImplementation writes to. Patch the pool instance directly so relay
+  // setWebSocketImplementation writes to. Patch the pool instances directly so relay
   // connections work in Node environments that lack a native WebSocket (Node < 22).
+  // MCP never installs a different runtime — Node has no Worker — so the pool to
+  // patch for app data is the default runtime's, and bunker traffic has its own.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (nostrRuntime.pool as any)._WebSocket = WebSocket;
+  (defaultNostrRuntime.pool as any)._WebSocket = WebSocket;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (signerPool as any)._WebSocket = WebSocket;
   if (input.relays?.length) overrideRelays(input.relays);
 
   const signer = await (deps.buildSigner ?? buildMcpSigner)();
