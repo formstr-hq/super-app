@@ -1,5 +1,5 @@
 import type { Filter } from "nostr-tools";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { WarmupRegistry, warmScopesFor } from "./warmup";
 
@@ -50,6 +50,8 @@ describe("warmScopesFor", () => {
 });
 
 describe("WarmupRegistry", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("declares every scope on start and drops them all on stop", () => {
     const dataLayer = fakeDataLayer();
     const registry = new WarmupRegistry(dataLayer);
@@ -64,12 +66,28 @@ describe("WarmupRegistry", () => {
 
   it("vouches for a read its interests cover, and not for others", () => {
     const dataLayer = fakeDataLayer();
-    const registry = new WarmupRegistry(dataLayer);
+    // No sync window: this is about which filters match, not about timing.
+    const registry = new WarmupRegistry(dataLayer, 0);
     registry.start(ME);
 
     expect(registry.covers({ kinds: [14083], authors: [ME] })).toBe(true);
     expect(registry.covers({ kinds: [14083], authors: ["b".repeat(64)] })).toBe(false);
     expect(registry.covers({ kinds: [9999], authors: [ME] })).toBe(false);
+  });
+
+  it("vouches for nothing until its interests have had time to sync", () => {
+    // A cache restored from IndexedDB can hold yesterday's copy while the
+    // standing interest's first round trip is still in flight. Settling a read
+    // early in that window would serve the stale one, so the registry stays
+    // silent until the interest has plausibly caught up.
+    vi.useFakeTimers();
+    const registry = new WarmupRegistry(fakeDataLayer());
+    registry.start(ME);
+
+    expect(registry.covers({ kinds: [14083], authors: [ME] })).toBe(false);
+
+    vi.advanceTimersByTime(3000);
+    expect(registry.covers({ kinds: [14083], authors: [ME] })).toBe(true);
   });
 
   it("vouches for nothing once stopped", () => {
@@ -84,7 +102,7 @@ describe("WarmupRegistry", () => {
 
   it("replaces the previous account's interests when a new one starts", () => {
     const dataLayer = fakeDataLayer();
-    const registry = new WarmupRegistry(dataLayer);
+    const registry = new WarmupRegistry(dataLayer, 0);
     const other = "c".repeat(64);
 
     registry.start(ME);

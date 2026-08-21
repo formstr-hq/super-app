@@ -111,6 +111,13 @@ registry keeps the declared filters for exactly this test. A warm read settles o
 grace period rather than the full quiet window, because the interest keeping that scope
 fresh is already running. Everything else is cold and pays the quiet window.
 
+One qualification, found while building it: an interest that exists is not yet an interest
+that has synced. A cache restored from IndexedDB holds whatever was true when the tab last
+closed, and for the first round trip after sign-in the standing interest has not corrected
+it. A read settled early in that window shows the stale copy, and nothing re-renders it
+while the stores remain non-reactive. So the registry vouches for nothing for the first
+3 seconds after declaring: until then every read behaves exactly as it does today.
+
 ## 4. Warm-up interests
 
 A registry in the app collects, per module, the filters describing the logged-in user's own
