@@ -1,5 +1,4 @@
 import { signerManager } from "@formstr/core";
-import { relayManager } from "@formstr/core";
 import { DataLayer, LocalRelayClient, workerChannel } from "@formstr/local-relay";
 import type { EventTemplate } from "nostr-tools";
 
@@ -24,7 +23,6 @@ export function startLocalRelaySession(pubkey: string): LocalRelaySession {
     name: pubkey,
   });
   const client = new LocalRelayClient(workerChannel(worker));
-  client.setUserRelays(relayManager.getAllRelays());
 
   const dataLayer = new DataLayer({
     client,

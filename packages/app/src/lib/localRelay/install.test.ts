@@ -1,4 +1,4 @@
-import { getNostrRuntime, defaultNostrRuntime } from "@formstr/core";
+import { getNostrRuntime, defaultNostrRuntime, relayManager } from "@formstr/core";
 import {
   DataLayer,
   LocalRelayClient,
@@ -8,7 +8,7 @@ import {
 } from "@formstr/local-relay";
 import { fakeSocketFactory, makeEvent } from "@formstr/local-relay/testkit";
 import type { Event } from "nostr-tools";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { installRuntime, isLocalRelayEnabled } from "./install";
 
@@ -80,6 +80,33 @@ describe("installRuntime", () => {
     teardown();
     await settle();
     expect(sock.sent.some((m: unknown[]) => m[0] === "CLOSE")).toBe(true);
+  });
+
+  it("hands the worker the user's own relays once their NIP-65 list resolves", async () => {
+    const { f, dataLayer } = await wire();
+    // The list is fetched at login, which is after the session starts. A worker
+    // never told about it would route every read and publish — and every outbox
+    // retry — to the defaults for the whole session.
+    vi.spyOn(relayManager, "fetchUserRelays").mockResolvedValue([
+      { url: "wss://nip65", read: true, write: true },
+    ]);
+    vi.spyOn(relayManager, "getAllRelays").mockReturnValue(["wss://nip65"]);
+
+    const teardown = installRuntime(dataLayer, ME);
+    await settle();
+
+    // No relay hints: this can only reach the user's own relays.
+    void getNostrRuntime().publish([], makeEvent({ id: "n".repeat(64) }) as Event);
+    await settle();
+    const sock = f.last("wss://nip65");
+    sock.open();
+    await settle();
+
+    expect(
+      sock.sent.some((m: unknown[]) => m[0] === "EVENT" && (m[1] as Event).id === "n".repeat(64)),
+    ).toBe(true);
+    teardown();
+    vi.restoreAllMocks();
   });
 
   it("pauses the worker when the tab is hidden and resumes when it returns", async () => {

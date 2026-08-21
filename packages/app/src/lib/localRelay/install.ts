@@ -1,4 +1,4 @@
-import { resetNostrRuntime, setNostrRuntime } from "@formstr/core";
+import { relayManager, resetNostrRuntime, setNostrRuntime } from "@formstr/core";
 import type { DataLayer } from "@formstr/local-relay";
 
 import { LocalRelayRuntime } from "./LocalRelayRuntime";
@@ -32,6 +32,18 @@ export function isLocalRelayEnabled(): boolean {
  * a teardown plus a fresh install.
  */
 export function installRuntime(dataLayer: DataLayer, pubkey: string): () => void {
+  // Routing policy, not a command: the worker folds these into how it reaches
+  // relays for reads, publishes and outbox retries. Seeded with what is known
+  // now and updated when the user's NIP-65 list arrives, because that resolves
+  // after login and a worker never told would route on defaults all session.
+  dataLayer.setUserRelays(relayManager.getAllRelays());
+  void relayManager
+    .fetchUserRelays(pubkey)
+    .then(() => dataLayer.setUserRelays(relayManager.getAllRelays()))
+    .catch(() => {
+      // No list published, or no relay answered. The defaults still stand.
+    });
+
   const warmup = new WarmupRegistry(dataLayer);
   warmup.start(pubkey);
 
