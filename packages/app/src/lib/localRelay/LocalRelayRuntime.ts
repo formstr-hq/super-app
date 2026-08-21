@@ -9,6 +9,17 @@ export interface LocalRelayRuntimeOptions {
   quietMs?: number;
   /** Hard cap on awaiting a publish's per-relay outcome. */
   publishTimeoutMs?: number;
+  /** Quiet period for a read whose scope a standing interest keeps fresh. */
+  warmGraceMs?: number;
+  /**
+   * Is this scope backed by a standing interest?
+   *
+   * Supplied by the warm-up registry. A read it vouches for reads a store the
+   * worker is actively updating, so it settles on `warmGraceMs` instead of
+   * waiting out `quietMs`. That is the whole instant-load win: without it every
+   * read pays the cold-cache latency even when the data is already there.
+   */
+  isWarm?: (filter: Filter) => boolean;
 }
 
 /**
@@ -29,6 +40,8 @@ export class LocalRelayRuntime implements NostrRuntimeContract {
   private readonly timeoutMs: number;
   private readonly quietMs: number;
   private readonly publishTimeoutMs: number;
+  private readonly warmGraceMs: number;
+  private readonly isWarm: (filter: Filter) => boolean;
   /** Interests opened by `subscribe`, so `dispose` can drop them. */
   private readonly standing = new Set<{ unobserve: () => void }>();
 
@@ -39,11 +52,14 @@ export class LocalRelayRuntime implements NostrRuntimeContract {
     this.timeoutMs = options.timeoutMs ?? 4000;
     this.quietMs = options.quietMs ?? 700;
     this.publishTimeoutMs = options.publishTimeoutMs ?? 10_000;
+    this.warmGraceMs = options.warmGraceMs ?? 150;
+    this.isWarm = options.isWarm ?? (() => false);
   }
 
   querySync(relays: string[], filter: Filter, timeoutMs?: number): Promise<Event[]> {
     return new Promise((resolve) => {
       const collected = new Map<string, Event>();
+      const quiet = this.isWarm(filter) ? this.warmGraceMs : this.quietMs;
       let settled = false;
       let quietTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -65,7 +81,7 @@ export class LocalRelayRuntime implements NostrRuntimeContract {
           onEvent: (event) => {
             collected.set(event.id, event);
             if (quietTimer) clearTimeout(quietTimer);
-            quietTimer = setTimeout(finish, this.quietMs);
+            quietTimer = setTimeout(finish, quiet);
           },
         },
         relays.length > 0 ? { relays } : undefined,

@@ -40,6 +40,46 @@ async function wire() {
 }
 
 describe("LocalRelayRuntime", () => {
+  it("settles a warm read on the short grace, not the full quiet window", async () => {
+    const { client: clientCh, worker: workerCh } = createChannelPair();
+    const f = fakeSocketFactory();
+    const service = new RelayService({
+      channel: workerCh,
+      socketFactory: f.factory,
+      storage: new MemoryStorage(),
+      verify: () => true,
+      now: () => NOW,
+    });
+    await service.start();
+    const client = new LocalRelayClient(clientCh, { unobserveGraceMs: 0 });
+    client.setUserRelays(["wss://user"]);
+    const dataLayer = new DataLayer({
+      client,
+      sign: async () => makeEvent({ id: "s".repeat(64) }),
+    });
+    await settle();
+    const runtime = new LocalRelayRuntime(dataLayer, {
+      timeoutMs: 5000,
+      quietMs: 2000,
+      warmGraceMs: 20,
+      // A standing interest keeps this scope fresh, so the read need not wait
+      // out a network that has nothing more to say.
+      isWarm: () => true,
+    });
+
+    const started = Date.now();
+    const pending = runtime.querySync(["wss://module"], { kinds: [1], authors: ["alice"] });
+    await settle();
+    const sock = f.last("wss://module");
+    sock.open();
+    const subId = sock.sent.find((m: unknown[]) => m[0] === "REQ")?.[1];
+    sock.emit(["EVENT", subId, makeEvent({ id: "w".repeat(64), kind: 1, pubkey: "alice" })]);
+
+    const events = await pending;
+    expect(events).toHaveLength(1);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
   it("querySync collects what the relays deliver and settles on its own", async () => {
     const { f, runtime } = await wire();
 

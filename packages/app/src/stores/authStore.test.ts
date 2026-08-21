@@ -19,7 +19,7 @@ vi.hoisted(() => {
 // ── Mock the @formstr/signer-backed appSigner ────────────────────────────────
 // Hoisted so the (hoisted) vi.mock factories below can reference them safely.
 type Account = { pubkey: string; npub: string; method: string; nip46?: any; ncryptsec?: string };
-const { signerState, emit, mgr, signerPool } = vi.hoisted(() => {
+const { signerState, emit, mgr, signerPool, sessions } = vi.hoisted(() => {
   const signerState: {
     accounts: Account[];
     active: string | null;
@@ -38,7 +38,15 @@ const { signerState, emit, mgr, signerPool } = vi.hoisted(() => {
   // transport has its own pool precisely so swapping the app's network runtime
   // cannot take bunker logins down with it.
   const signerPool = { tag: "signer-pool" };
-  return { signerState, emit, mgr, signerPool };
+  // Local relay sessions need a Worker, which jsdom has not got. Record the
+  // start/close calls instead — the behaviour under test is the store's, not
+  // the worker's.
+  const sessions: { started: string[]; closed: string[]; purged: string[] } = {
+    started: [],
+    closed: [],
+    purged: [],
+  };
+  return { signerState, emit, mgr, signerPool, sessions };
 });
 
 vi.mock("../auth/appSigner", () => ({
@@ -104,6 +112,17 @@ vi.mock("../auth/appSigner", () => ({
 // ── Mock the core signerManager (capture injections) ─────────────────────────
 vi.mock("@formstr/core", () => ({ signerManager: mgr, signerPool }));
 
+vi.mock("../lib/localRelay/session", () => ({
+  startLocalRelaySession: (pubkey: string) => {
+    sessions.started.push(pubkey);
+    return { dataLayer: {}, close: () => sessions.closed.push(pubkey) };
+  },
+}));
+
+vi.mock("../lib/localRelay/purge", () => ({
+  purgeAccountCache: (pubkey: string) => sessions.purged.push(pubkey),
+}));
+
 vi.mock("@formstr/agent/services/profile", () => ({
   fetchProfile: vi.fn(async (pubkey: string) => ({
     pubkey,
@@ -123,6 +142,9 @@ beforeEach(() => {
   signerState.unlocked = false;
   signerState.listeners = [];
   localStorage.clear();
+  sessions.started.length = 0;
+  sessions.closed.length = 0;
+  sessions.purged.length = 0;
   vi.clearAllMocks();
   useAuthStore.setState({
     accounts: [],
@@ -198,6 +220,93 @@ describe("authStore bridge", () => {
       clientSecretKey: "00".repeat(32),
     },
   };
+
+  const localAccount = (pubkey: string) => ({
+    pubkey,
+    npub: `npub-${pubkey}`,
+    method: "ncryptsec",
+    ncryptsec: "ncryptsec1x",
+  });
+
+  it("puts the app on a local relay session for the account that signs in", async () => {
+    signerState.accounts = [localAccount("aPk")];
+    signerState.active = "aPk";
+    signerState.unlocked = true;
+
+    await useAuthStore.getState().init();
+
+    expect(sessions.started).toEqual(["aPk"]);
+  });
+
+  it("closes the previous account's session before opening the next", async () => {
+    // Each account has its own cache namespace, so the worker cannot be shared.
+    signerState.accounts = [localAccount("aPk")];
+    signerState.active = "aPk";
+    signerState.unlocked = true;
+    await useAuthStore.getState().init();
+
+    signerState.accounts = [localAccount("bPk")];
+    signerState.active = "bPk";
+    emit({ type: "login" });
+
+    // Tail-relative: the store is a module singleton, so a session opened by an
+    // earlier test may still be current when this one starts (and re-targeting
+    // to the same account is deliberately a no-op).
+    expect(sessions.closed.at(-1)).toBe("aPk");
+    expect(sessions.started.at(-1)).toBe("bPk");
+  });
+
+  it("closes the session on logout", async () => {
+    signerState.accounts = [localAccount("aPk")];
+    signerState.active = "aPk";
+    signerState.unlocked = true;
+    await useAuthStore.getState().init();
+
+    signerState.accounts = [];
+    signerState.active = null;
+    emit({ type: "logout" });
+
+    expect(sessions.closed.at(-1)).toBe("aPk");
+  });
+
+  it("clears the signed-out account's cached events", async () => {
+    signerState.accounts = [localAccount("aPk")];
+    signerState.active = "aPk";
+    signerState.unlocked = true;
+    await useAuthStore.getState().init();
+
+    signerState.accounts = [];
+    signerState.active = null;
+    emit({ type: "logout" });
+
+    expect(sessions.purged).toEqual(["aPk"]);
+  });
+
+  it("keeps the other account's cache when switching between them", async () => {
+    // Switching is not signing out: the account being left keeps its warm cache
+    // so switching back is still instant.
+    signerState.accounts = [localAccount("aPk")];
+    signerState.active = "aPk";
+    signerState.unlocked = true;
+    await useAuthStore.getState().init();
+
+    signerState.accounts = [localAccount("bPk")];
+    signerState.active = "bPk";
+    emit({ type: "login" });
+
+    expect(sessions.purged).toEqual([]);
+  });
+
+  it("stays on the default runtime when the kill switch is off", async () => {
+    localStorage.setItem("formstr.localRelay", "off");
+    signerState.accounts = [localAccount("aPk")];
+    signerState.active = "aPk";
+    signerState.unlocked = true;
+
+    await useAuthStore.getState().init();
+
+    expect(sessions.started).toEqual([]);
+  });
 
   it("init auto-unlocks a nip46 account via appSigner.unlock({ pool }) — not loginWithBunkerUri", async () => {
     signerState.accounts = [{ ...nip46Account }];

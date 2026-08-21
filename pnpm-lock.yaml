@@ -976,7 +976,7 @@ packages:
     resolution: {integrity: sha512-FproZNaf22430e3AdqLfymxVfpxzVDgKZ7i92pw2QgcH+p1Ph+ncqe+Dl5cnZEsEc1+XYWvYXOCBMsF3VCARYw==}
 
   '@formstr/local-relay@file:.local-tarballs/formstr-local-relay-0.7.0.tgz':
-    resolution: {integrity: sha512-sKOry3hKwUktTSvaWjF69AcxBoUtCLLApOzqNK/D5wrC65OsCG9wWtu/xuzNdq5gfmkjlGWa2NT+IZ2ZNqJtxQ==, tarball: file:.local-tarballs/formstr-local-relay-0.7.0.tgz}
+    resolution: {integrity: sha512-x44N6/eY2Xuba5/G4GgWLxzadPLGuS/N8MvWULE55xBjdc1UvRVv01f7yzny8xs1DwoZqT0eFjUtF9ZrGoAlCA==, tarball: file:.local-tarballs/formstr-local-relay-0.7.0.tgz}
     version: 0.7.0
 
   '@formstr/signer@0.2.2':

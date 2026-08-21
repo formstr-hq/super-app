@@ -15,6 +15,9 @@ import {
 import { mapMethod } from "../auth/methodMap";
 import { toNostrSigner } from "../auth/toNostrSigner";
 import { resetCalendarSdk } from "../lib/calendar/sdk";
+import { isLocalRelayEnabled } from "../lib/localRelay/install";
+import { purgeAccountCache } from "../lib/localRelay/purge";
+import { startLocalRelaySession, type LocalRelaySession } from "../lib/localRelay/session";
 
 export interface AccountView {
   pubkey: string;
@@ -56,6 +59,30 @@ let pendingResolvers: Array<(signer: NostrSigner) => void> = [];
 
 export const useAuthStore = create<AuthStore>((set, get) => {
   let profileLoadedFor: string | null = null;
+  /** The local relay session, and whose account it caches for. */
+  let session: LocalRelaySession | null = null;
+  let sessionFor: string | null = null;
+
+  /**
+   * Point the app's network runtime at `pubkey`'s local relay.
+   *
+   * One session per account, because each has its own cache database: switching
+   * accounts tears the worker down and spawns another rather than sharing one.
+   * Signing out closes it, which restores the SimplePool runtime.
+   */
+  function retargetSession(pubkey: string | null): void {
+    if (pubkey === sessionFor) return;
+    const previous = sessionFor;
+    session?.close();
+    session = null;
+    sessionFor = null;
+    // Signing out clears that account's cache; switching accounts does not, so
+    // the one being left keeps its warm store for the next switch back.
+    if (!pubkey && previous) purgeAccountCache(previous);
+    if (!pubkey || !isLocalRelayEnabled()) return;
+    session = startLocalRelaySession(pubkey);
+    sessionFor = pubkey;
+  }
 
   /** Push appSigner's current account/signer state into the store + signerManager. */
   function sync(): void {
@@ -69,6 +96,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
     }));
 
     if (active) {
+      retargetSession(active.pubkey);
       const method = mapMethod(active.method);
       if (activeSigner) {
         const adapted = toNostrSigner(activeSigner);
@@ -97,6 +125,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
           .catch(() => {});
       }
     } else {
+      retargetSession(null);
       signerManager.logout();
       resetCalendarSdk();
       profileLoadedFor = null;

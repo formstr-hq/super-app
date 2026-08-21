@@ -1,0 +1,56 @@
+import { resetNostrRuntime, setNostrRuntime } from "@formstr/core";
+import type { DataLayer } from "@formstr/local-relay";
+
+import { LocalRelayRuntime } from "./LocalRelayRuntime";
+import { WarmupRegistry } from "./warmup";
+
+const KILL_SWITCH_KEY = "formstr.localRelay";
+
+/**
+ * Should the app run on the local relay?
+ *
+ * A dev-facing escape hatch while the substrate proves itself against live
+ * relays: `localStorage.setItem("formstr.localRelay", "off")` puts the app back
+ * on the SimplePool runtime for one reload, with nothing else to change. Delete
+ * this once live verification passes.
+ */
+export function isLocalRelayEnabled(): boolean {
+  try {
+    return localStorage.getItem(KILL_SWITCH_KEY) !== "off";
+  } catch {
+    // Private-mode browsers throw on storage access. Default to on.
+    return true;
+  }
+}
+
+/**
+ * Point the app's runtime at the local relay for one account.
+ *
+ * Returns the teardown: it drops the standing interests, restores the SimplePool
+ * runtime, and stops listening for visibility changes. The worker and data layer
+ * outlive this — whoever spawned them tears them down — so an account switch is
+ * a teardown plus a fresh install.
+ */
+export function installRuntime(dataLayer: DataLayer, pubkey: string): () => void {
+  const warmup = new WarmupRegistry(dataLayer);
+  warmup.start(pubkey);
+
+  const runtime = new LocalRelayRuntime(dataLayer, {
+    isWarm: (filter) => warmup.covers(filter),
+  });
+  setNostrRuntime(runtime);
+
+  // Lifecycle hints, not commands: the worker decides what to close and reopen.
+  const onVisibility = () => {
+    if (document.visibilityState === "hidden") dataLayer.pause();
+    else dataLayer.resume();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+
+  return () => {
+    document.removeEventListener("visibilitychange", onVisibility);
+    warmup.stop();
+    runtime.dispose();
+    resetNostrRuntime();
+  };
+}
