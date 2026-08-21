@@ -22,7 +22,7 @@
     "@formstr/calendar-sdk": "^0.1.0",
     "@formstr/core": "workspace:*",
     "@formstr/kanban-sdk": "^0.1.1",
-    "@formstr/local-relay": "file:../../.local-tarballs/formstr-local-relay-0.7.0.tgz",
+    "@formstr/local-relay": "^0.6.1",
     "@formstr/signer": "^0.2.2",
     "@mui/material": "^6.4.0",
     "lucide-react": "^1.8.0",

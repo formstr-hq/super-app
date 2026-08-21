@@ -64,26 +64,20 @@ answer them synchronously.
 data, so core exports a dedicated `signerPool` and both point there. That is what frees
 the contract from exposing a `pool` the local-relay backend does not own.
 
-## 2. `@formstr/local-relay` 0.7.0 — publish relay hints
+## 2. Publish relay hints — already shipped
 
 The worker computes publish targets itself (author write relays ∪ user relays ∪ p-tag
-inboxes) and takes no per-publish relay argument. Super-app publishes to fixed per-module
-lists, and kanbanstr interop depends on kanban events landing on the kanban set.
+inboxes). Super-app publishes to fixed per-module lists, and kanbanstr interop depends on
+kanban events landing on the kanban set.
 
-An optional hint threads through the existing layers:
+**`@formstr/local-relay` 0.6.1 already solves this.** `publishEvent(event, { relays })`
+takes explicit target hints and unions them into the worker's routing — added for NIP-17
+gift wraps, whose recipients read from a kind-10050 inbox the worker cannot derive. The
+same hint carries a module's relay set, so no package change is needed.
 
-- `DataLayer.publish(template, { relays })` and `publishEvent(event, { relays })`
-- `LocalRelayClient.publish(event, relays?)`
-- frame `{ kind: "publish"; pubId; event; relays? }` → `WorkerHost`
-- `RelayService.publishUpstream(pubId, event, hints)` → `publishTargets(event, hints)`
-
-`publishTargets` unions the hints into the set it already computes. The outbox needs no
-change: debt is derived from actual per-relay results, so a hinted relay that times out is
-retried like any other.
-
-This mirrors the read side, where `ObserveOptions.relays` already means "relays the app
-knows hold this data". It does not weaken the load-bearing principle — the worker still
-decides what to open and when; the hint only adds targets it would not otherwise know.
+Note for anyone extending the package: **npm 0.6.1 is ahead of `main`**. It was published
+from `fix/dm-aware-publish-routing`, which was never merged, so `main` lacks both the hint
+parameter and DM routing. Branch from the published source, not from `main`.
 
 ## 3. The adapter
 
@@ -179,17 +173,16 @@ engine rather than a mock of it.
 - **Settle policy is where bugs will hide.** Too eager shows a board one edit behind; too
   patient feels slower than today. The warm/cold distinction is the mitigation, and it is
   only as good as the warm-up filter coverage.
-- **Cross-repo sequencing.** local-relay 0.7.0 must be on npm before the app branch can
-  merge — an unpublished pin breaks every `pnpm` invocation in super-app, including the
-  husky hook. Local development consumes a packed tarball until then.
+- **No unpublished dependency.** The app runs on `@formstr/local-relay@^0.6.1` from npm.
+  Per-account cache deletion uses `IndexedDBStorage.destroy()`, which is public there.
 - **`relay.nostr.band` already times out from the browser.** It will now surface as outbox
   debt rather than a silent failure. That is an improvement, but a visible one.
 
 ## Landing plan
 
-1. local-relay publish hints — PR on `common-packages` off `main`, independent of the open
-   #25/#26 stack. Publish 0.7.0.
-2. App branch `feat/local-relay-substrate` off `dev`: core seam, adapter, warm-up registry,
-   worker entry, kill switch, boot wiring. Consumes a packed tarball until 0.7.0 is live,
-   then pins `^0.7.0`.
-3. Live verification against real relays before the kill switch is removed.
+1. App branch `feat/local-relay-substrate` off `dev`: core seam, adapter, warm-up registry,
+   worker entry, kill switch, boot wiring. Depends only on published `^0.6.1`, so it can
+   merge on its own.
+2. Live verification against real relays before the kill switch is removed.
+3. Optional, unrelated to this branch: `formstr-hq/common-packages` should merge
+   `fix/dm-aware-publish-routing` so `main` stops trailing what npm serves.

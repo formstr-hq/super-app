@@ -46,7 +46,7 @@ importers:
     dependencies:
       '@formstr/calendar-sdk':
         specifier: ^0.1.0
-        version: 0.1.0(@formstr/local-relay@file:.local-tarballs/formstr-local-relay-0.7.0.tgz(typescript@5.9.3))(typescript@5.9.3)
+        version: 0.1.0(@formstr/local-relay@0.6.1(typescript@5.9.3))(typescript@5.9.3)
       '@formstr/core':
         specifier: workspace:*
         version: link:../core
@@ -95,7 +95,7 @@ importers:
         version: link:../agent
       '@formstr/calendar-sdk':
         specifier: ^0.1.0
-        version: 0.1.0(@formstr/local-relay@file:.local-tarballs/formstr-local-relay-0.7.0.tgz(typescript@5.9.3))(typescript@5.9.3)
+        version: 0.1.0(@formstr/local-relay@0.6.1(typescript@5.9.3))(typescript@5.9.3)
       '@formstr/core':
         specifier: workspace:*
         version: link:../core
@@ -103,8 +103,8 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.9.3)
       '@formstr/local-relay':
-        specifier: file:../../.local-tarballs/formstr-local-relay-0.7.0.tgz
-        version: file:.local-tarballs/formstr-local-relay-0.7.0.tgz(typescript@5.9.3)
+        specifier: ^0.6.1
+        version: 0.6.1(typescript@5.9.3)
       '@formstr/signer':
         specifier: ^0.2.2
         version: 0.2.2(typescript@5.9.3)
@@ -965,7 +965,6 @@ packages:
 
   '@formstr/calendar-sdk@0.1.0':
     resolution: {integrity: sha512-YtFn981EX3JiGxjK6ji0U0Az38BVs72ZPcjiyEllcvVj6HxUgagFBQtFfl/A7KrFD1mUouzyqPBTjpCu5WwLdA==}
-    version: 0.1.0
     peerDependencies:
       '@formstr/local-relay': '>=0.4.0 <1.0.0'
     peerDependenciesMeta:
@@ -975,9 +974,8 @@ packages:
   '@formstr/kanban-sdk@0.1.1':
     resolution: {integrity: sha512-FproZNaf22430e3AdqLfymxVfpxzVDgKZ7i92pw2QgcH+p1Ph+ncqe+Dl5cnZEsEc1+XYWvYXOCBMsF3VCARYw==}
 
-  '@formstr/local-relay@file:.local-tarballs/formstr-local-relay-0.7.0.tgz':
-    resolution: {integrity: sha512-x44N6/eY2Xuba5/G4GgWLxzadPLGuS/N8MvWULE55xBjdc1UvRVv01f7yzny8xs1DwoZqT0eFjUtF9ZrGoAlCA==, tarball: file:.local-tarballs/formstr-local-relay-0.7.0.tgz}
-    version: 0.7.0
+  '@formstr/local-relay@0.6.1':
+    resolution: {integrity: sha512-8IKAkGKs2ZXBrqOWDAjqXMSNMtydmJWEIThURWswkOtCFi36syg5BhYMgSEB0v/KnwqePvgt7whoCPt2WaQ5dQ==}
 
   '@formstr/signer@0.2.2':
     resolution: {integrity: sha512-25BCGIKZSKRrtVQwnxfWeiLH7KctEbxQrB26dxcjbkcnIIcfiV39s/Xt9yG//eZ+1zTHUpkIQkplfOhjTENtNw==}
@@ -4568,13 +4566,13 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@formstr/calendar-sdk@0.1.0(@formstr/local-relay@file:.local-tarballs/formstr-local-relay-0.7.0.tgz(typescript@5.9.3))(typescript@5.9.3)':
+  '@formstr/calendar-sdk@0.1.0(@formstr/local-relay@0.6.1(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
       '@noble/hashes': 1.8.0
       nostr-tools: 2.23.3(typescript@5.9.3)
       rrule: 2.8.1
     optionalDependencies:
-      '@formstr/local-relay': file:.local-tarballs/formstr-local-relay-0.7.0.tgz(typescript@5.9.3)
+      '@formstr/local-relay': 0.6.1(typescript@5.9.3)
     transitivePeerDependencies:
       - typescript
 
@@ -4585,7 +4583,7 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@formstr/local-relay@file:.local-tarballs/formstr-local-relay-0.7.0.tgz(typescript@5.9.3)':
+  '@formstr/local-relay@0.6.1(typescript@5.9.3)':
     dependencies:
       nostr-tools: 2.24.3(typescript@5.9.3)
     transitivePeerDependencies:
