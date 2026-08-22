@@ -68,9 +68,15 @@ export function installRuntime(dataLayer: DataLayer, pubkey: string): () => void
     else dataLayer.resume();
   };
   document.addEventListener("visibilitychange", onVisibility);
+  // `visibilitychange` does not fire on every path out of a page — a bfcache
+  // navigation or a closing tab goes straight to `pagehide`, leaving sockets
+  // open behind a page nobody is looking at.
+  const onPageHide = () => dataLayer.pause();
+  window.addEventListener("pagehide", onPageHide);
 
   return () => {
     document.removeEventListener("visibilitychange", onVisibility);
+    window.removeEventListener("pagehide", onPageHide);
     setRelayHealthReader(null);
     warmup.stop();
     runtime.dispose();

@@ -22,7 +22,28 @@ export function startLocalRelaySession(pubkey: string): LocalRelaySession {
     // Read inside the worker as the IndexedDB namespace.
     name: pubkey,
   });
-  const client = new LocalRelayClient(workerChannel(worker));
+
+  const client = new LocalRelayClient(workerChannel(worker), {
+    /**
+     * Sign the worker's NIP-42 AUTH challenges. Without this a relay that
+     * demands AUTH is simply unreachable, and nothing says so.
+     *
+     * Deliberately the non-blocking accessor: `getSigner()` opens the unlock
+     * modal, and this fires from background socket activity the user did not
+     * ask for. Refusing while locked is a real answer — the worker marks the
+     * relay auth-failed and tries again on a later reconnect, by which time the
+     * user has usually unlocked for something they did ask for.
+     */
+    onSignRequest: async (template: EventTemplate) => {
+      const signer = signerManager.getSignerIfAvailable();
+      if (!signer) return null;
+      try {
+        return await signer.signEvent(template);
+      } catch {
+        return null;
+      }
+    },
+  });
 
   const dataLayer = new DataLayer({
     client,
