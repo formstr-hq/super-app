@@ -1,6 +1,8 @@
 import { relayManager, resetNostrRuntime, setNostrRuntime } from "@formstr/core";
 import type { DataLayer } from "@formstr/local-relay";
 
+import { setRelayHealthReader } from "../relayHealth";
+
 import { LocalRelayRuntime } from "./LocalRelayRuntime";
 import { WarmupRegistry } from "./warmup";
 
@@ -52,6 +54,14 @@ export function installRuntime(dataLayer: DataLayer, pubkey: string): () => void
   });
   setNostrRuntime(runtime);
 
+  // The header's relay indicator reads whichever backend owns the sockets. Under
+  // the local relay that is the worker, and the SimplePool it would otherwise
+  // poll never connects to anything.
+  setRelayHealthReader(async () => {
+    const health = await dataLayer.relayHealth();
+    return new Map(health.map((r) => [r.relay, r.connected]));
+  });
+
   // Lifecycle hints, not commands: the worker decides what to close and reopen.
   const onVisibility = () => {
     if (document.visibilityState === "hidden") dataLayer.pause();
@@ -61,6 +71,7 @@ export function installRuntime(dataLayer: DataLayer, pubkey: string): () => void
 
   return () => {
     document.removeEventListener("visibilitychange", onVisibility);
+    setRelayHealthReader(null);
     warmup.stop();
     runtime.dispose();
     resetNostrRuntime();
