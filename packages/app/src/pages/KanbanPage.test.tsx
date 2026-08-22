@@ -17,12 +17,13 @@ vi.mock("../components/kanban/BoardListView", () => ({
 }));
 vi.mock("../components/MobileRailDrawer", () => ({ MobileRailDrawer: () => null }));
 
+import { naddrForCoordinate } from "../kanban/boardKey";
 import { useAuthStore, useKanbanStore } from "../stores";
 
 import { KanbanPage } from "./KanbanPage";
 
-const OWNER = "owner-pk";
-const BOARD_KEY = "30301:owner-pk:board-1";
+const OWNER = "a".repeat(64);
+const BOARD_KEY = `30301:${OWNER}:board-1`;
 
 function makeBoard(overrides: Partial<KanbanBoard> = {}): KanbanBoard {
   return {
@@ -43,7 +44,7 @@ function makeBoard(overrides: Partial<KanbanBoard> = {}): KanbanBoard {
   };
 }
 
-function renderAtBoard(board: KanbanBoard, pubkey: string | null) {
+function renderAtBoard(board: KanbanBoard, pubkey: string | null, segment?: string) {
   useAuthStore.setState({ pubkey, openAuthModal: vi.fn() } as never);
   useKanbanStore.setState({
     boards: [board],
@@ -57,7 +58,7 @@ function renderAtBoard(board: KanbanBoard, pubkey: string | null) {
   } as never);
 
   return render(
-    <MemoryRouter initialEntries={[`/kanban/${encodeURIComponent(BOARD_KEY)}`]}>
+    <MemoryRouter initialEntries={[`/kanban/${segment ?? naddrForCoordinate(BOARD_KEY)}`]}>
       <Routes>
         <Route path="/kanban/*" element={<KanbanPage />} />
       </Routes>
@@ -67,6 +68,27 @@ function renderAtBoard(board: KanbanBoard, pubkey: string | null) {
 
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
+
+describe("KanbanPage board routing", () => {
+  it("opens the board an naddr segment points at", () => {
+    renderAtBoard(makeBoard(), OWNER);
+    expect(screen.getByRole("button", { name: /delete board/i })).toBeInTheDocument();
+  });
+
+  it("still opens a board from a pre-naddr raw coordinate link", () => {
+    // Those URLs were shipped, so they exist in the wild. An undecodable
+    // segment is handed through untouched, and a raw coordinate is exactly a
+    // board key, so the old links keep resolving.
+    renderAtBoard(makeBoard(), OWNER, encodeURIComponent(BOARD_KEY));
+    expect(screen.getByRole("button", { name: /delete board/i })).toBeInTheDocument();
+  });
+
+  it("reports a missing board for a segment that resolves to nothing", () => {
+    renderAtBoard(makeBoard(), OWNER, "naddr1nonsense");
+    expect(screen.getByText(/not in your list/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /delete board/i })).not.toBeInTheDocument();
+  });
+});
 
 describe("KanbanPage board deletion", () => {
   it("offers delete to the board owner", () => {

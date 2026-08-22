@@ -28,12 +28,13 @@ vi.mock("../components/kanban/BoardView", () => ({
   },
 }));
 
+import { naddrForCoordinate } from "../kanban/boardKey";
 import { useAuthStore, useKanbanStore } from "../stores";
 
 import { KanbanPage } from "./KanbanPage";
 
-const ME = "me-pk";
-const BOARD_KEY = "30301:me-pk:board-1";
+const ME = "a".repeat(64);
+const BOARD_KEY = `30301:${ME}:board-1`;
 
 const BOARD: KanbanBoard = {
   id: "board-1",
@@ -96,7 +97,7 @@ function renderPage() {
   } as never);
 
   return render(
-    <MemoryRouter initialEntries={[`/kanban/${encodeURIComponent(BOARD_KEY)}`]}>
+    <MemoryRouter initialEntries={[`/kanban/${naddrForCoordinate(BOARD_KEY)}`]}>
       <Routes>
         <Route path="/kanban/*" element={<KanbanPage />} />
       </Routes>

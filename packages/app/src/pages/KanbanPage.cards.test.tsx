@@ -31,13 +31,14 @@ vi.mock("../components/kanban/BoardListView", () => ({
 }));
 vi.mock("../components/MobileRailDrawer", () => ({ MobileRailDrawer: () => null }));
 
+import { naddrForCoordinate } from "../kanban/boardKey";
 import { useAuthStore, useKanbanStore } from "../stores";
 
 import { KanbanPage } from "./KanbanPage";
 
-const OWNER = "owner-pk";
+const OWNER = "a".repeat(64);
 const HELPER = "helper-pk";
-const BOARD_KEY = "30301:owner-pk:board-1";
+const BOARD_KEY = `30301:${OWNER}:board-1`;
 
 function makeBoard(overrides: Partial<KanbanBoard> = {}): KanbanBoard {
   return {
@@ -98,7 +99,7 @@ function renderAtBoard(board: KanbanBoard, card: KanbanCard, pubkey: string | nu
   } as never);
 
   return render(
-    <MemoryRouter initialEntries={[`/kanban/${encodeURIComponent(BOARD_KEY)}`]}>
+    <MemoryRouter initialEntries={[`/kanban/${naddrForCoordinate(BOARD_KEY)}`]}>
       <Routes>
         <Route path="/kanban/*" element={<KanbanPage />} />
       </Routes>

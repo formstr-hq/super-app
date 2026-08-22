@@ -21,6 +21,7 @@ vi.mock("../components/kanban/InvitationsView", () => ({
 vi.mock("../components/MobileRailDrawer", () => ({ MobileRailDrawer: () => null }));
 
 import { makeBoard as makeFixtureBoard } from "../kanban/boardFixture";
+import { naddrForCoordinate } from "../kanban/boardKey";
 import { useAuthStore, useKanbanMembersStore, useKanbanStore } from "../stores";
 
 import { KanbanPage } from "./KanbanPage";
@@ -71,7 +72,7 @@ afterEach(cleanup);
 
 describe("KanbanPage membership", () => {
   it("opens the members dialog from the board header", () => {
-    renderKanban(`/kanban/${encodeURIComponent(BOARD_KEY)}`, makeBoard(), OWNER);
+    renderKanban(`/kanban/${naddrForCoordinate(BOARD_KEY)}`, makeBoard(), OWNER);
 
     fireEvent.click(screen.getByRole("button", { name: "Members" }));
 
@@ -80,7 +81,7 @@ describe("KanbanPage membership", () => {
 
   it("shows a member added while the dialog is open", async () => {
     const board = makeBoard();
-    renderKanban(`/kanban/${encodeURIComponent(BOARD_KEY)}`, board, OWNER);
+    renderKanban(`/kanban/${naddrForCoordinate(BOARD_KEY)}`, board, OWNER);
 
     fireEvent.click(screen.getByRole("button", { name: "Members" }));
     expect(screen.getByText("Members · 1")).toBeInTheDocument();
@@ -99,7 +100,7 @@ describe("KanbanPage membership", () => {
 
   it("offers the members dialog to a non-owner too, read-only", () => {
     const board = makeBoard({ members: ["b".repeat(64)] });
-    renderKanban(`/kanban/${encodeURIComponent(BOARD_KEY)}`, board, "b".repeat(64));
+    renderKanban(`/kanban/${naddrForCoordinate(BOARD_KEY)}`, board, "b".repeat(64));
 
     fireEvent.click(screen.getByRole("button", { name: "Members" }));
 
@@ -107,7 +108,7 @@ describe("KanbanPage membership", () => {
   });
 
   it("counts pending invitations in the rail", () => {
-    renderKanban(`/kanban/${encodeURIComponent(BOARD_KEY)}`, makeBoard(), OWNER, {
+    renderKanban(`/kanban/${naddrForCoordinate(BOARD_KEY)}`, makeBoard(), OWNER, {
       invitations: [{ wrapId: "w1" }, { wrapId: "w2" }] as never,
     });
 
@@ -123,7 +124,7 @@ describe("KanbanPage membership", () => {
   });
 
   it("warns on a board whose owner published a removal notice", () => {
-    renderKanban(`/kanban/${encodeURIComponent(BOARD_KEY)}`, makeBoard(), "b".repeat(64), {
+    renderKanban(`/kanban/${naddrForCoordinate(BOARD_KEY)}`, makeBoard(), "b".repeat(64), {
       removedCoordinates: [BOARD_KEY],
     });
 
@@ -131,7 +132,7 @@ describe("KanbanPage membership", () => {
   });
 
   it("stays quiet on a board with no notice", () => {
-    renderKanban(`/kanban/${encodeURIComponent(BOARD_KEY)}`, makeBoard(), OWNER, {
+    renderKanban(`/kanban/${naddrForCoordinate(BOARD_KEY)}`, makeBoard(), OWNER, {
       removedCoordinates: ["32301:someone:other"],
     });
 

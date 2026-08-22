@@ -22,7 +22,12 @@ import { KanbanSidebar } from "../components/kanban/KanbanSidebar";
 import { MembersDialog } from "../components/kanban/MembersDialog";
 import { MobileRailDrawer } from "../components/MobileRailDrawer";
 import { PageHeader } from "../components/PageHeader";
-import { boardKey } from "../kanban/boardKey";
+import {
+  boardKey,
+  coordinateFromNaddr,
+  naddrForBoard,
+  naddrForCoordinate,
+} from "../kanban/boardKey";
 import {
   collectLabels,
   EMPTY_FILTER,
@@ -47,7 +52,18 @@ type ActiveDialog =
 export function KanbanPage() {
   const navigate = useNavigate();
   const params = useParams();
-  const activeKey = params["*"] ? decodeURIComponent(params["*"]) : null;
+  const segment = params["*"] ? decodeURIComponent(params["*"]) : null;
+  // The board list keys everything by coordinate (`boardKey`), but the URL
+  // carries an `naddr`. Decode at this one boundary. A segment that is not an
+  // naddr is passed through as the key itself, which keeps the raw-coordinate
+  // links shipped before naddr routing working; anything else matches no board
+  // and lands on `MissingBoard`.
+  const activeKey =
+    segment === null
+      ? null
+      : segment === INVITATIONS_KEY
+        ? segment
+        : (coordinateFromNaddr(segment) ?? segment);
   const showingInvitations = activeKey === INVITATIONS_KEY;
 
   const pubkey = useAuthStore((s) => s.pubkey);
@@ -153,7 +169,7 @@ export function KanbanPage() {
 
   const openBoard = useCallback(
     (next: KanbanBoard | null) => {
-      navigate(next ? `/kanban/${encodeURIComponent(boardKey(next))}` : "/kanban");
+      navigate(next ? `/kanban/${naddrForBoard(next)}` : "/kanban");
     },
     [navigate],
   );
@@ -259,7 +275,7 @@ export function KanbanPage() {
         {showingInvitations ? (
           <InvitationsView
             onBack={() => openBoard(null)}
-            onOpenBoard={(coordinate) => navigate(`/kanban/${encodeURIComponent(coordinate)}`)}
+            onOpenBoard={(coordinate) => navigate(`/kanban/${naddrForCoordinate(coordinate)}`)}
           />
         ) : board ? (
           <>
