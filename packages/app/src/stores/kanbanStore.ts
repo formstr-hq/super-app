@@ -2,12 +2,55 @@ import type { BoardDraft, CardDraft, KanbanBoard, KanbanCard } from "@formstr/ka
 import { create } from "zustand";
 
 import { boardKey } from "../kanban/boardKey";
+import { cardScopeFilters } from "../kanban/cardScope";
 import { kanbanSdk } from "../kanban/sdk";
+import { currentLiveSync } from "../lib/live/controller";
+import { singleFlight } from "../lib/live/singleFlight";
 
 import { useAuthStore } from "./authStore";
 
 function message(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
+}
+
+/** Closes the live scope for whichever board is currently open. */
+let closeCardScope: (() => void) | null = null;
+/** Which board that scope is for, so re-reading it does not resubscribe. */
+let watchedBoard: string | null = null;
+
+/**
+ * Watch the open board, so a collaborator's edit lands without a refresh.
+ *
+ * The standing warm-up interests cover the user's board *list*; a board's cards
+ * are scoped to its coordinate, so only the board actually on screen is worth
+ * watching. Keyed per board, so opening another one replaces this scope rather
+ * than accumulating subscriptions behind the user.
+ */
+function watchCards(board: KanbanBoard, refetch: () => Promise<void>): void {
+  const key = `cards:${boardKey(board)}`;
+  // The scope's own onChange re-runs fetchCards, which lands back here. Without
+  // this the subscription that just fired would be torn down and rebuilt on
+  // every card edit.
+  if (key === watchedBoard) return;
+
+  closeCardScope?.();
+  closeCardScope = null;
+  watchedBoard = null;
+
+  const live = currentLiveSync();
+  const filters = cardScopeFilters(board);
+  // No live sync when signed out, and no scope for a private board whose view
+  // key this account cannot use. Neither is an error: the board still loads.
+  if (!live || !filters) return;
+
+  const run = singleFlight(refetch);
+  closeCardScope = live.open({
+    key,
+    filters,
+    relays: [...kanbanSdk.relays],
+    onChange: () => void run(),
+  });
+  watchedBoard = key;
 }
 
 interface KanbanStore {
@@ -54,6 +97,11 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
   },
 
   reset() {
+    // Runs on sign-out: a scope left open would keep refetching a board for an
+    // account with no signer left to decrypt it.
+    closeCardScope?.();
+    closeCardScope = null;
+    watchedBoard = null;
     set({ boards: [], cardsByBoard: {}, error: null });
   },
 
@@ -119,6 +167,7 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
   },
 
   async fetchCards(board) {
+    watchCards(board, () => get().fetchCards(board));
     set({ isLoadingCards: true, error: null });
     try {
       const cards = await kanbanSdk.fetchCards(board);

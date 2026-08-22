@@ -41,10 +41,16 @@ const { signerState, emit, mgr, signerPool, sessions } = vi.hoisted(() => {
   // Local relay sessions need a Worker, which jsdom has not got. Record the
   // start/close calls instead — the behaviour under test is the store's, not
   // the worker's.
-  const sessions: { started: string[]; closed: string[]; purged: string[] } = {
+  const sessions: {
+    started: string[];
+    closed: string[];
+    purged: string[];
+    watched: Array<string | null>;
+  } = {
     started: [],
     closed: [],
     purged: [],
+    watched: [],
   };
   return { signerState, emit, mgr, signerPool, sessions };
 });
@@ -123,6 +129,12 @@ vi.mock("../lib/localRelay/purge", () => ({
   purgeAccountCache: (pubkey: string) => sessions.purged.push(pubkey),
 }));
 
+// Live sync opens real subscriptions through the runtime; record the retargets
+// instead. What the store owes it is the account changes, nothing more.
+vi.mock("../lib/live/controller", () => ({
+  retargetLiveSync: (pubkey: string | null) => sessions.watched.push(pubkey),
+}));
+
 vi.mock("@formstr/agent/services/profile", () => ({
   fetchProfile: vi.fn(async (pubkey: string) => ({
     pubkey,
@@ -144,6 +156,7 @@ beforeEach(() => {
   localStorage.clear();
   sessions.started.length = 0;
   sessions.closed.length = 0;
+  sessions.watched.length = 0;
   sessions.purged.length = 0;
   vi.clearAllMocks();
   useAuthStore.setState({
@@ -254,6 +267,34 @@ describe("authStore bridge", () => {
     // to the same account is deliberately a no-op).
     expect(sessions.closed.at(-1)).toBe("aPk");
     expect(sessions.started.at(-1)).toBe("bPk");
+  });
+
+  it("points live sync at the account, and at the next one on a switch", async () => {
+    signerState.accounts = [localAccount("aPk")];
+    signerState.active = "aPk";
+    signerState.unlocked = true;
+    await useAuthStore.getState().init();
+    expect(sessions.watched.at(-1)).toBe("aPk");
+
+    signerState.accounts = [localAccount("bPk")];
+    signerState.active = "bPk";
+    emit({ type: "login" });
+    expect(sessions.watched.at(-1)).toBe("bPk");
+  });
+
+  it("stops live sync on logout", async () => {
+    // Left running, it would keep refetching stores for an account that is no
+    // longer signed in — and with no signer, every private read would fail.
+    signerState.accounts = [localAccount("aPk")];
+    signerState.active = "aPk";
+    signerState.unlocked = true;
+    await useAuthStore.getState().init();
+
+    signerState.accounts = [];
+    signerState.active = null;
+    emit({ type: "logout" });
+
+    expect(sessions.watched.at(-1)).toBeNull();
   });
 
   it("closes the session on logout", async () => {

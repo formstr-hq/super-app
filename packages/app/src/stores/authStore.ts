@@ -15,6 +15,7 @@ import {
 import { mapMethod } from "../auth/methodMap";
 import { toNostrSigner } from "../auth/toNostrSigner";
 import { resetCalendarSdk } from "../lib/calendar/sdk";
+import { retargetLiveSync } from "../lib/live/controller";
 import { isLocalRelayEnabled } from "../lib/localRelay/install";
 import { purgeAccountCache } from "../lib/localRelay/purge";
 import { startLocalRelaySession, type LocalRelaySession } from "../lib/localRelay/session";
@@ -52,6 +53,8 @@ interface AuthStore {
   dismissLegacyMigration(): void;
   openAuthModal(mode: "login" | "unlock"): void;
   closeAuthModal(): void;
+  /** Re-read the active account's kind-0. Best-effort; leaves the old one on failure. */
+  refreshProfile(): Promise<void>;
 }
 
 // Resolvers for blocking signerManager.getSigner() calls waiting on an unlock.
@@ -97,6 +100,9 @@ export const useAuthStore = create<AuthStore>((set, get) => {
 
     if (active) {
       retargetSession(active.pubkey);
+      // Outside retargetSession, and outside its kill switch: live sync rides on
+      // the runtime contract, which both network backends implement.
+      retargetLiveSync(active.pubkey);
       const method = mapMethod(active.method);
       if (activeSigner) {
         const adapted = toNostrSigner(activeSigner);
@@ -126,6 +132,7 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       }
     } else {
       retargetSession(null);
+      retargetLiveSync(null);
       signerManager.logout();
       resetCalendarSdk();
       profileLoadedFor = null;
@@ -273,6 +280,19 @@ export const useAuthStore = create<AuthStore>((set, get) => {
 
     closeAuthModal() {
       set({ authModalOpen: false });
+    },
+
+    async refreshProfile() {
+      const pubkey = get().pubkey;
+      if (!pubkey) return;
+      try {
+        const profile = await fetchProfile(pubkey);
+        // The account can change while the read is in flight; writing then would
+        // show one account's name over another's session.
+        if (get().pubkey === pubkey) set({ profile });
+      } catch {
+        // Best-effort. Keeping the profile already on screen beats blanking it.
+      }
     },
   };
 });
