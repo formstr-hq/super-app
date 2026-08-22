@@ -1,4 +1,10 @@
-import type { BoardDraft, CardDraft, KanbanBoard, KanbanCard } from "@formstr/kanban-sdk";
+import {
+  KANBAN_KINDS,
+  type BoardDraft,
+  type CardDraft,
+  type KanbanBoard,
+  type KanbanCard,
+} from "@formstr/kanban-sdk";
 import { create } from "zustand";
 
 import { boardKey } from "../kanban/boardKey";
@@ -12,6 +18,15 @@ import { useAuthStore } from "./authStore";
 function message(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
 }
+
+/**
+ * Coordinates `resolveBoardLink` has already been to the relays for.
+ *
+ * The page re-runs the lookup whenever the board list changes, and a board
+ * that is genuinely not on the relays never stops being absent — without this,
+ * a dead link re-queries on every render.
+ */
+const attemptedLinks = new Set<string>();
 
 /** Closes the live scope for whichever board is currently open. */
 let closeCardScope: (() => void) | null = null;
@@ -57,13 +72,22 @@ interface KanbanStore {
   boards: KanbanBoard[];
   /** Cards per board, keyed by `boardKey(board)`. */
   cardsByBoard: Record<string, KanbanCard[]>;
+  /**
+   * A board opened from a URL that is not one of the user's own — someone
+   * else's public board, reached by `naddr`. Kept out of `boards` so it does
+   * not turn up in the board list or the sidebar, neither of which mean
+   * "boards you have looked at".
+   */
+  linkedBoard: KanbanBoard | null;
   isLoadingBoards: boolean;
   isLoadingCards: boolean;
+  isResolvingLink: boolean;
   error: string | null;
 
   clearError(): void;
   ingestBoard(board: KanbanBoard): void;
   fetchBoards(): Promise<void>;
+  resolveBoardLink(coordinate: string): Promise<void>;
   fetchCards(board: KanbanBoard): Promise<void>;
   createBoard(draft: BoardDraft): Promise<KanbanBoard>;
   updateBoard(board: KanbanBoard, changes: Partial<BoardDraft>): Promise<KanbanBoard>;
@@ -88,8 +112,10 @@ interface KanbanStore {
 export const useKanbanStore = create<KanbanStore>((set, get) => ({
   boards: [],
   cardsByBoard: {},
+  linkedBoard: null,
   isLoadingBoards: false,
   isLoadingCards: false,
+  isResolvingLink: false,
   error: null,
 
   clearError() {
@@ -102,7 +128,8 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
     closeCardScope?.();
     closeCardScope = null;
     watchedBoard = null;
-    set({ boards: [], cardsByBoard: {}, error: null });
+    attemptedLinks.clear();
+    set({ boards: [], cardsByBoard: {}, linkedBoard: null, error: null });
   },
 
   /**
@@ -163,6 +190,40 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
       });
     } catch (e) {
       set({ error: message(e, "Failed to load boards"), isLoadingBoards: false });
+    }
+  },
+
+  /**
+   * Resolve a board named by a URL but absent from the user's own boards.
+   *
+   * An `naddr` carries everything needed to fetch the board it points at, which
+   * is the whole point of routing on one — a shared link has to open for
+   * somebody who was never invited. Only public boards: a private board is
+   * encrypted under a view key that reaches this account through a board list
+   * or an invitation, and either of those would have put it in `boards`.
+   */
+  async resolveBoardLink(coordinate) {
+    if (get().boards.some((b) => boardKey(b) === coordinate)) return;
+    if (!coordinate.startsWith(`${KANBAN_KINDS.publicBoard}:`)) {
+      set({ linkedBoard: null });
+      return;
+    }
+    const linked = get().linkedBoard;
+    if (linked && boardKey(linked) === coordinate) return;
+    if (attemptedLinks.has(coordinate)) {
+      set({ linkedBoard: null });
+      return;
+    }
+
+    attemptedLinks.add(coordinate);
+    set({ linkedBoard: null, isResolvingLink: true });
+    try {
+      const board = await kanbanSdk.fetchBoardByCoordinate(coordinate);
+      set({ linkedBoard: board ?? null, isResolvingLink: false });
+    } catch {
+      // A coordinate out of a URL that no relay answers for is a bad link, not
+      // a failure of the app: `MissingBoard` says that better than a banner.
+      set({ linkedBoard: null, isResolvingLink: false });
     }
   },
 

@@ -1,5 +1,6 @@
 import {
   canEditCards,
+  KANBAN_KINDS,
   type BoardDraft,
   type CardDraft,
   type Column,
@@ -78,12 +79,15 @@ export function KanbanPage() {
   const {
     boards,
     cardsByBoard,
+    linkedBoard,
     isLoadingBoards,
     isLoadingCards,
+    isResolvingLink,
     error,
     clearError,
     fetchBoards,
     fetchCards,
+    resolveBoardLink,
     createBoard,
     updateBoard,
     deleteBoard,
@@ -116,10 +120,24 @@ export function KanbanPage() {
     void loadRemovalNotices();
   }, [pubkey, loadInvitations, loadRemovalNotices, resetMembers]);
 
-  const board = useMemo(
+  const ownBoard = useMemo(
     () => (activeKey ? boards.find((b) => boardKey(b) === activeKey) : undefined),
     [boards, activeKey],
   );
+
+  // An `naddr` carries the board's whole address, so a link can name a board
+  // this account was never given — someone else's public board. That one is
+  // resolved on its own and deliberately kept out of `boards`.
+  const board =
+    ownBoard ??
+    (linkedBoard && activeKey && boardKey(linkedBoard) === activeKey ? linkedBoard : undefined);
+
+  useEffect(() => {
+    // Wait out the user's own board list first: most links are to a board it
+    // is about to deliver, and asking early spends a round trip to find that out.
+    if (!activeKey || showingInvitations || ownBoard || isLoadingBoards) return;
+    void resolveBoardLink(activeKey);
+  }, [activeKey, showingInvitations, ownBoard, isLoadingBoards, resolveBoardLink]);
 
   useEffect(() => {
     if (board) void fetchCards(board);
@@ -388,7 +406,11 @@ export function KanbanPage() {
             />
           </>
         ) : activeKey ? (
-          <MissingBoard loading={isLoadingBoards} onBack={() => openBoard(null)} />
+          <MissingBoard
+            loading={isLoadingBoards || isResolvingLink}
+            isPrivate={activeKey.startsWith(`${KANBAN_KINDS.privateBoard}:`)}
+            onBack={() => openBoard(null)}
+          />
         ) : (
           <>
             <PageHeader
@@ -469,13 +491,31 @@ export function KanbanPage() {
   );
 }
 
-function MissingBoard({ loading, onBack }: { loading: boolean; onBack: () => void }) {
+/**
+ * A link that did not open a board.
+ *
+ * The two reasons need different advice. A public board is looked up by
+ * coordinate, so failing to find one means it is not on these relays at all. A
+ * private board is never looked up — its view key only arrives with an
+ * invitation or a board list — so the fix is to get access, not to find it.
+ */
+function MissingBoard({
+  loading,
+  isPrivate,
+  onBack,
+}: {
+  loading: boolean;
+  isPrivate: boolean;
+  onBack: () => void;
+}) {
   return (
     <Box sx={{ p: 4, textAlign: "center" }}>
       <Typography variant="body2" color="text.secondary">
         {loading
           ? "Loading board…"
-          : "That board is not in your list. A private board is only readable with its view key — open it from the device you created it on, or accept its invitation first."}
+          : isPrivate
+            ? "That board is private, and it is not in your list. A private board is only readable with its view key — open it from the device you created it on, or accept its invitation first."
+            : "We could not find that board on your relays. The link may be wrong, or the board may live on relays this app does not read."}
       </Typography>
       {!loading && (
         <Button size="small" onClick={onBack} sx={{ mt: 1.5 }}>

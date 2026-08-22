@@ -11,6 +11,7 @@ vi.mock("../kanban/sdk", () => ({
     fetchPrivateBoards: vi.fn(),
     fetchBoardLists: vi.fn(),
     fetchCards: vi.fn(),
+    fetchBoardByCoordinate: vi.fn(),
     createBoard: vi.fn(),
     updateBoard: vi.fn(),
     deleteBoard: vi.fn(),
@@ -101,6 +102,79 @@ beforeEach(() => {
   closers.length = 0;
   useKanbanStore.getState().reset();
   useAuthStore.setState({ pubkey: "pk" });
+});
+
+describe("resolveBoardLink", () => {
+  it("fetches a public board that is not in the user's own list", async () => {
+    // A shared `naddr` names a board nobody put in this account's lists, so
+    // `fetchBoards` will never return it. Without this the link dead-ends.
+    const shared = makeBoard({ pubkey: "someone-else" });
+    sdk.fetchBoardByCoordinate.mockResolvedValue(shared);
+
+    await useKanbanStore.getState().resolveBoardLink("30301:someone-else:board-1");
+
+    expect(sdk.fetchBoardByCoordinate).toHaveBeenCalledWith("30301:someone-else:board-1");
+    expect(useKanbanStore.getState().linkedBoard).toBe(shared);
+  });
+
+  it("leaves a private coordinate alone, having no view key to read it with", async () => {
+    // A 32301 board is encrypted under a view key that only reaches this
+    // account through a board list or an invitation — both of which would have
+    // put the board in `boards` already. Asking would spend a round trip on a
+    // payload that cannot be decrypted.
+    await useKanbanStore.getState().resolveBoardLink("32301:someone-else:board-1");
+
+    expect(sdk.fetchBoardByCoordinate).not.toHaveBeenCalled();
+    expect(useKanbanStore.getState().linkedBoard).toBeNull();
+  });
+
+  it("does not go to the relays for a board already in the list", async () => {
+    useKanbanStore.setState({ boards: [makeBoard()] });
+
+    await useKanbanStore.getState().resolveBoardLink(BOARD_KEY);
+
+    expect(sdk.fetchBoardByCoordinate).not.toHaveBeenCalled();
+  });
+
+  it("asks once per coordinate, however often the open board is re-read", async () => {
+    sdk.fetchBoardByCoordinate.mockResolvedValue(null);
+
+    await useKanbanStore.getState().resolveBoardLink("30301:someone-else:board-1");
+    await useKanbanStore.getState().resolveBoardLink("30301:someone-else:board-1");
+
+    expect(sdk.fetchBoardByCoordinate).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a board resolved for a different link", async () => {
+    sdk.fetchBoardByCoordinate.mockResolvedValueOnce(makeBoard({ pubkey: "someone-else" }));
+    await useKanbanStore.getState().resolveBoardLink("30301:someone-else:board-1");
+
+    sdk.fetchBoardByCoordinate.mockResolvedValueOnce(null);
+    await useKanbanStore.getState().resolveBoardLink("30301:someone-else:board-2");
+
+    expect(useKanbanStore.getState().linkedBoard).toBeNull();
+  });
+
+  it("reports a failed lookup as a missing board, not an error banner", async () => {
+    // The coordinate came out of a URL: an unreachable board is a bad link,
+    // which `MissingBoard` already explains better than a red alert.
+    sdk.fetchBoardByCoordinate.mockRejectedValue(new Error("relay down"));
+
+    await useKanbanStore.getState().resolveBoardLink("30301:someone-else:board-1");
+
+    expect(useKanbanStore.getState().linkedBoard).toBeNull();
+    expect(useKanbanStore.getState().error).toBeNull();
+    expect(useKanbanStore.getState().isResolvingLink).toBe(false);
+  });
+
+  it("is cleared on sign-out", async () => {
+    sdk.fetchBoardByCoordinate.mockResolvedValue(makeBoard({ pubkey: "someone-else" }));
+    await useKanbanStore.getState().resolveBoardLink("30301:someone-else:board-1");
+
+    useKanbanStore.getState().reset();
+
+    expect(useKanbanStore.getState().linkedBoard).toBeNull();
+  });
 });
 
 describe("fetchBoards", () => {

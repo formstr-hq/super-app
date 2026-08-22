@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const deleteBoard = vi.hoisted(() => vi.fn(async () => {}));
+const resolveBoardLink = vi.hoisted(() => vi.fn(async () => {}));
 const fetchBoards = vi.hoisted(() => vi.fn(async () => {}));
 const fetchCards = vi.hoisted(() => vi.fn(async () => {}));
 
@@ -55,6 +56,7 @@ function renderAtBoard(board: KanbanBoard, pubkey: string | null, segment?: stri
     fetchBoards,
     fetchCards,
     deleteBoard,
+    resolveBoardLink,
   } as never);
 
   return render(
@@ -83,10 +85,61 @@ describe("KanbanPage board routing", () => {
     expect(screen.getByRole("button", { name: /delete board/i })).toBeInTheDocument();
   });
 
+  it("looks up a board the naddr names but the user's own list has not got", async () => {
+    // The point of routing on an naddr: it carries the whole address, so a
+    // link shared by someone who never invited you still opens.
+    const shared = `30301:${"b".repeat(64)}:shared-board`;
+    renderAtBoard(makeBoard(), OWNER, naddrForCoordinate(shared));
+
+    await waitFor(() => expect(resolveBoardLink).toHaveBeenCalledWith(shared));
+  });
+
+  it("opens the board that lookup found, without adding it to the list", async () => {
+    const shared = makeBoard({ pubkey: "b".repeat(64), id: "shared-board", title: "Shared" });
+    useKanbanStore.setState({ boards: [], linkedBoard: shared } as never);
+    renderAtBoard(makeBoard(), OWNER, naddrForCoordinate(`30301:${"b".repeat(64)}:shared-board`));
+    useKanbanStore.setState({ boards: [], linkedBoard: shared } as never);
+
+    await waitFor(() => expect(screen.getByText("board view")).toBeInTheDocument());
+    expect(screen.queryByText(/not in your list/i)).not.toBeInTheDocument();
+  });
+
+  it("opens a shared public board for a signed-out visitor, read-only", async () => {
+    // Nothing on the public read path touches the signer, so a shared link must
+    // not trip the login modal on the way in — the mistake the calendar module
+    // made with its own "show all public" surface.
+    const openAuthModal = vi.fn();
+    const shared = makeBoard({ pubkey: "b".repeat(64), id: "shared-board" });
+    renderAtBoard(makeBoard(), null, naddrForCoordinate(`30301:${"b".repeat(64)}:shared-board`));
+    useAuthStore.setState({ pubkey: null, openAuthModal } as never);
+    useKanbanStore.setState({ boards: [], linkedBoard: shared } as never);
+
+    await waitFor(() => expect(screen.getByText("board view")).toBeInTheDocument());
+    expect(openAuthModal).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /add card/i })).not.toBeInTheDocument();
+  });
+
+  it("does not look up a board it already has", async () => {
+    renderAtBoard(makeBoard(), OWNER);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /delete board/i })).toBeVisible(),
+    );
+    expect(resolveBoardLink).not.toHaveBeenCalled();
+  });
+
   it("reports a missing board for a segment that resolves to nothing", () => {
     renderAtBoard(makeBoard(), OWNER, "naddr1nonsense");
-    expect(screen.getByText(/not in your list/i)).toBeInTheDocument();
+    expect(screen.getByText(/could not find that board/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /delete board/i })).not.toBeInTheDocument();
+  });
+
+  it("blames the view key only for a private board, which is the one it explains", () => {
+    // A public board that did not resolve was looked for on the relays and was
+    // not there; saying "not in your list" would send the user hunting for the
+    // wrong thing.
+    const priv = `32301:${"b".repeat(64)}:secret`;
+    renderAtBoard(makeBoard(), OWNER, naddrForCoordinate(priv));
+    expect(screen.getByText(/view key/i)).toBeInTheDocument();
   });
 });
 
