@@ -13,6 +13,12 @@ interface Declarable {
   ): { unobserve: () => void };
 }
 
+/** One standing interest's scope, and the moment it was declared. */
+interface WarmEntry {
+  filters: Filter[];
+  declaredAt: number;
+}
+
 /**
  * Holds the app's standing interests for one account.
  *
@@ -20,11 +26,15 @@ interface Declarable {
  * logout, so mounting or unmounting a view never opens or closes a socket. The
  * registry also answers whether a given read is backed by one of them, which is
  * what the runtime consults before settling a read early.
+ *
+ * It answers for interests it did not declare, too. A module that opens its own
+ * live scope — the board on screen, whose cards no boot-time interest covers —
+ * registers it here through `track`, because a read is warm when *some* standing
+ * interest keeps it fresh, not only when this class opened it.
  */
 export class WarmupRegistry {
   private handles: Array<{ unobserve: () => void }> = [];
-  private declared: Filter[] = [];
-  private declaredAt = 0;
+  private entries: WarmEntry[] = [];
 
   constructor(
     private readonly dataLayer: Declarable,
@@ -53,21 +63,60 @@ export class WarmupRegistry {
           scope.relays.length > 0 ? { relays: scope.relays } : undefined,
         ),
       );
-      this.declared.push(...scope.filters);
+      this.entries.push({ filters: scope.filters, declaredAt: Date.now() });
     }
-    this.declaredAt = Date.now();
+  }
+
+  /**
+   * Count an interest this registry does not own as warm, until the returned
+   * function is called.
+   *
+   * The subscription is the caller's — this only records that the scope is being
+   * kept current, so reads over it can settle on the short grace. Without it a
+   * live-watched scope reads as cold and pays the full quiet window on every
+   * refetch, which is the slowest part of writing to an open board.
+   */
+  track(filters: Filter[]): () => void {
+    const entry: WarmEntry = { filters, declaredAt: Date.now() };
+    this.entries.push(entry);
+    return () => {
+      const at = this.entries.indexOf(entry);
+      if (at >= 0) this.entries.splice(at, 1);
+    };
   }
 
   stop(): void {
     for (const handle of this.handles) handle.unobserve();
     this.handles = [];
-    this.declared = [];
+    this.entries = [];
   }
 
   /** Is this read backed by a standing interest that has had time to sync? */
   covers(filter: Filter): boolean {
-    if (this.declared.length === 0) return false;
-    if (Date.now() - this.declaredAt < this.syncWindowMs) return false;
-    return this.declared.some((declared) => isCoveredBy(filter, declared));
+    const now = Date.now();
+    return this.entries.some(
+      (entry) =>
+        now - entry.declaredAt >= this.syncWindowMs &&
+        entry.filters.some((declared) => isCoveredBy(filter, declared)),
+    );
   }
+}
+
+/**
+ * The registry the app is currently running on, or null when it is signed out or
+ * on the SimplePool backend.
+ *
+ * A module-level handle because the two sides never meet otherwise: the registry
+ * is built during the local-relay install, while the live scopes that want to
+ * register with it are opened later, per view, from stores that know nothing
+ * about the network backend.
+ */
+let current: WarmupRegistry | null = null;
+
+export function currentWarmup(): WarmupRegistry | null {
+  return current;
+}
+
+export function setCurrentWarmup(registry: WarmupRegistry | null): void {
+  current = registry;
 }

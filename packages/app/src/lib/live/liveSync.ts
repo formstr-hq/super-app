@@ -1,6 +1,8 @@
 import { nostrRuntime } from "@formstr/core";
 import type { Filter } from "nostr-tools";
 
+import { currentWarmup } from "../localRelay/warmup";
+
 /** Something worth watching, and what to do when it changes. */
 export interface LiveScope {
   /** Identity of the scope. Opening the same key again replaces it. */
@@ -16,6 +18,8 @@ const COALESCE_MS = 250;
 
 interface OpenScope {
   unsub: () => void;
+  /** Drops this scope's warm registration, when there is a registry to drop it from. */
+  untrack?: () => void;
   timer?: ReturnType<typeof setTimeout>;
 }
 
@@ -60,7 +64,13 @@ export class LiveSync {
       },
     });
 
-    this.open_.set(scope.key, { unsub: () => handle.unsub() });
+    // A live scope is a standing interest by another name, so reads over it can
+    // settle on the warm grace instead of waiting out a network that is already
+    // streaming into this store. Null on the SimplePool backend, which has no
+    // registry to tell — and nothing that would consult one.
+    const untrack = currentWarmup()?.track(scope.filters);
+
+    this.open_.set(scope.key, { unsub: () => handle.unsub(), untrack });
     return () => this.close(scope.key);
   }
 
@@ -70,6 +80,7 @@ export class LiveSync {
     if (!entry) return;
     this.open_.delete(key);
     clearTimeout(entry.timer);
+    entry.untrack?.();
     entry.unsub();
   }
 

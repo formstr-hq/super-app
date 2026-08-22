@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { scopesFor } from "../live/scopes";
 
-import { WarmupRegistry } from "./warmup";
+import { WarmupRegistry, currentWarmup, setCurrentWarmup } from "./warmup";
 
 const ME = "a".repeat(64);
 
@@ -71,6 +71,48 @@ describe("WarmupRegistry", () => {
     expect(registry.covers({ kinds: [14083], authors: [ME] })).toBe(false);
   });
 
+  it("vouches for a scope another owner registered, once it has had time to sync", () => {
+    // The open board's cards: live-watched by the kanban store, covered by no
+    // boot-time interest. Untracked, every refetch of that board pays the full
+    // cold quiet window even though the store is being kept current.
+    vi.useFakeTimers();
+    const registry = new WarmupRegistry(fakeDataLayer());
+    registry.start(ME);
+    const cards: Filter = { kinds: [30302], "#a": ["30301:" + ME + ":board"] };
+
+    expect(registry.covers(cards)).toBe(false);
+
+    const untrack = registry.track([cards]);
+    expect(registry.covers(cards)).toBe(false);
+
+    vi.advanceTimersByTime(3000);
+    expect(registry.covers(cards)).toBe(true);
+
+    untrack();
+    expect(registry.covers(cards)).toBe(false);
+  });
+
+  it("does not declare an interest for a scope it only tracks", () => {
+    // The subscription belongs to the caller; tracking is bookkeeping, and a
+    // second interest over the same filters would decode everything twice.
+    const dataLayer = fakeDataLayer();
+    const registry = new WarmupRegistry(dataLayer, 0);
+    const before = dataLayer.declared.length;
+
+    registry.track([{ kinds: [30302] }]);
+
+    expect(dataLayer.declared.length).toBe(before);
+  });
+
+  it("forgets tracked scopes on stop, like its own", () => {
+    const registry = new WarmupRegistry(fakeDataLayer(), 0);
+    registry.track([{ kinds: [30302] }]);
+
+    registry.stop();
+
+    expect(registry.covers({ kinds: [30302] })).toBe(false);
+  });
+
   it("replaces the previous account's interests when a new one starts", () => {
     const dataLayer = fakeDataLayer();
     const registry = new WarmupRegistry(dataLayer, 0);
@@ -82,5 +124,18 @@ describe("WarmupRegistry", () => {
     expect(dataLayer.declared.filter((d) => d.live).length).toBe(scopesFor(other).length);
     expect(registry.covers({ kinds: [14083], authors: [ME] })).toBe(false);
     expect(registry.covers({ kinds: [14083], authors: [other] })).toBe(true);
+  });
+
+  it("exposes the registry in force, and forgets it on sign-out", () => {
+    // How a live scope opened later, by a store that knows nothing about the
+    // network backend, finds the registry to register with.
+    expect(currentWarmup()).toBeNull();
+
+    const registry = new WarmupRegistry(fakeDataLayer(), 0);
+    setCurrentWarmup(registry);
+    expect(currentWarmup()).toBe(registry);
+
+    setCurrentWarmup(null);
+    expect(currentWarmup()).toBeNull();
   });
 });

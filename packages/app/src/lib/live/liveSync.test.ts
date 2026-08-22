@@ -10,6 +10,8 @@ vi.mock("@formstr/core", () => ({
   },
 }));
 
+import { WarmupRegistry, setCurrentWarmup } from "../localRelay/warmup";
+
 import { LiveSync } from "./liveSync";
 
 interface Handlers {
@@ -171,5 +173,26 @@ describe("LiveSync", () => {
     close();
     live.closeAll();
     expect(unsubs[0]).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers its scope as warm, and unregisters when closed", () => {
+    // Without this the board on screen reads as cold on every refetch, and the
+    // slowest part of saving a card is a read of data already streaming in.
+    const registry = new WarmupRegistry({ observe: () => ({ unobserve: () => {} }) }, 0);
+    setCurrentWarmup(registry);
+    try {
+      const close = new LiveSync().open(scope(vi.fn()));
+      expect(registry.covers({ kinds: [30301] })).toBe(true);
+
+      close();
+      expect(registry.covers({ kinds: [30301] })).toBe(false);
+    } finally {
+      setCurrentWarmup(null);
+    }
+  });
+
+  it("opens normally when there is no registry, as on the SimplePool backend", () => {
+    setCurrentWarmup(null);
+    expect(() => new LiveSync().open(scope(vi.fn()))).not.toThrow();
   });
 });
