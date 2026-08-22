@@ -18,3 +18,8 @@ coverage/
 
 # Personal working notes for AI-assisted sessions (local only)
 CLAUDE.md
+
+# Local tool output (browser drivers, verification screenshots, packed tarballs)
+.playwright-mcp/
+.verify-shots/
+.local-tarballs/
