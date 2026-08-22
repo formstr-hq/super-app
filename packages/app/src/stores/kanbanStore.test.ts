@@ -1,8 +1,12 @@
 import type { KanbanBoard, KanbanCard } from "@formstr/kanban-sdk";
+
+import type { LiveScope } from "../lib/live/liveSync";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../kanban/sdk", () => ({
   kanbanSdk: {
+    relays: ["wss://kanban.test"],
     fetchBoards: vi.fn(),
     fetchPrivateBoards: vi.fn(),
     fetchBoardLists: vi.fn(),
@@ -17,6 +21,27 @@ vi.mock("../kanban/sdk", () => ({
   },
 }));
 
+const { liveSync, closers } = vi.hoisted(() => {
+  const closers: Array<ReturnType<typeof vi.fn>> = [];
+  return {
+    closers,
+    liveSync: {
+      open: vi.fn((_scope: LiveScope) => {
+        const close = vi.fn();
+        closers.push(close);
+        return close;
+      }),
+    },
+  };
+});
+
+// The bus opens real subscriptions through the runtime. Record the scopes
+// instead — what the store owes it is which board is open, nothing more.
+vi.mock("../lib/live/controller", () => ({
+  currentLiveSync: () => liveSync,
+}));
+
+import { boardKey } from "../kanban/boardKey";
 import { kanbanSdk } from "../kanban/sdk";
 
 import { useAuthStore } from "./authStore";
@@ -73,6 +98,7 @@ const BOARD_KEY = "30301:pk:board-1";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  closers.length = 0;
   useKanbanStore.getState().reset();
   useAuthStore.setState({ pubkey: "pk" });
 });
@@ -232,5 +258,116 @@ describe("board writes", () => {
 
     expect(useKanbanStore.getState().boards).toEqual([]);
     expect(useKanbanStore.getState().cardsByBoard[BOARD_KEY]).toBeUndefined();
+  });
+});
+
+describe("optimistic writes vs. a live refetch", () => {
+  // Found live: the local relay echoes a publish back to its own observers, so
+  // the reactive refetch can land BEFORE the SDK call the user made resolves.
+  // A blind append then adds a second copy of a board the list already holds.
+  it("does not duplicate a board the refetch already brought in", async () => {
+    const board = makeBoard();
+    sdk.createBoard.mockImplementation(async () => {
+      // The refetch beats the publish's own resolution.
+      useKanbanStore.setState({ boards: [board] });
+      return board;
+    });
+
+    await useKanbanStore.getState().createBoard({ title: "Board" } as never);
+
+    expect(useKanbanStore.getState().boards).toHaveLength(1);
+  });
+
+  it("does not duplicate a card the refetch already brought in", async () => {
+    const board = makeBoard();
+    const card = makeCard("c1", "todo", 100);
+    sdk.createCard.mockImplementation(async () => {
+      useKanbanStore.setState({ cardsByBoard: { [BOARD_KEY]: [card] } });
+      return card;
+    });
+
+    await useKanbanStore.getState().createCard(board, { title: "Card" } as never);
+
+    expect(useKanbanStore.getState().cardsByBoard[BOARD_KEY]).toHaveLength(1);
+  });
+
+  it("keeps the newly created board when the refetch has not landed yet", async () => {
+    const board = makeBoard();
+    sdk.createBoard.mockResolvedValue(board);
+    await useKanbanStore.getState().createBoard({ title: "Board" } as never);
+    expect(useKanbanStore.getState().boards).toEqual([board]);
+  });
+});
+
+describe("live card scope", () => {
+  it("watches the open board's cards", async () => {
+    const board = makeBoard();
+    sdk.fetchCards.mockResolvedValue([]);
+    await useKanbanStore.getState().fetchCards(board);
+
+    expect(liveSync.open).toHaveBeenCalledTimes(1);
+    const scope = liveSync.open.mock.calls[0][0];
+    expect(scope.key).toBe(`cards:${boardKey(board)}`);
+    expect(scope.filters[0]["#a"]).toEqual([boardKey(board)]);
+  });
+
+  it("drops the previous board's scope when another is opened", async () => {
+    sdk.fetchCards.mockResolvedValue([]);
+    await useKanbanStore.getState().fetchCards(makeBoard({ id: "b1" }));
+    await useKanbanStore.getState().fetchCards(makeBoard({ id: "b2" }));
+
+    // Keyed per board, so the bus closes the first scope itself; opening the
+    // same board twice must not stack two subscriptions either.
+    const keys = liveSync.open.mock.calls.map((c) => c[0].key);
+    expect(new Set(keys).size).toBe(2);
+    expect(closers[0]).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes the scope to the kanban relays", async () => {
+    sdk.fetchCards.mockResolvedValue([]);
+    await useKanbanStore.getState().fetchCards(makeBoard());
+    expect(liveSync.open.mock.calls[0][0].relays).toEqual(["wss://kanban.test"]);
+  });
+
+  it("does not resubscribe when the same board is re-read", async () => {
+    // The scope's own onChange re-runs fetchCards. Reopening the scope there
+    // would tear down the subscription that just fired and rebuild it on every
+    // single card edit.
+    const board = makeBoard();
+    sdk.fetchCards.mockResolvedValue([]);
+    await useKanbanStore.getState().fetchCards(board);
+    await useKanbanStore.getState().fetchCards(board);
+
+    expect(liveSync.open).toHaveBeenCalledTimes(1);
+    expect(closers[0]).not.toHaveBeenCalled();
+  });
+
+  it("re-reads the board's cards when the scope changes", async () => {
+    const board = makeBoard();
+    sdk.fetchCards.mockResolvedValue([]);
+    await useKanbanStore.getState().fetchCards(board);
+    sdk.fetchCards.mockClear();
+
+    await liveSync.open.mock.calls[0][0].onChange();
+
+    expect(sdk.fetchCards).toHaveBeenCalledWith(board);
+  });
+
+  it("stops watching on reset", async () => {
+    sdk.fetchCards.mockResolvedValue([]);
+    await useKanbanStore.getState().fetchCards(makeBoard());
+    useKanbanStore.getState().reset();
+
+    // reset runs on sign-out. A scope left open would keep refetching a board
+    // for an account that no longer has a signer to decrypt it.
+    expect(closers[0]).toHaveBeenCalledTimes(1);
+  });
+
+  it("still loads a private board whose key it cannot use", async () => {
+    sdk.fetchCards.mockResolvedValue([]);
+    await useKanbanStore.getState().fetchCards(makeBoard({ isPrivate: true, viewKey: undefined }));
+
+    expect(sdk.fetchCards).toHaveBeenCalled();
+    expect(liveSync.open).not.toHaveBeenCalled();
   });
 });

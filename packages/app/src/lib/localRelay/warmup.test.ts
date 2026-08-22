@@ -1,7 +1,9 @@
 import type { Filter } from "nostr-tools";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
-import { WarmupRegistry, warmScopesFor } from "./warmup";
+import { scopesFor } from "../live/scopes";
+
+import { WarmupRegistry, currentWarmup, setCurrentWarmup } from "./warmup";
 
 const ME = "a".repeat(64);
 
@@ -18,37 +20,6 @@ function fakeDataLayer() {
   };
 }
 
-describe("warmScopesFor", () => {
-  it("covers each module's own-scope reads, scoped to the user", () => {
-    const scopes = warmScopesFor(ME);
-    const kinds = scopes.flatMap((s) => s.filters.flatMap((f) => f.kinds ?? []));
-
-    expect(kinds).toContain(14083); // forms list
-    expect(kinds).toContain(30301); // public boards
-    expect(kinds).toContain(32303); // private board list
-    expect(kinds).toContain(32123); // calendar lists
-    expect(kinds).toContain(34578); // drive file metadata
-    expect(kinds).toContain(0); // own profile
-  });
-
-  it("routes each scope to its module's relays", () => {
-    // A warm interest that read from the wrong relays would keep a cache warm
-    // with events the module never publishes there.
-    for (const scope of warmScopesFor(ME)) {
-      expect(scope.relays.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("asks only for the user's own events, never the whole kind", () => {
-    for (const scope of warmScopesFor(ME)) {
-      for (const filter of scope.filters) {
-        const scoped = filter.authors?.includes(ME) || filter["#p"]?.includes(ME);
-        expect(scoped).toBe(true);
-      }
-    }
-  });
-});
-
 describe("WarmupRegistry", () => {
   afterEach(() => vi.useRealTimers());
 
@@ -57,7 +28,7 @@ describe("WarmupRegistry", () => {
     const registry = new WarmupRegistry(dataLayer);
 
     registry.start(ME);
-    expect(dataLayer.declared.length).toBe(warmScopesFor(ME).length);
+    expect(dataLayer.declared.length).toBe(scopesFor(ME).length);
     expect(dataLayer.declared.every((d) => d.live)).toBe(true);
 
     registry.stop();
@@ -100,6 +71,48 @@ describe("WarmupRegistry", () => {
     expect(registry.covers({ kinds: [14083], authors: [ME] })).toBe(false);
   });
 
+  it("vouches for a scope another owner registered, once it has had time to sync", () => {
+    // The open board's cards: live-watched by the kanban store, covered by no
+    // boot-time interest. Untracked, every refetch of that board pays the full
+    // cold quiet window even though the store is being kept current.
+    vi.useFakeTimers();
+    const registry = new WarmupRegistry(fakeDataLayer());
+    registry.start(ME);
+    const cards: Filter = { kinds: [30302], "#a": ["30301:" + ME + ":board"] };
+
+    expect(registry.covers(cards)).toBe(false);
+
+    const untrack = registry.track([cards]);
+    expect(registry.covers(cards)).toBe(false);
+
+    vi.advanceTimersByTime(3000);
+    expect(registry.covers(cards)).toBe(true);
+
+    untrack();
+    expect(registry.covers(cards)).toBe(false);
+  });
+
+  it("does not declare an interest for a scope it only tracks", () => {
+    // The subscription belongs to the caller; tracking is bookkeeping, and a
+    // second interest over the same filters would decode everything twice.
+    const dataLayer = fakeDataLayer();
+    const registry = new WarmupRegistry(dataLayer, 0);
+    const before = dataLayer.declared.length;
+
+    registry.track([{ kinds: [30302] }]);
+
+    expect(dataLayer.declared.length).toBe(before);
+  });
+
+  it("forgets tracked scopes on stop, like its own", () => {
+    const registry = new WarmupRegistry(fakeDataLayer(), 0);
+    registry.track([{ kinds: [30302] }]);
+
+    registry.stop();
+
+    expect(registry.covers({ kinds: [30302] })).toBe(false);
+  });
+
   it("replaces the previous account's interests when a new one starts", () => {
     const dataLayer = fakeDataLayer();
     const registry = new WarmupRegistry(dataLayer, 0);
@@ -108,8 +121,21 @@ describe("WarmupRegistry", () => {
     registry.start(ME);
     registry.start(other);
 
-    expect(dataLayer.declared.filter((d) => d.live).length).toBe(warmScopesFor(other).length);
+    expect(dataLayer.declared.filter((d) => d.live).length).toBe(scopesFor(other).length);
     expect(registry.covers({ kinds: [14083], authors: [ME] })).toBe(false);
     expect(registry.covers({ kinds: [14083], authors: [other] })).toBe(true);
+  });
+
+  it("exposes the registry in force, and forgets it on sign-out", () => {
+    // How a live scope opened later, by a store that knows nothing about the
+    // network backend, finds the registry to register with.
+    expect(currentWarmup()).toBeNull();
+
+    const registry = new WarmupRegistry(fakeDataLayer(), 0);
+    setCurrentWarmup(registry);
+    expect(currentWarmup()).toBe(registry);
+
+    setCurrentWarmup(null);
+    expect(currentWarmup()).toBeNull();
   });
 });

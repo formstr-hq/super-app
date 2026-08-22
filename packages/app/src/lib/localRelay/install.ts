@@ -4,7 +4,7 @@ import type { DataLayer } from "@formstr/local-relay";
 import { setRelayHealthReader } from "../relayHealth";
 
 import { LocalRelayRuntime } from "./LocalRelayRuntime";
-import { WarmupRegistry } from "./warmup";
+import { WarmupRegistry, setCurrentWarmup } from "./warmup";
 
 const KILL_SWITCH_KEY = "formstr.localRelay";
 
@@ -48,6 +48,9 @@ export function installRuntime(dataLayer: DataLayer, pubkey: string): () => void
 
   const warmup = new WarmupRegistry(dataLayer);
   warmup.start(pubkey);
+  // Published before any view opens, so a module's own live scope can register
+  // itself as warm the moment it is declared.
+  setCurrentWarmup(warmup);
 
   const runtime = new LocalRelayRuntime(dataLayer, {
     isWarm: (filter) => warmup.covers(filter),
@@ -77,6 +80,7 @@ export function installRuntime(dataLayer: DataLayer, pubkey: string): () => void
   return () => {
     document.removeEventListener("visibilitychange", onVisibility);
     window.removeEventListener("pagehide", onPageHide);
+    setCurrentWarmup(null);
     setRelayHealthReader(null);
     warmup.stop();
     runtime.dispose();
