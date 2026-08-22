@@ -10,6 +10,8 @@
 
 import { IndexedDBStorage, RelayService, selfChannel } from "@formstr/local-relay";
 
+import { appPrunePolicy } from "./prunePolicy";
+
 const scope = self as unknown as {
   name?: string;
   postMessage: (m: unknown) => void;
@@ -23,6 +25,9 @@ const service = new RelayService({
   // outbox debt and is retried on reconnect, which is strictly better than the
   // old runtime's fire-and-forget.
   publishTimeoutMs: 5000,
+  // Without this the store keeps only what a generic Nostr client would, and
+  // sweeps the user's own boards, calendars and forms on a 7-day TTL.
+  persistence: { prunePolicy: appPrunePolicy() },
 });
 
 void service.start();
