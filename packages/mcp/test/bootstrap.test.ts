@@ -1,6 +1,7 @@
-import { signerManager } from "@formstr/core";
+import { defaultNostrRuntime, signerManager, signerPool } from "@formstr/core";
 import { type ActiveSigner, type Signer, type StoredAccount } from "@formstr/signer";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import WsWebSocket from "ws";
 
 import { bootstrap, type BootstrapDeps } from "../src/bootstrap";
 
@@ -110,6 +111,20 @@ describe("bootstrap", () => {
     const [, method, pubkey] = setActiveSpy.mock.calls[0];
     expect(method).toBe("local");
     expect(pubkey).toBe(PUBKEY);
+  });
+
+  it("patches a Node WebSocket onto both pools it will actually use", async () => {
+    const { signer } = fakeSigner(nip46Account);
+    await bootstrap({}, depsFor(signer));
+
+    // Node < 22 has no global WebSocket, and when bundled to CJS the module-level
+    // binding setWebSocketImplementation writes to is a different one, so the pool
+    // instances need patching directly. Two of them now: app data reads through
+    // the default runtime, bunker traffic through the signer pool.
+    expect((defaultNostrRuntime.pool as unknown as { _WebSocket?: unknown })._WebSocket).toBe(
+      WsWebSocket,
+    );
+    expect((signerPool as unknown as { _WebSocket?: unknown })._WebSocket).toBe(WsWebSocket);
   });
 
   it("resumes a nip46 session via signer.unlock({ pool }) and injects as 'nip46'", async () => {

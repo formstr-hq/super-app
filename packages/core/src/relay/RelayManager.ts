@@ -1,6 +1,6 @@
 import type { Event, Filter } from "nostr-tools";
 
-import { nostrRuntime } from "../runtime/NostrRuntime";
+import { nostrRuntime } from "../runtime/installed";
 
 import { MODULE_DEFAULT_RELAYS, type ModuleName } from "./module-defaults";
 

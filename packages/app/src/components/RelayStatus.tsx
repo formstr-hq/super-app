@@ -1,8 +1,9 @@
-import { relayManager, nostrRuntime } from "@formstr/core";
+import { relayManager } from "@formstr/core";
 import { Box, Tooltip, Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 
 import type { AccentModule } from "../lib/moduleAccent";
+import { readRelayHealth } from "../lib/relayHealth";
 
 const POLL_MS = 5000;
 const SIZE = 16;
@@ -28,9 +29,9 @@ const LABEL: Record<ArmState, string> = {
 
 /**
  * The wordmark's asterisk, drawn as one arm per relay the active module
- * publishes to, lit by the pool's live connection state.
+ * publishes to, lit by the network layer's live connection state.
  *
- * The pool only tracks relays it has actually touched, so a relay missing from
+ * A backend only tracks relays it has actually touched, so a relay missing from
  * the status map has not been contacted yet — that is "idle", not "down".
  * Reporting it as down would be a lie on every cold start.
  */
@@ -39,10 +40,18 @@ export function RelayStatus({ module }: { module: AccentModule }) {
   const [status, setStatus] = useState<Map<string, boolean>>(() => new Map());
 
   useEffect(() => {
-    const read = () => setStatus(new Map(nostrRuntime.pool.listConnectionStatus()));
+    let live = true;
+    const read = () => {
+      void readRelayHealth().then((next) => {
+        if (live) setStatus(next);
+      });
+    };
     read();
     const id = setInterval(read, POLL_MS);
-    return () => clearInterval(id);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
   }, []);
 
   const arms: { url: string; state: ArmState }[] = relays.map((url) => {
