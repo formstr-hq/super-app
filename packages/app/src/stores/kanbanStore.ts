@@ -184,7 +184,10 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
     set({ error: null });
     try {
       const board = await kanbanSdk.createBoard(draft);
-      set((s) => ({ boards: [board, ...s.boards] }));
+      // Upsert rather than prepend: the local relay echoes the publish back to
+      // its own observers, so the reactive refetch can land before this call
+      // resolves and a blind prepend would show the board twice.
+      get().ingestBoard(board);
       return board;
     } catch (e) {
       set({ error: message(e, "Failed to create board") });
@@ -227,9 +230,18 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
     try {
       const card = await kanbanSdk.createCard(board, draft);
       const key = boardKey(board);
-      set((s) => ({
-        cardsByBoard: { ...s.cardsByBoard, [key]: [...(s.cardsByBoard[key] ?? []), card] },
-      }));
+      // Same race as createBoard: the refetch may already hold this card.
+      set((s) => {
+        const cards = s.cardsByBoard[key] ?? [];
+        return {
+          cardsByBoard: {
+            ...s.cardsByBoard,
+            [key]: cards.some((c) => c.id === card.id)
+              ? cards.map((c) => (c.id === card.id ? card : c))
+              : [...cards, card],
+          },
+        };
+      });
       return card;
     } catch (e) {
       set({ error: message(e, "Failed to create card") });

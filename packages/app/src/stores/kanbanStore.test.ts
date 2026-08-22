@@ -261,6 +261,44 @@ describe("board writes", () => {
   });
 });
 
+describe("optimistic writes vs. a live refetch", () => {
+  // Found live: the local relay echoes a publish back to its own observers, so
+  // the reactive refetch can land BEFORE the SDK call the user made resolves.
+  // A blind append then adds a second copy of a board the list already holds.
+  it("does not duplicate a board the refetch already brought in", async () => {
+    const board = makeBoard();
+    sdk.createBoard.mockImplementation(async () => {
+      // The refetch beats the publish's own resolution.
+      useKanbanStore.setState({ boards: [board] });
+      return board;
+    });
+
+    await useKanbanStore.getState().createBoard({ title: "Board" } as never);
+
+    expect(useKanbanStore.getState().boards).toHaveLength(1);
+  });
+
+  it("does not duplicate a card the refetch already brought in", async () => {
+    const board = makeBoard();
+    const card = makeCard("c1", "todo", 100);
+    sdk.createCard.mockImplementation(async () => {
+      useKanbanStore.setState({ cardsByBoard: { [BOARD_KEY]: [card] } });
+      return card;
+    });
+
+    await useKanbanStore.getState().createCard(board, { title: "Card" } as never);
+
+    expect(useKanbanStore.getState().cardsByBoard[BOARD_KEY]).toHaveLength(1);
+  });
+
+  it("keeps the newly created board when the refetch has not landed yet", async () => {
+    const board = makeBoard();
+    sdk.createBoard.mockResolvedValue(board);
+    await useKanbanStore.getState().createBoard({ title: "Board" } as never);
+    expect(useKanbanStore.getState().boards).toEqual([board]);
+  });
+});
+
 describe("live card scope", () => {
   it("watches the open board's cards", async () => {
     const board = makeBoard();
