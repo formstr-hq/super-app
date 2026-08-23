@@ -1,7 +1,12 @@
 import { DndContext } from "@dnd-kit/core";
 import type { KanbanCard } from "@formstr/kanban-sdk";
 import { render, screen, cleanup } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// The assignee avatar resolves a kind-0, and a kind-0 is a relay round trip.
+vi.mock("@formstr/agent/services/profile", () => ({
+  fetchProfile: vi.fn().mockResolvedValue(null),
+}));
 
 import { avatarInitials } from "../../lib/pubkeyAvatar";
 

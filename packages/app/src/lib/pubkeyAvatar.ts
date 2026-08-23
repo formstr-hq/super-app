@@ -32,3 +32,23 @@ export function avatarInitials(pubkeyHex: string): string {
     return pubkeyHex.slice(0, 2).toUpperCase() || "??";
   }
 }
+
+/**
+ * Initials for a kind-0 name, or null when it has none worth showing.
+ *
+ * Two words give their first letters, one word its first two, so a tile is
+ * always two characters wide where the name allows it. Only letters and digits
+ * count: nostr names are full of emoji and ornaments, and a tile reading "★彡"
+ * identifies nobody — null tells the caller to fall back to the npub, which at
+ * least a reader can match against a profile.
+ */
+export function initialsFromName(name: string): string | null {
+  const words = name
+    .split(/\s+/)
+    .map((word) => [...word].filter((char) => /[\p{L}\p{N}]/u.test(char)).join(""))
+    .filter(Boolean);
+  if (words.length === 0) return null;
+
+  const initials = words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2);
+  return initials.toUpperCase();
+}

@@ -1,24 +1,63 @@
 import { Box, Tooltip } from "@mui/material";
+import { useEffect, useState } from "react";
 
 import { formatNpub } from "../../lib/npub";
-import { avatarColor, avatarInitials } from "../../lib/pubkeyAvatar";
+import { useProfile } from "../../lib/profileCache";
+import { avatarColor, avatarInitials, initialsFromName } from "../../lib/pubkeyAvatar";
 
 interface AssigneeAvatarProps {
   pubkey: string;
   size?: number;
 }
 
-/** A pubkey as a colour and two letters, with the readable npub on hover. */
+/**
+ * Someone's face, or the next best thing.
+ *
+ * Three steps down: the kind-0 picture, the initials of the kind-0 name, then
+ * two characters of the npub. Each step is what the one before it falls back to
+ * — on first paint nothing has been fetched yet, so every avatar starts at the
+ * npub and improves in place when the profile lands.
+ */
 export function AssigneeAvatar({ pubkey, size = 18 }: AssigneeAvatarProps) {
+  const profile = useProfile(pubkey);
+  const [pictureFailed, setPictureFailed] = useState(false);
+
+  const name = profile?.displayName || profile?.name || "";
+  const npub = formatNpub(pubkey);
+  const picture = profile?.picture;
+
+  // A rotated profile deserves a fresh attempt at its new picture.
+  useEffect(() => setPictureFailed(false), [picture]);
+
+  const tile = {
+    width: size,
+    height: size,
+    borderRadius: "3px",
+    flexShrink: 0,
+  };
+
+  if (picture && !pictureFailed) {
+    return (
+      <Tooltip title={name || npub}>
+        <Box
+          component="img"
+          src={picture}
+          alt={name || npub}
+          // Picture URLs rot — the host disappears, the CDN blocks the referrer.
+          // A broken image element identifies nobody; the initials still do.
+          onError={() => setPictureFailed(true)}
+          sx={{ ...tile, objectFit: "cover", bgcolor: avatarColor(pubkey) }}
+        />
+      </Tooltip>
+    );
+  }
+
   return (
-    <Tooltip title={formatNpub(pubkey)}>
+    <Tooltip title={name || npub}>
       <Box
-        aria-label={formatNpub(pubkey)}
+        aria-label={npub}
         sx={{
-          width: size,
-          height: size,
-          borderRadius: "3px",
-          flexShrink: 0,
+          ...tile,
           bgcolor: avatarColor(pubkey),
           color: "#FFFFFF",
           display: "flex",
@@ -31,7 +70,7 @@ export function AssigneeAvatar({ pubkey, size = 18 }: AssigneeAvatarProps) {
           userSelect: "none",
         }}
       >
-        {avatarInitials(pubkey)}
+        {initialsFromName(name) ?? avatarInitials(pubkey)}
       </Box>
     </Tooltip>
   );

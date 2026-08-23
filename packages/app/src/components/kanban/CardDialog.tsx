@@ -1,6 +1,7 @@
 import type { CardDraft, KanbanCard } from "@formstr/kanban-sdk";
 import {
   Autocomplete,
+  Box,
   Button,
   Chip,
   Dialog,
@@ -15,6 +16,8 @@ import { useEffect, useState } from "react";
 
 import { npubToHex } from "../../lib/npub";
 import { profileName, useProfileName } from "../../lib/profileCache";
+
+import { AssigneeAvatar } from "./AssigneeAvatar";
 
 interface CardDialogProps {
   open: boolean;
@@ -171,9 +174,10 @@ export function CardDialog({
             // Options are hex pubkeys; only their rendering is human.
             getOptionLabel={(option) => profileName(option)}
             renderOption={({ key, ...props }, option) => (
-              <li key={key} {...props}>
+              <Box component="li" key={key} {...props} sx={{ gap: 1 }}>
+                <AssigneeAvatar pubkey={option} size={20} />
                 <AssigneeName pubkey={option} />
-              </li>
+              </Box>
             )}
             renderTags={(value, getTagProps) =>
               value.map((pubkey, index) => {
@@ -182,7 +186,14 @@ export function CardDialog({
                   <Chip
                     key={key}
                     size="small"
-                    label={<AssigneeName pubkey={pubkey} />}
+                    // Inside the label rather than Chip's `avatar` slot, which
+                    // clones the child and restyles it as a round MUI Avatar.
+                    label={
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.625 }}>
+                        <AssigneeAvatar pubkey={pubkey} size={16} />
+                        <AssigneeName pubkey={pubkey} />
+                      </Box>
+                    }
                     {...tagProps}
                   />
                 );

@@ -38,13 +38,13 @@ export function profileName(pubkey: string): string {
 }
 
 /**
- * A pubkey's display name, fetched once per session.
+ * A pubkey's kind-0 profile, fetched once per session.
  *
- * Renders the short npub immediately and swaps in the kind-0 name when it
- * arrives, so a member list is legible on first paint and never blocks on a
- * relay that is slow or has nothing to say.
+ * Returns null until it arrives — and forever, for a pubkey that has none — so
+ * a caller renders its fallback on first paint and never blocks on a relay that
+ * is slow or has nothing to say.
  */
-export function useProfileName(pubkey: string | null): string {
+export function useProfile(pubkey: string | null): NostrProfile | null {
   const [, bump] = useState(0);
 
   useEffect(() => {
@@ -57,6 +57,17 @@ export function useProfileName(pubkey: string | null): string {
     };
   }, [pubkey]);
 
+  return pubkey ? (resolved.get(pubkey) ?? null) : null;
+}
+
+/**
+ * A pubkey's display name, fetched once per session.
+ *
+ * Renders the short npub immediately and swaps in the kind-0 name when it
+ * arrives.
+ */
+export function useProfileName(pubkey: string | null): string {
+  useProfile(pubkey);
   return pubkey ? profileName(pubkey) : "";
 }
 
