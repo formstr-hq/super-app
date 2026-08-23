@@ -1,6 +1,9 @@
 import type { CardDraft, KanbanCard } from "@formstr/kanban-sdk";
 import {
+  Autocomplete,
+  Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -11,12 +14,21 @@ import {
 } from "@mui/material";
 import { useEffect, useState } from "react";
 
+import { npubToHex } from "../../lib/npub";
+import { profileName, useProfileName } from "../../lib/profileCache";
+
+import { AssigneeAvatar } from "./AssigneeAvatar";
+
 interface CardDialogProps {
   open: boolean;
   /** When set, the dialog edits this card instead of creating one. */
   card?: KanbanCard;
   /** Column heading shown in the title, for context when creating. */
   columnName: string;
+  /** Labels already used on this board, offered before anything new is typed. */
+  labelOptions?: string[];
+  /** Board members, as hex pubkeys, offered as assignees. */
+  assigneeOptions?: string[];
   saving: boolean;
   /** Viewers can open a card to read it, but every field and control is off. */
   readOnly?: boolean;
@@ -28,20 +40,43 @@ interface CardDialogProps {
   onBin?: () => void;
 }
 
-/** Comma-separated input ⇄ string list, trimmed and de-duplicated. */
-function parseList(value: string): string[] {
+/** Trimmed, non-empty and de-duplicated, preserving the order they were added. */
+function cleanLabels(values: readonly string[]): string[] {
   const seen = new Set<string>();
-  for (const part of value.split(",")) {
-    const trimmed = part.trim();
+  for (const value of values) {
+    const trimmed = value.trim();
     if (trimmed) seen.add(trimmed);
   }
   return [...seen];
+}
+
+/**
+ * Hex pubkeys only.
+ *
+ * Options arrive as hex already; a hand-typed entry may be an npub, and
+ * anything that is neither is dropped rather than stored as a `p` tag no relay
+ * or client can resolve.
+ */
+function cleanAssignees(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  for (const value of values) {
+    const hex = npubToHex(value);
+    if (hex) seen.add(hex);
+  }
+  return [...seen];
+}
+
+/** A pubkey's display name, kept live so a kind-0 lookup repaints it. */
+function AssigneeName({ pubkey }: { pubkey: string }) {
+  return <>{useProfileName(pubkey)}</>;
 }
 
 export function CardDialog({
   open,
   card,
   columnName,
+  labelOptions = [],
+  assigneeOptions = [],
   saving,
   readOnly = false,
   onClose,
@@ -53,15 +88,15 @@ export function CardDialog({
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [labels, setLabels] = useState("");
-  const [assignees, setAssignees] = useState("");
+  const [labels, setLabels] = useState<string[]>([]);
+  const [assignees, setAssignees] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setTitle(card?.title ?? "");
     setDescription(card?.description ?? "");
-    setLabels(card?.labels.join(", ") ?? "");
-    setAssignees(card?.assignees.join(", ") ?? "");
+    setLabels(card?.labels ?? []);
+    setAssignees(card?.assignees ?? []);
   }, [open, card]);
 
   const canSubmit = title.trim().length > 0 && !saving && !readOnly;
@@ -71,8 +106,8 @@ export function CardDialog({
     onSubmit({
       title: title.trim(),
       description: description.trim(),
-      labels: parseList(labels),
-      assignees: parseList(assignees),
+      labels,
+      assignees,
     });
   };
 
@@ -103,24 +138,75 @@ export function CardDialog({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
-          <TextField
-            label="Labels"
-            size="small"
-            fullWidth
-            placeholder="bug, urgent"
-            helperText={readOnly ? " " : "Comma-separated"}
+
+          {/* freeSolo on both: the board's own labels and members are a
+              shortcut, never the limit. A new label, or someone who has not
+              been invited yet, still has to be typeable. */}
+          <Autocomplete
+            multiple
+            freeSolo
+            filterSelectedOptions
             disabled={readOnly}
+            options={labelOptions}
             value={labels}
-            onChange={(e) => setLabels(e.target.value)}
+            onChange={(_, next) => setLabels(cleanLabels(next as string[]))}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Labels"
+                size="small"
+                placeholder={labels.length === 0 ? "bug, urgent" : ""}
+                helperText={readOnly ? " " : "Pick one used on this board, or type a new one"}
+              />
+            )}
           />
-          <TextField
-            label="Assignees"
-            size="small"
-            fullWidth
-            placeholder="hex pubkeys, comma-separated"
+
+          <Autocomplete
+            multiple
+            freeSolo
+            filterSelectedOptions
             disabled={readOnly}
+            options={assigneeOptions}
             value={assignees}
-            onChange={(e) => setAssignees(e.target.value)}
+            getOptionLabel={(option) => profileName(String(option))}
+            onChange={(_, next) => setAssignees(cleanAssignees(next as string[]))}
+            renderOption={({ key, ...props }, option) => (
+              <Box
+                component="li"
+                key={key}
+                {...props}
+                sx={{ display: "flex", alignItems: "center", gap: 1 }}
+              >
+                {/* Decorative here: the name sits right beside it, and the
+                    avatar's own aria-label would otherwise be read twice. */}
+                <Box component="span" aria-hidden sx={{ display: "flex" }}>
+                  <AssigneeAvatar pubkey={option} size={20} />
+                </Box>
+                <AssigneeName pubkey={option} />
+              </Box>
+            )}
+            renderTags={(values, getTagProps) =>
+              values.map((option, index) => {
+                const { key, ...tagProps } = getTagProps({ index });
+                return (
+                  <Chip
+                    size="small"
+                    {...tagProps}
+                    key={key}
+                    label={<AssigneeName pubkey={option} />}
+                  />
+                );
+              })
+            }
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Assignees"
+                size="small"
+                placeholder={assignees.length === 0 ? "Board members" : ""}
+                helperText={readOnly ? " " : "Board members, or paste an npub"}
+              />
+            )}
           />
         </Stack>
       </DialogContent>

@@ -9,6 +9,9 @@ const deleteCard = vi.hoisted(() => vi.fn(async () => {}));
 const binCard = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock("../kanban/sdk", () => ({ kanbanSdk: {} }));
+vi.mock("@formstr/agent/services/profile", () => ({
+  fetchProfile: vi.fn().mockResolvedValue(null),
+}));
 
 // A stand-in board that just opens the one card, so the page's card gate can be
 // exercised without dragging dnd-kit into the test.
@@ -84,11 +87,16 @@ function makeCard(pubkey: string): KanbanCard {
   };
 }
 
-function renderAtBoard(board: KanbanBoard, card: KanbanCard, pubkey: string | null) {
+function renderAtBoard(
+  board: KanbanBoard,
+  card: KanbanCard,
+  pubkey: string | null,
+  alsoOnBoard: KanbanCard[] = [],
+) {
   useAuthStore.setState({ pubkey, openAuthModal: vi.fn() } as never);
   useKanbanStore.setState({
     boards: [board],
-    cardsByBoard: { [BOARD_KEY]: [card] },
+    cardsByBoard: { [BOARD_KEY]: [card, ...alsoOnBoard] },
     isLoadingBoards: false,
     isLoadingCards: false,
     error: null,
@@ -145,6 +153,30 @@ describe("KanbanPage card permissions", () => {
     fireEvent.click(screen.getByRole("button", { name: /bin/i }));
     await waitFor(() => expect(binCard).toHaveBeenCalledWith(expect.anything(), card));
     expect(deleteCard).not.toHaveBeenCalled();
+  });
+});
+
+describe("KanbanPage card dialog options", () => {
+  it("offers the board's members as assignees", () => {
+    renderAtBoard(makeBoard(), makeCard(OWNER), OWNER);
+    openTheCard();
+
+    fireEvent.change(screen.getByLabelText("Assignees"), { target: { value: "helper" } });
+    expect(screen.getByRole("option", { name: /helper/ })).toBeInTheDocument();
+  });
+
+  it("offers labels already used elsewhere on the board", () => {
+    const tagged = {
+      ...makeCard(OWNER),
+      id: "card-2",
+      title: "Cut a release",
+      labels: ["release"],
+    };
+    renderAtBoard(makeBoard(), makeCard(OWNER), OWNER, [tagged]);
+    openTheCard();
+
+    fireEvent.change(screen.getByLabelText("Labels"), { target: { value: "rel" } });
+    expect(screen.getByRole("option", { name: "release" })).toBeInTheDocument();
   });
 });
 

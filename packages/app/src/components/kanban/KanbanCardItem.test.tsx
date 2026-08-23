@@ -44,9 +44,11 @@ function renderCard(card: KanbanCard) {
 afterEach(cleanup);
 
 describe("KanbanCardItem", () => {
-  it("shows the shortened card key", () => {
+  it("keeps the card id off the footer", () => {
     renderCard(makeCard());
-    expect(screen.getByText("9b17·4a6b")).toBeInTheDocument();
+    // The id is a random UUID nothing in the app accepts as input: not the
+    // filter, not a route, not a link anyone shares. It only cost footer room.
+    expect(screen.queryByText(/9b17/)).not.toBeInTheDocument();
   });
 
   it("shows two labels and collapses the rest", () => {
