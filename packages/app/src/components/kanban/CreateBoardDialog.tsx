@@ -13,8 +13,10 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
+
+import { moveColumn } from "../../kanban/columns";
 
 const DEFAULT_COLUMNS: Column[] = [
   { id: "todo", name: "To Do", order: 0 },
@@ -55,6 +57,16 @@ export function CreateBoardDialog({
 
   const renameColumn = (index: number, name: string) => {
     setColumns((prev) => prev.map((c, i) => (i === index ? { ...c, name } : c)));
+  };
+
+  /**
+   * Columns carry their position in `order`, and the SDK reads that number, so
+   * a board whose columns arrived in the wrong sequence could only be fixed by
+   * renaming every one of them. Buttons rather than drag: dnd-kit needs layout
+   * rects jsdom does not have, and this has to stay testable.
+   */
+  const shiftColumn = (index: number, by: number) => {
+    setColumns((prev) => moveColumn(prev, index, index + by));
   };
 
   const addColumn = () => {
@@ -126,6 +138,22 @@ export function CreateBoardDialog({
                     onChange={(e) => renameColumn(i, e.target.value)}
                     inputProps={{ "aria-label": `Column ${i + 1} name` }}
                   />
+                  <IconButton
+                    size="small"
+                    aria-label={`Move ${column.name} up`}
+                    disabled={i === 0}
+                    onClick={() => shiftColumn(i, -1)}
+                  >
+                    <ChevronUp size={14} />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    aria-label={`Move ${column.name} down`}
+                    disabled={i === columns.length - 1}
+                    onClick={() => shiftColumn(i, 1)}
+                  >
+                    <ChevronDown size={14} />
+                  </IconButton>
                   <IconButton
                     size="small"
                     aria-label={`Remove column ${column.name}`}

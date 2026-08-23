@@ -44,3 +44,21 @@ export function groupCardsByColumn(
   }
   return groups;
 }
+
+/**
+ * The columns with the one at `from` moved to `to`, renumbered.
+ *
+ * `order` is positional, so every column after the move needs a new one — the
+ * SDK reads the numbers, not the array. Kept here rather than in the dialog
+ * because dnd-kit cannot be driven in jsdom: index arithmetic in a pure module
+ * is arithmetic a test can prove.
+ */
+export function moveColumn(columns: Column[], from: number, to: number): Column[] {
+  const inRange = (i: number) => i >= 0 && i < columns.length;
+  if (!inRange(from) || !inRange(to) || from === to) return columns;
+
+  const next = [...columns];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next.map((column, order) => ({ ...column, order }));
+}

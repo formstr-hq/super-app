@@ -1,7 +1,7 @@
-import type { KanbanBoard, KanbanCard } from "@formstr/kanban-sdk";
+import type { Column, KanbanBoard, KanbanCard } from "@formstr/kanban-sdk";
 import { describe, expect, it } from "vitest";
 
-import { columnForCard, groupCardsByColumn, sortedColumns, statusFor } from "./columns";
+import { columnForCard, groupCardsByColumn, moveColumn, sortedColumns, statusFor } from "./columns";
 
 const COLUMNS = [
   { id: "todo", name: "To Do", order: 0 },
@@ -113,5 +113,35 @@ describe("groupCardsByColumn", () => {
     const grouped = groupCardsByColumn(makeBoard(false), [makeCard("orphan", "Archive", 10)]);
     expect(grouped.todo).toEqual([]);
     expect(grouped.doing).toEqual([]);
+  });
+});
+
+describe("moveColumn", () => {
+  const columns: Column[] = [
+    { id: "a", name: "A", order: 0 },
+    { id: "b", name: "B", order: 1 },
+    { id: "c", name: "C", order: 2 },
+  ];
+
+  it("moves a column later and renumbers every order", () => {
+    const moved = moveColumn(columns, 0, 1);
+    expect(moved.map((c) => c.id)).toEqual(["b", "a", "c"]);
+    expect(moved.map((c) => c.order)).toEqual([0, 1, 2]);
+  });
+
+  it("moves a column earlier", () => {
+    expect(moveColumn(columns, 2, 1).map((c) => c.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("leaves the input untouched", () => {
+    moveColumn(columns, 0, 2);
+    expect(columns.map((c) => c.id)).toEqual(["a", "b", "c"]);
+  });
+
+  // The dialog disables the end buttons, but a caller that gets it wrong should
+  // get the list back rather than a hole or a duplicate.
+  it("returns the columns unchanged when either index is out of range", () => {
+    expect(moveColumn(columns, -1, 0)).toEqual(columns);
+    expect(moveColumn(columns, 0, 3)).toEqual(columns);
   });
 });
