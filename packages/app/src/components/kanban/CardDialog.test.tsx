@@ -1,6 +1,15 @@
 import type { KanbanCard } from "@formstr/kanban-sdk";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { nip19 } from "nostr-tools";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The assignee picker renders names, and a name is a relay lookup. Nothing here
+// asserts on a resolved name, so every pubkey stays at its npub fallback.
+vi.mock("@formstr/agent/services/profile", () => ({
+  fetchProfile: vi.fn().mockResolvedValue(null),
+}));
+
+import { resetProfileCache } from "../../lib/profileCache";
 
 import { CardDialog } from "./CardDialog";
 
@@ -37,6 +46,7 @@ function renderDialog(props: Partial<React.ComponentProps<typeof CardDialog>> = 
 }
 
 afterEach(cleanup);
+beforeEach(resetProfileCache);
 
 describe("CardDialog", () => {
   it("names the destination column when creating", () => {
@@ -59,25 +69,11 @@ describe("CardDialog", () => {
     expect(screen.getByRole("button", { name: /add card/i })).toBeDisabled();
   });
 
-  it("splits comma-separated labels and assignees, trimming and de-duplicating", () => {
-    const onSubmit = vi.fn();
-    renderDialog({ onSubmit });
-    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
-    fireEvent.change(screen.getByLabelText("Labels"), {
-      target: { value: " bug , urgent ,bug, " },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
-
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Write docs", labels: ["bug", "urgent"] }),
-    );
-  });
-
   it("loads an existing card's values when editing", () => {
     renderDialog({ card: makeCard() });
     expect(screen.getByText("Edit card")).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Ship the SDK");
-    expect(screen.getByLabelText("Labels")).toHaveValue("release");
+    expect(screen.getByRole("button", { name: "release" })).toBeInTheDocument();
   });
 
   it("offers delete only when editing", () => {
@@ -132,5 +128,146 @@ describe("CardDialog", () => {
   it("blocks a second submit while the first is in flight", () => {
     renderDialog({ card: makeCard(), saving: true });
     expect(screen.getByRole("button", { name: /saving/i })).toBeDisabled();
+  });
+});
+
+/** Type into a picker and commit the entry, the way a keyboard user would. */
+function typeAndCommit(field: string, value: string) {
+  const input = screen.getByRole("combobox", { name: field });
+  fireEvent.change(input, { target: { value } });
+  fireEvent.keyDown(input, { key: "Enter" });
+}
+
+/** Open a picker's list and click one of its options. */
+function pickOption(field: string, option: string | RegExp) {
+  fireEvent.keyDown(screen.getByRole("combobox", { name: field }), { key: "ArrowDown" });
+  fireEvent.click(screen.getByRole("option", { name: option }));
+}
+
+const ALICE = "a".repeat(63) + "1";
+const BOB = "b".repeat(63) + "2";
+
+describe("CardDialog label picker", () => {
+  it("offers the labels already used on the board", () => {
+    renderDialog({ labelOptions: ["release", "bug"] });
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Labels" }), { key: "ArrowDown" });
+
+    expect(screen.getByRole("option", { name: "release" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "bug" })).toBeInTheDocument();
+  });
+
+  it("puts a picked label on the card", () => {
+    const onSubmit = vi.fn();
+    renderDialog({ labelOptions: ["release", "bug"], onSubmit });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
+
+    pickOption("Labels", "bug");
+    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ labels: ["bug"] }));
+  });
+
+  // The point of the picker is consistency, not a closed vocabulary: the first
+  // card to carry a label has to be able to invent it.
+  it("accepts a label the board has never used", () => {
+    const onSubmit = vi.fn();
+    renderDialog({ labelOptions: ["release"], onSubmit });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
+
+    typeAndCommit("Labels", "urgent");
+    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ labels: ["urgent"] }));
+  });
+
+  it("trims a label and refuses to add it twice", () => {
+    const onSubmit = vi.fn();
+    renderDialog({ onSubmit });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
+
+    typeAndCommit("Labels", "  bug  ");
+    typeAndCommit("Labels", "bug");
+    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ labels: ["bug"] }));
+  });
+
+  it("drops a label that is only whitespace", () => {
+    const onSubmit = vi.fn();
+    renderDialog({ onSubmit });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
+
+    typeAndCommit("Labels", "   ");
+    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ labels: [] }));
+  });
+});
+
+describe("CardDialog assignee picker", () => {
+  it("offers everyone the board lists", () => {
+    renderDialog({ assigneeOptions: [ALICE, BOB] });
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Assignees" }), { key: "ArrowDown" });
+
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
+
+  it("stores a picked member as a hex pubkey", () => {
+    const onSubmit = vi.fn();
+    renderDialog({ assigneeOptions: [ALICE], onSubmit });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
+
+    pickOption("Assignees", /npub1/);
+    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ assignees: [ALICE] }));
+  });
+
+  // Assigning someone who has not been invited yet is legitimate; the board's
+  // roster is a shortlist, not a whitelist.
+  it("accepts a pasted npub and stores its hex", () => {
+    const onSubmit = vi.fn();
+    renderDialog({ onSubmit });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
+
+    typeAndCommit("Assignees", nip19.npubEncode(BOB));
+    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ assignees: [BOB] }));
+  });
+
+  it("accepts a raw hex pubkey", () => {
+    const onSubmit = vi.fn();
+    renderDialog({ onSubmit });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
+
+    typeAndCommit("Assignees", ALICE);
+    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ assignees: [ALICE] }));
+  });
+
+  // A `p` tag has to be a pubkey. Storing "steve" would publish a tag no relay
+  // or client can resolve, and the card would carry it forever.
+  it("drops an entry that is neither an npub nor a hex pubkey", () => {
+    const onSubmit = vi.fn();
+    renderDialog({ onSubmit });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
+
+    typeAndCommit("Assignees", "steve");
+    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ assignees: [] }));
+  });
+
+  it("loads an existing card's assignees", () => {
+    renderDialog({ card: makeCard({ assignees: [ALICE] }), assigneeOptions: [ALICE] });
+    expect(screen.getByRole("button", { name: /npub1/ })).toBeInTheDocument();
+  });
+
+  it("offers no pickers to a read-only viewer", () => {
+    renderDialog({ card: makeCard(), readOnly: true, labelOptions: ["release"] });
+    expect(screen.getByRole("combobox", { name: "Labels" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Assignees" })).toBeDisabled();
   });
 });

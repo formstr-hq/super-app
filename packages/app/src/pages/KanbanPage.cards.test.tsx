@@ -9,6 +9,9 @@ const deleteCard = vi.hoisted(() => vi.fn(async () => {}));
 const binCard = vi.hoisted(() => vi.fn(async () => {}));
 
 vi.mock("../kanban/sdk", () => ({ kanbanSdk: {} }));
+vi.mock("@formstr/agent/services/profile", () => ({
+  fetchProfile: vi.fn().mockResolvedValue(null),
+}));
 
 // A stand-in board that just opens the one card, so the page's card gate can be
 // exercised without dragging dnd-kit into the test.
@@ -84,11 +87,17 @@ function makeCard(pubkey: string): KanbanCard {
   };
 }
 
-function renderAtBoard(board: KanbanBoard, card: KanbanCard, pubkey: string | null) {
+function renderAtBoard(
+  board: KanbanBoard,
+  card: KanbanCard,
+  pubkey: string | null,
+  /** Cards on the board the test does not open — they still supply labels. */
+  otherCards: KanbanCard[] = [],
+) {
   useAuthStore.setState({ pubkey, openAuthModal: vi.fn() } as never);
   useKanbanStore.setState({
     boards: [board],
-    cardsByBoard: { [BOARD_KEY]: [card] },
+    cardsByBoard: { [BOARD_KEY]: [card, ...otherCards] },
     isLoadingBoards: false,
     isLoadingCards: false,
     error: null,
@@ -157,5 +166,37 @@ describe("KanbanPage board editing", () => {
   it("withholds it from a maintainer, whose edit would fork the board", () => {
     renderAtBoard(makeBoard(), makeCard(OWNER), HELPER);
     expect(screen.queryByRole("button", { name: /^edit$/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("KanbanPage card pickers", () => {
+  const openPicker = (field: string) =>
+    fireEvent.keyDown(screen.getByRole("combobox", { name: field }), { key: "ArrowDown" });
+
+  it("offers labels already used elsewhere on the board", () => {
+    const other = { ...makeCard(OWNER), id: "card-2", title: "Other", labels: ["release"] };
+    renderAtBoard(makeBoard(), makeCard(OWNER), OWNER, [other]);
+    openTheCard();
+
+    openPicker("Labels");
+    expect(screen.getByRole("option", { name: "release" })).toBeInTheDocument();
+  });
+
+  it("offers the board's roster as assignees", () => {
+    // Owner plus the one maintainer the fixture lists.
+    renderAtBoard(makeBoard(), makeCard(OWNER), OWNER);
+    openTheCard();
+
+    openPicker("Assignees");
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
+
+  it("has nothing to offer on a board with no cards and no members", () => {
+    renderAtBoard(makeBoard({ maintainers: [] }), makeCard(OWNER), OWNER);
+    openTheCard();
+
+    openPicker("Labels");
+    // The owner is always assignable; labels start empty.
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
   });
 });
