@@ -37,7 +37,6 @@ import {
   type CardFilter,
 } from "../kanban/cardFilter";
 import { columnForCard, statusFor } from "../kanban/columns";
-import { boardMembers } from "../kanban/roles";
 import { INVITATIONS_KEY } from "../kanban/routes";
 import { useAuthStore, useKanbanMembersStore, useKanbanStore } from "../stores";
 
@@ -148,9 +147,6 @@ export function KanbanPage() {
   const liveCards = cards.filter((c) => !c.binned);
   const visibleCards = filterCards(liveCards, filter, pubkey);
   const boardLabels = collectLabels(cards);
-  // Everyone the board lists, so a card is assigned by picking a name rather
-  // than by pasting a hex pubkey.
-  const boardAssignees = board ? boardMembers(board).map((m) => m.pubkey) : [];
   const readOnly = !board || !pubkey || !canEditCards(board, pubkey);
   // Maintainers may write cards, but a NIP-09 tombstone is only honored from
   // the event's own author — a maintainer's deletion would be signed by the
@@ -473,8 +469,6 @@ export function KanbanPage() {
         open={dialog.kind === "card"}
         card={openCard}
         columnName={dialog.kind === "card" ? dialog.column.name : ""}
-        labelOptions={boardLabels}
-        assigneeOptions={boardAssignees}
         saving={saving}
         readOnly={readOnly}
         onClose={() => setDialog({ kind: "none" })}

@@ -13,7 +13,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const DEFAULT_COLUMNS: Column[] = [
@@ -66,21 +66,6 @@ export function CreateBoardDialog({
 
   const removeColumn = (index: number) => {
     setColumns((prev) => prev.filter((_, i) => i !== index).map((c, i) => ({ ...c, order: i })));
-  };
-
-  /**
-   * Swap a column with its neighbour. Position in this array is the only thing
-   * that decides `order` — `submit` renumbers from zero on the way out — so a
-   * move is a swap and nothing else.
-   */
-  const moveColumn = (index: number, delta: -1 | 1) => {
-    setColumns((prev) => {
-      const target = index + delta;
-      if (target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
   };
 
   const canSubmit = title.trim().length > 0 && columns.length > 0 && !saving;
@@ -141,22 +126,6 @@ export function CreateBoardDialog({
                     onChange={(e) => renameColumn(i, e.target.value)}
                     inputProps={{ "aria-label": `Column ${i + 1} name` }}
                   />
-                  <IconButton
-                    size="small"
-                    aria-label={`Move ${column.name} up`}
-                    disabled={i === 0}
-                    onClick={() => moveColumn(i, -1)}
-                  >
-                    <ChevronUp size={14} />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    aria-label={`Move ${column.name} down`}
-                    disabled={i === columns.length - 1}
-                    onClick={() => moveColumn(i, 1)}
-                  >
-                    <ChevronDown size={14} />
-                  </IconButton>
                   <IconButton
                     size="small"
                     aria-label={`Remove column ${column.name}`}

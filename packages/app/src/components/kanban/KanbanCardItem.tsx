@@ -4,6 +4,8 @@ import type { KanbanCard } from "@formstr/kanban-sdk";
 import { Box, Card, Tooltip, Typography } from "@mui/material";
 import { Link2, Paperclip } from "lucide-react";
 
+import { shortCardKey } from "../../kanban/cardKey";
+
 import { AssigneeStack } from "./AssigneeAvatar";
 
 interface KanbanCardItemProps {
@@ -57,8 +59,18 @@ export function KanbanCardItem({ card, disabled, onOpen }: KanbanCardItemProps) 
         </Typography>
       )}
 
-      {/* Footer: labels left, ownership and attachments right. */}
+      {/* Footer: identity and labels left, ownership and attachments right. */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+        <Tooltip title={card.id}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 10.5 }}
+          >
+            {shortCardKey(card.id)}
+          </Typography>
+        </Tooltip>
+
         {card.labels.length > 0 && (
           <Box sx={{ display: "flex", gap: 0.5, minWidth: 0, overflow: "hidden" }}>
             {card.labels.slice(0, 2).map((label) => (

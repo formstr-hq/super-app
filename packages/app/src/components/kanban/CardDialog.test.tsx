@@ -1,19 +1,8 @@
 import type { KanbanCard } from "@formstr/kanban-sdk";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { nip19 } from "nostr-tools";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("@formstr/agent/services/profile", () => ({
-  fetchProfile: vi.fn().mockResolvedValue(null),
-}));
-
-import { formatNpub } from "../../lib/npub";
-import { resetProfileCache } from "../../lib/profileCache";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CardDialog } from "./CardDialog";
-
-const ALICE = "a".repeat(64);
-const BOB = "b".repeat(64);
 
 function makeCard(overrides: Partial<KanbanCard> = {}): KanbanCard {
   return {
@@ -48,14 +37,6 @@ function renderDialog(props: Partial<React.ComponentProps<typeof CardDialog>> = 
 }
 
 afterEach(cleanup);
-beforeEach(resetProfileCache);
-
-/** Type into an Autocomplete's input, which is what opens its option list. */
-function typeInto(label: string, value: string) {
-  const input = screen.getByLabelText(label);
-  fireEvent.change(input, { target: { value } });
-  return input;
-}
 
 describe("CardDialog", () => {
   it("names the destination column when creating", () => {
@@ -78,88 +59,25 @@ describe("CardDialog", () => {
     expect(screen.getByRole("button", { name: /add card/i })).toBeDisabled();
   });
 
+  it("splits comma-separated labels and assignees, trimming and de-duplicating", () => {
+    const onSubmit = vi.fn();
+    renderDialog({ onSubmit });
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
+    fireEvent.change(screen.getByLabelText("Labels"), {
+      target: { value: " bug , urgent ,bug, " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Write docs", labels: ["bug", "urgent"] }),
+    );
+  });
+
   it("loads an existing card's values when editing", () => {
     renderDialog({ card: makeCard() });
     expect(screen.getByText("Edit card")).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Ship the SDK");
-    expect(screen.getByText("release")).toBeInTheDocument();
-  });
-
-  describe("labels", () => {
-    it("offers the labels already used on the board", () => {
-      renderDialog({ labelOptions: ["bug", "urgent"] });
-      typeInto("Labels", "bu");
-      expect(screen.getByRole("option", { name: "bug" })).toBeInTheDocument();
-    });
-
-    it("submits a label picked from the list", () => {
-      const onSubmit = vi.fn();
-      renderDialog({ onSubmit, labelOptions: ["bug", "urgent"] });
-      fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
-      typeInto("Labels", "urg");
-      fireEvent.click(screen.getByRole("option", { name: "urgent" }));
-      fireEvent.click(screen.getByRole("button", { name: /add card/i }));
-
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ labels: ["urgent"] }));
-    });
-
-    it("still accepts a label the board has never used", () => {
-      const onSubmit = vi.fn();
-      renderDialog({ onSubmit, labelOptions: ["bug"] });
-      fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
-      const input = typeInto("Labels", "flaky");
-      fireEvent.keyDown(input, { key: "Enter" });
-      fireEvent.click(screen.getByRole("button", { name: /add card/i }));
-
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ labels: ["flaky"] }));
-    });
-
-    it("does not re-offer a label the card already carries", () => {
-      renderDialog({ card: makeCard({ labels: ["release"] }), labelOptions: ["release", "bug"] });
-      typeInto("Labels", "rel");
-      expect(screen.queryByRole("option", { name: "release" })).not.toBeInTheDocument();
-    });
-  });
-
-  describe("assignees", () => {
-    it("offers the board's members", () => {
-      renderDialog({ assigneeOptions: [ALICE, BOB] });
-      typeInto("Assignees", formatNpub(ALICE).slice(0, 8));
-      expect(screen.getByRole("option", { name: formatNpub(ALICE) })).toBeInTheDocument();
-    });
-
-    it("submits the pubkey rather than the name shown", () => {
-      const onSubmit = vi.fn();
-      renderDialog({ onSubmit, assigneeOptions: [ALICE] });
-      fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
-      typeInto("Assignees", formatNpub(ALICE).slice(0, 8));
-      fireEvent.click(screen.getByRole("option", { name: formatNpub(ALICE) }));
-      fireEvent.click(screen.getByRole("button", { name: /add card/i }));
-
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ assignees: [ALICE] }));
-    });
-
-    it("accepts an npub typed by hand and stores it as hex", () => {
-      const onSubmit = vi.fn();
-      renderDialog({ onSubmit, assigneeOptions: [] });
-      fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
-      const input = typeInto("Assignees", nip19.npubEncode(BOB));
-      fireEvent.keyDown(input, { key: "Enter" });
-      fireEvent.click(screen.getByRole("button", { name: /add card/i }));
-
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ assignees: [BOB] }));
-    });
-
-    it("refuses text that is neither an npub nor a hex key", () => {
-      const onSubmit = vi.fn();
-      renderDialog({ onSubmit, assigneeOptions: [] });
-      fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Write docs" } });
-      const input = typeInto("Assignees", "not-a-key");
-      fireEvent.keyDown(input, { key: "Enter" });
-      fireEvent.click(screen.getByRole("button", { name: /add card/i }));
-
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ assignees: [] }));
-    });
+    expect(screen.getByLabelText("Labels")).toHaveValue("release");
   });
 
   it("offers delete only when editing", () => {
