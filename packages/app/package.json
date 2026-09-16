@@ -23,7 +23,7 @@
     "@formstr/core": "workspace:*",
     "@formstr/kanban-sdk": "^0.1.1",
     "@formstr/local-relay": "^0.6.1",
-    "@formstr/signer": "^0.2.2",
+    "@formstr/signer": "^0.3.1",
     "@mui/material": "^6.4.0",
     "lucide-react": "^1.8.0",
     "nostr-tools": "^2.23.3",

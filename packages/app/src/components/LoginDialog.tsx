@@ -1,9 +1,10 @@
 import { Box, Button, Dialog, DialogContent, Divider, TextField, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { Key, Puzzle, Radio, ScanLine, UserPlus } from "lucide-react";
+import { Key, Puzzle, Radio, ScanLine, Smartphone, UserPlus } from "lucide-react";
 import QRCode from "qrcode";
 import { useState } from "react";
 
+import { appSigner } from "../auth/appSigner";
 import { useAuthStore } from "../stores";
 import { DISPLAY_FONT } from "../theme";
 
@@ -23,8 +24,13 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
     importKey,
     loginWithBunkerUri,
     loginWithNostrConnect,
+    loginWithNip55Web,
   } = useAuthStore();
   const theme = useTheme();
+  // Browser NIP-55: suppressed inside a Capacitor shell (the native plugin is
+  // used there) and warned about on Firefox for Android, which cannot read the
+  // clipboard. Evaluated per render so it stays correct if the env changes.
+  const nip55Web = appSigner.nip55WebSupport();
 
   const [mode, setMode] = useState<Mode>(null);
   const [busy, setBusy] = useState(false);
@@ -195,6 +201,37 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
                 setError(null);
               }}
             />
+            {nip55Web.visible && (
+              <>
+                <RowButton
+                  icon={<Smartphone size={20} />}
+                  title="Signer app"
+                  subtitle="Amber or another NIP-55 app on this device"
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      await loginWithNip55Web();
+                      close();
+                    })
+                  }
+                />
+                {nip55Web.warning && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      display: "block",
+                      px: 1,
+                      py: 0.75,
+                      borderRadius: 1,
+                      bgcolor: "warning.main",
+                      color: "warning.contrastText",
+                    }}
+                  >
+                    {nip55Web.warning}
+                  </Typography>
+                )}
+              </>
+            )}
           </>
         ) : mode === "create" ? (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
