@@ -106,8 +106,8 @@ importers:
         specifier: ^0.6.1
         version: 0.6.1(typescript@5.9.3)
       '@formstr/signer':
-        specifier: ^0.2.2
-        version: 0.2.2(typescript@5.9.3)
+        specifier: ^0.3.0
+        version: 0.3.0(typescript@5.9.3)
       '@mui/material':
         specifier: ^6.4.0
         version: 6.5.0(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.5))(@types/react@19.2.14)(react@19.2.5))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -211,8 +211,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@formstr/signer':
-        specifier: ^0.2.2
-        version: 0.2.2(typescript@5.9.3)
+        specifier: ^0.3.0
+        version: 0.3.0(typescript@5.9.3)
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
@@ -977,8 +977,8 @@ packages:
   '@formstr/local-relay@0.6.1':
     resolution: {integrity: sha512-8IKAkGKs2ZXBrqOWDAjqXMSNMtydmJWEIThURWswkOtCFi36syg5BhYMgSEB0v/KnwqePvgt7whoCPt2WaQ5dQ==}
 
-  '@formstr/signer@0.2.2':
-    resolution: {integrity: sha512-25BCGIKZSKRrtVQwnxfWeiLH7KctEbxQrB26dxcjbkcnIIcfiV39s/Xt9yG//eZ+1zTHUpkIQkplfOhjTENtNw==}
+  '@formstr/signer@0.3.0':
+    resolution: {integrity: sha512-xBmfmkhc0rG/LJkTpM1FtjUgKv1YCCmkk3VlH7TzMOTir3/BCHVkhNAiKkWSaQD6Xr5IfjW9o8v+ev4o4kvVqg==}
     peerDependencies:
       nostr-signer-capacitor-plugin: ^0.0.5
     peerDependenciesMeta:
@@ -4589,7 +4589,7 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@formstr/signer@0.2.2(typescript@5.9.3)':
+  '@formstr/signer@0.3.0(typescript@5.9.3)':
     dependencies:
       nostr-tools: 2.23.3(typescript@5.9.3)
       qrcode: 1.5.4

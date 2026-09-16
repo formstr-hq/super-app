@@ -11,5 +11,6 @@ describe("mapMethod", () => {
   it("maps the remaining LoginMethods for exhaustiveness", () => {
     expect(mapMethod("extension")).toBe("nip07");
     expect(mapMethod("android")).toBe("nip55");
+    expect(mapMethod("nip55-web")).toBe("nip55");
   });
 });

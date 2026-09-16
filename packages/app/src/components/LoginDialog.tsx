@@ -1,9 +1,10 @@
 import { Box, Button, Dialog, DialogContent, Divider, TextField, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { Key, Puzzle, Radio, ScanLine, UserPlus } from "lucide-react";
+import { Key, Puzzle, Radio, ScanLine, Smartphone, UserPlus } from "lucide-react";
 import QRCode from "qrcode";
 import { useState } from "react";
 
+import { appSigner } from "../auth/appSigner";
 import { useAuthStore } from "../stores";
 import { DISPLAY_FONT } from "../theme";
 
@@ -23,8 +24,13 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
     importKey,
     loginWithBunkerUri,
     loginWithNostrConnect,
+    loginWithNip55Web,
   } = useAuthStore();
   const theme = useTheme();
+  // Browser NIP-55 only works in an Android browser with clipboard access, and
+  // is suppressed inside a Capacitor shell (there the native plugin is used).
+  // Evaluated per render so it stays correct if the env can't change.
+  const canUseNip55Web = appSigner.supportsNip55Web();
 
   const [mode, setMode] = useState<Mode>(null);
   const [busy, setBusy] = useState(false);
@@ -195,6 +201,20 @@ export function LoginDialog({ open, onClose }: LoginDialogProps) {
                 setError(null);
               }}
             />
+            {canUseNip55Web && (
+              <RowButton
+                icon={<Smartphone size={20} />}
+                title="Signer app"
+                subtitle="Amber or another NIP-55 app on this device"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await loginWithNip55Web();
+                    close();
+                  })
+                }
+              />
+            )}
           </>
         ) : mode === "create" ? (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>

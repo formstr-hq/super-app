@@ -46,6 +46,8 @@ interface AuthStore {
   importKey(input: string, passphrase: string): Promise<void>;
   loginWithBunkerUri(uri: string): Promise<void>;
   loginWithNostrConnect(opts: { relays: string[]; onUri: (uri: string) => void }): Promise<void>;
+  /** Browser-only NIP-55: pair with an installed Android signer app. */
+  loginWithNip55Web(): Promise<void>;
   switchAccount(pubkey: string): Promise<void>;
   unlock(pubkey: string, passphrase: string): Promise<void>;
   logout(pubkey?: string): Promise<void>;
@@ -199,6 +201,10 @@ export const useAuthStore = create<AuthStore>((set, get) => {
             // a QR (nostrconnect://) login stores a non-bunker URI that parseBunkerInput
             // rejects ("invalid bunker URI"); unlock() also skips a re-approval prompt.
             await appSigner.unlock({ pool: signerPool });
+          } else if (active.method === "nip55-web") {
+            // Resumes from the cached pubkey without opening the signer app;
+            // the first sign/encrypt call is what prompts.
+            await appSigner.unlock();
           }
         } catch {
           // Stay locked; the user can unlock manually.
@@ -236,6 +242,10 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       await appSigner.loginWithNostrConnect({ relays: opts.relays, onUri: opts.onUri });
     },
 
+    async loginWithNip55Web() {
+      await appSigner.loginWithNip55Web();
+    },
+
     async switchAccount(pubkey: string) {
       await appSigner.switchAccount(pubkey);
     },
@@ -253,6 +263,9 @@ export const useAuthStore = create<AuthStore>((set, get) => {
       } else if (account.method === "nip46" && account.nip46) {
         // Silent resume via the shared relay pool — see init()'s auto-unlock note.
         await appSigner.unlock({ pool: signerPool });
+      } else if (account.method === "nip55-web") {
+        // Cached-pubkey resume; no signer app is opened here.
+        await appSigner.unlock();
       }
     },
 
