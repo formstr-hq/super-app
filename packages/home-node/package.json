@@ -1,0 +1,30 @@
+{
+  "name": "@formstr/home-node",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Home-node daemon: listens over Nostr for whitelisted edge devices and pipes each session into a local ACP harness (e.g. opencode) via stdio. Ships a local web admin dashboard.",
+  "bin": {
+    "formstr-home-node": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@formstr/core": "workspace:*",
+    "@formstr/nostr-transport": "workspace:*",
+    "nostr-tools": "^2.16.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/ws": "^8.5.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

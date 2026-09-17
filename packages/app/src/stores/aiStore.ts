@@ -1,7 +1,10 @@
 import { create } from "zustand";
 
 import { createProvider, ConversationContext, Agent } from "../ai";
+import { AcpClient } from "../ai/acp/acpClient";
+import { connectHomeNode } from "../ai/acp/homeNode";
 import type { Message, LLMProvider, EntityRef, RunStep, ConfirmRequest } from "../ai/types";
+import { uuid } from "../lib/uuid";
 
 import { useAuthStore } from "./authStore";
 import { useSettingsStore } from "./settingsStore";
@@ -97,6 +100,8 @@ interface AIStore {
   _provider: LLMProvider | null;
   _context: ConversationContext;
   _agent: Agent | null;
+  _acp: AcpClient | null;
+  _acpConnecting: Promise<void> | null;
 
   initProvider(): Promise<void>;
   sendMessage(content: string): Promise<void>;
@@ -119,10 +124,91 @@ export const useAIStore = create<AIStore>((set, get) => ({
   _provider: null,
   _context: _initialContext,
   _agent: null,
+  _acp: null,
+  _acpConnecting: null,
 
   async initProvider() {
     const settings = useSettingsStore.getState();
     set({ providerStatus: "connecting", errorMessage: null });
+
+    // Home node (ACP over Nostr): drive a remote harness instead of a local
+    // LLM provider. All progress maps onto the same store fields the panel
+    // already renders (streamingContent, streamingSteps, pendingConfirm).
+    if (settings.homeNodeEnabled && settings.homeNodeNpub) {
+      // Guard against concurrent connects (e.g. React double-invoke) spawning
+      // two remote harness processes for one device.
+      const inflight = get()._acpConnecting;
+      if (inflight) {
+        await inflight;
+        return;
+      }
+      const connectPromise = (async () => {
+        const existing = get()._acp;
+        if (existing) await existing.close();
+        const duplex = await connectHomeNode({
+          npub: settings.homeNodeNpub,
+          relays: settings.homeNodeRelays.length ? settings.homeNodeRelays : undefined,
+        });
+        const acp = new AcpClient(duplex, {
+          onMessageChunk(text) {
+            set((state) => ({ streamingContent: state.streamingContent + text }));
+          },
+          onToolCall(tc) {
+            set((state) => ({
+              streamingSteps: [
+                ...state.streamingSteps,
+                {
+                  id: tc.toolCallId,
+                  toolName: tc.title || tc.kind || "tool",
+                  module: null,
+                  status: "running",
+                },
+              ],
+            }));
+          },
+          onToolCallUpdate(tc) {
+            const status: RunStep["status"] =
+              tc.status === "completed" ? "success" : tc.status === "failed" ? "error" : "running";
+            set((state) => ({
+              streamingSteps: state.streamingSteps.map((s) =>
+                s.id === tc.toolCallId ? { ...s, status } : s,
+              ),
+            }));
+          },
+          onPermissionRequest(req) {
+            return new Promise<string | null>((resolveOpt) => {
+              const allow = req.options.find((o) => o.kind === "allow_once") ?? req.options[0];
+              const reject = req.options.find((o) => o.kind === "reject_once");
+              const step = get().streamingSteps.find((s) => s.id === req.toolCallId);
+              set({
+                pendingConfirm: {
+                  id: req.toolCallId ?? uuid(),
+                  toolName: step?.toolName ?? "tool",
+                  module: null,
+                  message: `Allow the agent to run "${step?.toolName ?? "a tool"}"?`,
+                  resolve: (approved: boolean) =>
+                    resolveOpt(approved ? (allow?.optionId ?? null) : (reject?.optionId ?? null)),
+                },
+              });
+            });
+          },
+        });
+        await acp.connect(settings.homeNodeCwd || ".");
+        set({ _acp: acp, _agent: null, availableModels: [], providerStatus: "connected" });
+      })();
+      set({ _acpConnecting: connectPromise });
+      try {
+        await connectPromise;
+      } catch (e) {
+        set({
+          providerStatus: "error",
+          errorMessage: e instanceof Error ? e.message : "Could not reach the home node",
+        });
+      } finally {
+        set({ _acpConnecting: null });
+      }
+      return;
+    }
 
     try {
       const provider = createProvider({
@@ -174,6 +260,69 @@ export const useAIStore = create<AIStore>((set, get) => ({
   async sendMessage(content: string) {
     if (get().isProcessing) return;
 
+    // Home node path: send the prompt over ACP; events (bound in initProvider)
+    // stream into the same state fields the panel renders.
+    if (useSettingsStore.getState().homeNodeEnabled) {
+      if (!get()._acp) {
+        await get().initProvider();
+        if (!get()._acp) {
+          set({ errorMessage: get().errorMessage ?? "Home node not connected." });
+          return;
+        }
+      }
+      const userMsg: Message = {
+        id: uuid(),
+        role: "user",
+        content,
+        timestamp: Date.now(),
+      };
+      set((state) => {
+        const msgs = [...state.messages, userMsg];
+        persistMessages(msgs);
+        return {
+          messages: msgs,
+          isProcessing: true,
+          streamingContent: "",
+          streamingSteps: [],
+          errorMessage: null,
+        };
+      });
+      try {
+        await get()._acp!.prompt(content);
+        const { streamingContent, streamingSteps } = get();
+        if (streamingContent.trim() || streamingSteps.length > 0) {
+          const assistantMsg: Message = {
+            id: uuid(),
+            role: "assistant",
+            content: streamingContent,
+            run: streamingSteps.length > 0 ? streamingSteps : undefined,
+            timestamp: Date.now(),
+          };
+          set((state) => {
+            const msgs = [...state.messages, assistantMsg];
+            persistMessages(msgs);
+            return {
+              messages: msgs,
+              isProcessing: false,
+              streamingContent: "",
+              streamingSteps: [],
+            };
+          });
+        } else {
+          set({ isProcessing: false, streamingContent: "", streamingSteps: [] });
+        }
+      } catch (e) {
+        set({
+          isProcessing: false,
+          streamingContent: "",
+          streamingSteps: [],
+          pendingConfirm: null,
+          errorMessage: e instanceof Error ? e.message : "Home node request failed",
+        });
+      }
+      return;
+    }
+
     if (!get()._agent) {
       await get().initProvider();
       if (!get()._agent) {
@@ -188,7 +337,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
     const pubkey = useAuthStore.getState().pubkey;
 
     const userMsg: Message = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       role: "user",
       content,
       timestamp: Date.now(),
@@ -249,7 +398,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
             const steps = get().streamingSteps;
             if (fullContent.trim() || steps.length > 0) {
               const assistantMsg: Message = {
-                id: crypto.randomUUID(),
+                id: uuid(),
                 role: "assistant",
                 content: fullContent,
                 run: steps.length > 0 ? steps : undefined,
@@ -306,6 +455,8 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
   reset() {
     get()._context.reset();
+    void get()._acp?.close();
+    set({ _acp: null });
     try {
       localStorage.removeItem(STORAGE_KEY_MESSAGES);
       localStorage.removeItem(STORAGE_KEY_ENTITIES);

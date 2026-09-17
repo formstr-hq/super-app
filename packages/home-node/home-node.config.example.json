@@ -1,0 +1,8 @@
+{
+  "nsec": "nsec1yourhomenodesecretkeygoeshere...",
+  "relays": ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net"],
+  "whitelist": ["npub1yourphone...", "npub1yourlaptop..."],
+  "cwd": "/home/you/projects/the-repo-you-want-the-agent-to-work-on",
+  "privacy": "nip44",
+  "admin": { "port": 4577, "host": "yggdrasil" }
+}
