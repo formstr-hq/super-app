@@ -1,7 +1,9 @@
 import { create } from "zustand";
 
 import { createProvider, ConversationContext, Agent } from "../ai";
+import { AcpProvider } from "../ai/acp/acpProvider";
 import type { Message, LLMProvider, EntityRef, RunStep, ConfirmRequest } from "../ai/types";
+import { uuid } from "../lib/uuid";
 
 import { useAuthStore } from "./authStore";
 import { useSettingsStore } from "./settingsStore";
@@ -97,6 +99,8 @@ interface AIStore {
   _provider: LLMProvider | null;
   _context: ConversationContext;
   _agent: Agent | null;
+  _acpProvider: AcpProvider | null;
+  _acpConnecting: Promise<void> | null;
 
   initProvider(): Promise<void>;
   sendMessage(content: string): Promise<void>;
@@ -119,10 +123,54 @@ export const useAIStore = create<AIStore>((set, get) => ({
   _provider: null,
   _context: _initialContext,
   _agent: null,
+  _acpProvider: null,
+  _acpConnecting: null,
 
   async initProvider() {
     const settings = useSettingsStore.getState();
     set({ providerStatus: "connecting", errorMessage: null });
+
+    // Home node (ACP over Nostr): use the harness (opencode) as the model behind
+    // the SAME Agent loop as local providers. The Agent runs tools locally under
+    // the UI signer, so calendar/drive/forms work with the correct identity.
+    if (settings.homeNodeEnabled && settings.homeNodeNpub) {
+      // Guard against concurrent connects (e.g. React double-invoke).
+      const inflight = get()._acpConnecting;
+      if (inflight) {
+        await inflight;
+        return;
+      }
+      const connectPromise = (async () => {
+        await get()._acpProvider?.close();
+        const provider = new AcpProvider(
+          {
+            npub: settings.homeNodeNpub,
+            relays: settings.homeNodeRelays.length ? settings.homeNodeRelays : undefined,
+          },
+          settings.homeNodeCwd || ".",
+        );
+        await provider.connect();
+        set({
+          _provider: provider,
+          _acpProvider: provider,
+          _agent: new Agent(provider, get()._context),
+          availableModels: ["home-node"],
+          providerStatus: "connected",
+        });
+      })();
+      set({ _acpConnecting: connectPromise });
+      try {
+        await connectPromise;
+      } catch (e) {
+        set({
+          providerStatus: "error",
+          errorMessage: e instanceof Error ? e.message : "Could not reach the home node",
+        });
+      } finally {
+        set({ _acpConnecting: null });
+      }
+      return;
+    }
 
     try {
       const provider = createProvider({
@@ -188,7 +236,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
     const pubkey = useAuthStore.getState().pubkey;
 
     const userMsg: Message = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       role: "user",
       content,
       timestamp: Date.now(),
@@ -249,7 +297,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
             const steps = get().streamingSteps;
             if (fullContent.trim() || steps.length > 0) {
               const assistantMsg: Message = {
-                id: crypto.randomUUID(),
+                id: uuid(),
                 role: "assistant",
                 content: fullContent,
                 run: steps.length > 0 ? steps : undefined,
@@ -306,6 +354,8 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
   reset() {
     get()._context.reset();
+    void get()._acpProvider?.close();
+    set({ _acpProvider: null });
     try {
       localStorage.removeItem(STORAGE_KEY_MESSAGES);
       localStorage.removeItem(STORAGE_KEY_ENTITIES);

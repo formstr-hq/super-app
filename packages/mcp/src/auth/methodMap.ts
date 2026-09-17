@@ -15,6 +15,9 @@ export function mapMethod(method: LoginMethod): SignerMethod {
     case "ncryptsec":
       return "local";
     case "android":
+    // Browser NIP-55 is unreachable in the headless MCP, but it is still a
+    // NIP-55 external signer, so it maps like the Capacitor path.
+    case "nip55-web":
       return "nip55";
   }
 }
