@@ -5,6 +5,7 @@
  */
 export const MODULE_DEFAULT_RELAYS = {
   forms: [
+    "wss://relay.formstr.app",
     "wss://relay.damus.io",
     "wss://relay.primal.net",
     "wss://nos.lol",
@@ -18,6 +19,7 @@ export const MODULE_DEFAULT_RELAYS = {
   // relays, so events published here land on every relay the standalone reads
   // (and vice-versa) — required for cross-app calendar sync.
   calendar: [
+    "wss://relay.formstr.app",
     "wss://relay.damus.io",
     "wss://relay.primal.net",
     "wss://nos.lol",
@@ -33,6 +35,7 @@ export const MODULE_DEFAULT_RELAYS = {
   // silently breaks interop with kanbanstr.com — boards published here stop
   // appearing there, and no local test catches it.
   kanban: [
+    "wss://relay.formstr.app",
     "wss://relay.damus.io",
     "wss://nos.lol",
     "wss://relay.primal.net",
@@ -41,8 +44,14 @@ export const MODULE_DEFAULT_RELAYS = {
   // Pages and Polls have no UI in the web app any more, but the agent still
   // implements them for the MCP server — these are protocol relays, not app
   // navigation, so they stay.
-  pages: ["wss://relay.damus.io", "wss://relay.primal.net", "wss://nos.lol"],
+  pages: [
+    "wss://relay.formstr.app",
+    "wss://relay.damus.io",
+    "wss://relay.primal.net",
+    "wss://nos.lol",
+  ],
   polls: [
+    "wss://relay.formstr.app",
     "wss://relay.damus.io",
     "wss://relay.primal.net",
     "wss://nos.lol",
@@ -50,7 +59,12 @@ export const MODULE_DEFAULT_RELAYS = {
     "wss://nostr-01.yakihonne.com",
     "wss://nostr21.com",
   ],
-  drive: ["wss://relay.damus.io", "wss://relay.nostr.band", "wss://nos.lol"],
+  drive: [
+    "wss://relay.formstr.app",
+    "wss://relay.damus.io",
+    "wss://relay.nostr.band",
+    "wss://nos.lol",
+  ],
 } as const;
 
 export type ModuleName = keyof typeof MODULE_DEFAULT_RELAYS;
