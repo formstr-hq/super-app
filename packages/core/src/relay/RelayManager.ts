@@ -12,6 +12,7 @@ export interface RelayConfig {
 
 /** Union of all module default relays, deduplicated. */
 const DEFAULT_RELAYS: readonly string[] = [
+  "wss://relay.formstr.app",
   "wss://relay.damus.io",
   "wss://relay.primal.net",
   "wss://nos.lol",

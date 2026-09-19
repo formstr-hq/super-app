@@ -8,6 +8,7 @@ describe("MODULE_DEFAULT_RELAYS", () => {
   it("forms set matches the standalone formstr.app default relays exactly", () => {
     // upstream/nostr-forms/packages/formstr-app/src/nostr/common.ts defaultRelays
     const upstream = [
+      "wss://relay.formstr.app",
       "wss://relay.damus.io",
       "wss://relay.primal.net",
       "wss://nos.lol",
@@ -23,6 +24,7 @@ describe("MODULE_DEFAULT_RELAYS", () => {
   it("calendar set is a superset of calendar.formstr.app's default relays", () => {
     // upstream/nostr-calendar/src/common/nostr.ts defaultRelays
     const upstream = [
+      "wss://relay.formstr.app",
       "wss://relay.damus.io",
       "wss://relay.primal.net",
       "wss://nos.lol",
