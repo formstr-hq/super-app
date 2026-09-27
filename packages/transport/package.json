@@ -1,0 +1,32 @@
+{
+  "name": "@formstr/nostr-transport",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Reliable, encrypted, whitelisted duplex byte-stream transport over Nostr. Transport-only: knows nothing about ACP or any higher-level protocol.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@formstr/core": "workspace:*",
+    "nostr-tools": "^2.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.4"
+  }
+}

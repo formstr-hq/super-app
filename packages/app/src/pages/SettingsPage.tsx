@@ -6,6 +6,7 @@ import { type ReactNode, useState } from "react";
 import { AboutSection } from "../components/settings/AboutSection";
 import { AISettingsSection } from "../components/settings/AISettingsSection";
 import { GeneralSettings } from "../components/settings/GeneralSettings";
+import { HomeNodeSection } from "../components/settings/HomeNodeSection";
 import { ProfileSection } from "../components/settings/ProfileSection";
 import { PromptsSection } from "../components/settings/PromptsSection";
 
@@ -66,7 +67,12 @@ export function SettingsPage() {
         >
           {section === "profile" && <ProfileSection />}
           {section === "general" && <GeneralSettings />}
-          {section === "ai" && <AISettingsSection />}
+          {section === "ai" && (
+            <>
+              <AISettingsSection />
+              <HomeNodeSection />
+            </>
+          )}
           {section === "prompts" && <PromptsSection />}
           {section === "about" && <AboutSection />}
         </Box>

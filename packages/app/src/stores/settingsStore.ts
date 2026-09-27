@@ -126,6 +126,13 @@ interface SettingsStore {
   aiPanelOpen: boolean;
   savedPrompts: SavedPrompt[];
 
+  // Home node (ACP over Nostr): route the assistant to a remote harness.
+  homeNodeEnabled: boolean;
+  homeNodeNpub: string;
+  homeNodeCwd: string;
+  /** Relays to reach the home node on (must overlap the daemon's). Empty = app defaults. */
+  homeNodeRelays: string[];
+
   toggleTheme(): void;
   toggleSidebar(): void;
   setSidebarOpen(open: boolean): void;
@@ -138,6 +145,7 @@ interface SettingsStore {
   setOllamaUrl(url: string): void;
   setCompatConfig(config: { baseUrl?: string; key?: string | null }): void;
   setAIPanelOpen(open: boolean): void;
+  setHomeNode(config: { enabled?: boolean; npub?: string; cwd?: string; relays?: string[] }): void;
   /** Returns false (and does nothing) when the normalized keyword is empty or taken. */
   addSavedPrompt(keyword: string, prompt: string): boolean;
   updateSavedPrompt(id: string, patch: Partial<Pick<SavedPrompt, "keyword" | "prompt">>): void;
@@ -163,6 +171,11 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   compatKey: _ai.compatKey,
   aiPanelOpen: false,
   savedPrompts: parseJson<SavedPrompt[]>(localStorage.getItem("formstr:saved-prompts"), []),
+
+  homeNodeEnabled: localStorage.getItem("formstr:home-node-enabled") === "true",
+  homeNodeNpub: localStorage.getItem("formstr:home-node-npub") ?? "",
+  homeNodeCwd: localStorage.getItem("formstr:home-node-cwd") ?? ".",
+  homeNodeRelays: parseJson<string[]>(localStorage.getItem("formstr:home-node-relays"), []),
 
   toggleTheme() {
     set((state) => {
@@ -238,6 +251,22 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
         next.compatKey = config.key;
       }
       return { ...state, ...next };
+    });
+  },
+
+  setHomeNode(config) {
+    set((state) => {
+      const next = {
+        homeNodeEnabled: config.enabled ?? state.homeNodeEnabled,
+        homeNodeNpub: config.npub ?? state.homeNodeNpub,
+        homeNodeCwd: config.cwd ?? state.homeNodeCwd,
+        homeNodeRelays: config.relays ?? state.homeNodeRelays,
+      };
+      localStorage.setItem("formstr:home-node-enabled", String(next.homeNodeEnabled));
+      localStorage.setItem("formstr:home-node-npub", next.homeNodeNpub);
+      localStorage.setItem("formstr:home-node-cwd", next.homeNodeCwd);
+      localStorage.setItem("formstr:home-node-relays", JSON.stringify(next.homeNodeRelays));
+      return next;
     });
   },
 

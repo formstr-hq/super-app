@@ -1,0 +1,4 @@
+# Local runtime config contains an nsec (secret) — never commit it.
+home-node.config.json
+*.log
+smoke.config.json

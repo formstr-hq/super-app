@@ -1,5 +1,5 @@
 import { Box, Divider, ListSubheader, Menu, MenuItem, Typography } from "@mui/material";
-import { Check, ChevronDown, Settings2 } from "lucide-react";
+import { Check, ChevronDown, Server, Settings2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -14,8 +14,38 @@ import { useAIStore, useSettingsStore } from "../../stores";
 export function ProviderModelPill() {
   const { aiProvider, aiModels, apiKeys, compatBaseUrl, setActiveProvider } = useSettingsStore();
   const { availableModels, setModel, initProvider, providerStatus, errorMessage } = useAIStore();
+  const homeNodeEnabled = useSettingsStore((s) => s.homeNodeEnabled);
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  // When routing to a home node, the model is chosen on the harness (admin
+  // dashboard), not here — show a static indicator instead of the local picker.
+  if (homeNodeEnabled) {
+    return (
+      <Box
+        component="button"
+        onClick={() => navigate("/settings")}
+        title="Model is configured on your home node"
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 0.5,
+          px: 0.75,
+          py: 0.25,
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          color: "text.secondary",
+          fontSize: 11,
+          borderRadius: 1,
+          "&:hover": { bgcolor: "action.hover" },
+        }}
+      >
+        <Server size={12} style={{ flexShrink: 0 }} />
+        <span>Home node</span>
+      </Box>
+    );
+  }
 
   const activeModel = aiModels[aiProvider] || PROVIDER_DEFAULT_MODEL[aiProvider];
   const configured = AI_PROVIDERS.filter((p) =>
