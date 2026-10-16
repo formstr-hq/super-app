@@ -4,6 +4,7 @@ import {
   type CardDraft,
   type KanbanBoard,
   type KanbanCard,
+  type KanbanComment,
 } from "@formstr/kanban-sdk";
 import { create } from "zustand";
 
@@ -73,6 +74,13 @@ interface KanbanStore {
   /** Cards per board, keyed by `boardKey(board)`. */
   cardsByBoard: Record<string, KanbanCard[]>;
   /**
+   * Comments per card, keyed by the card's `d` (`card.id`). Oldest first, the
+   * order `fetchComments` returns a card's thread in.
+   */
+  commentsByCard: Record<string, KanbanComment[]>;
+  /** Per-card comment load state, keyed the same as `commentsByCard`. */
+  isLoadingComments: Record<string, boolean>;
+  /**
    * A board opened from a URL that is not one of the user's own — someone
    * else's public board, reached by `naddr`. Kept out of `boards` so it does
    * not turn up in the board list or the sidebar, neither of which mean
@@ -100,6 +108,9 @@ interface KanbanStore {
   ): Promise<KanbanCard>;
   deleteCard(board: KanbanBoard, card: KanbanCard): Promise<void>;
   binCard(board: KanbanBoard, card: KanbanCard, binned?: boolean): Promise<void>;
+  loadComments(board: KanbanBoard, card: KanbanCard): Promise<void>;
+  addComment(board: KanbanBoard, card: KanbanCard, text: string): Promise<void>;
+  deleteComment(comment: KanbanComment): Promise<void>;
   moveCard(
     board: KanbanBoard,
     cardId: string,
@@ -112,6 +123,8 @@ interface KanbanStore {
 export const useKanbanStore = create<KanbanStore>((set, get) => ({
   boards: [],
   cardsByBoard: {},
+  commentsByCard: {},
+  isLoadingComments: {},
   linkedBoard: null,
   isLoadingBoards: false,
   isLoadingCards: false,
@@ -129,7 +142,14 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
     closeCardScope = null;
     watchedBoard = null;
     attemptedLinks.clear();
-    set({ boards: [], cardsByBoard: {}, linkedBoard: null, error: null });
+    set({
+      boards: [],
+      cardsByBoard: {},
+      commentsByCard: {},
+      isLoadingComments: {},
+      linkedBoard: null,
+      error: null,
+    });
   },
 
   /**
@@ -369,6 +389,78 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
   },
 
   /**
+   * Comments on one card, oldest first.
+   *
+   * Takes the whole board, exactly like `fetchCards`: a private board's
+   * comments are encrypted under the same view key its cards are, so the read
+   * is scoped to the board, not just the card id.
+   */
+  async loadComments(board, card) {
+    const key = card.id;
+    set((s) => ({ isLoadingComments: { ...s.isLoadingComments, [key]: true } }));
+    try {
+      // The SDK returns a card's comments oldest-first; that order is kept as-is.
+      const comments = await kanbanSdk.fetchComments(board, key);
+      set((s) => ({
+        commentsByCard: { ...s.commentsByCard, [key]: comments },
+        isLoadingComments: { ...s.isLoadingComments, [key]: false },
+      }));
+    } catch (e) {
+      set((s) => ({
+        error: message(e, "Failed to load comments"),
+        isLoadingComments: { ...s.isLoadingComments, [key]: false },
+      }));
+    }
+  },
+
+  /**
+   * Post a comment on a card.
+   *
+   * No optimistic insert: an encrypted write the relays refuse has no local
+   * shadow worth showing, and the dialog refetches once this resolves anyway.
+   */
+  async addComment(board, card, text) {
+    set({ error: null });
+    try {
+      const comment = await kanbanSdk.createComment(board, card.id, { content: text });
+      const key = card.id;
+      set((s) => ({
+        // Same relay-echo race as createBoard/createCard: the local relay can
+        // land the comment through its own observers before this call resolves.
+        commentsByCard: {
+          ...s.commentsByCard,
+          [key]: mergeComment(s.commentsByCard[key] ?? [], comment),
+        },
+      }));
+    } catch (e) {
+      set({ error: message(e, "Failed to post comment") });
+      throw e;
+    }
+  },
+
+  /**
+   * Delete a comment. Signs a NIP-09 deletion, which kinds like this honour
+   * from the comment's author and nobody else — the UI offers it only on own
+   * comments.
+   */
+  async deleteComment(comment) {
+    set({ error: null });
+    try {
+      await kanbanSdk.deleteComment(comment);
+      const key = comment.cardId;
+      set((s) => ({
+        commentsByCard: {
+          ...s.commentsByCard,
+          [key]: (s.commentsByCard[key] ?? []).filter((c) => c.id !== comment.id),
+        },
+      }));
+    } catch (e) {
+      set({ error: message(e, "Failed to delete comment") });
+      throw e;
+    }
+  },
+
+  /**
    * Optimistic: the dragged card is re-ranked locally before the relay
    * roundtrip, so the board does not snap back under the pointer. A failure
    * restores the pre-drag snapshot — leaving the optimistic order in place
@@ -427,4 +519,20 @@ function predictRank(sortedRanks: number[], targetIndex: number): number {
   const before = sortedRanks[targetIndex - 1];
   const after = sortedRanks[targetIndex];
   return before + (after - before) / 2;
+}
+
+/**
+ * Fold a freshly returned comment into an oldest-first list.
+ *
+ * Replaces in place when the `d` is already there (the relay echo of the write
+ * this just made), otherwise slots the comment by `createdAt`, so a new comment
+ * shown immediately does not jump ahead of an earlier one that landed first.
+ */
+function mergeComment(comments: KanbanComment[], comment: KanbanComment): KanbanComment[] {
+  if (comments.some((c) => c.id === comment.id)) {
+    return comments.map((c) => (c.id === comment.id ? comment : c));
+  }
+  const at = comments.findIndex((c) => c.createdAt > comment.createdAt);
+  if (at === -1) return [...comments, comment];
+  return [...comments.slice(0, at), comment, ...comments.slice(at)];
 }

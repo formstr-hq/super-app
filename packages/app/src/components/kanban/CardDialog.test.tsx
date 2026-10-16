@@ -1,5 +1,5 @@
-import type { KanbanCard } from "@formstr/kanban-sdk";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import type { KanbanBoard, KanbanCard, KanbanComment } from "@formstr/kanban-sdk";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { nip19 } from "nostr-tools";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,7 +9,20 @@ vi.mock("@formstr/agent/services/profile", () => ({
   fetchProfile: vi.fn().mockResolvedValue(null),
 }));
 
+// The store reads through the SDK. Only the comment surface is stubbed: the
+// comment tests drive the real store and assert what it asked the SDK to do.
+vi.mock("../../kanban/sdk", () => ({
+  kanbanSdk: {
+    relays: ["wss://kanban.test"],
+    fetchComments: vi.fn(),
+    createComment: vi.fn(),
+    deleteComment: vi.fn(),
+  },
+}));
+
+import { kanbanSdk } from "../../kanban/sdk";
 import { resetProfileCache } from "../../lib/profileCache";
+import { useKanbanStore } from "../../stores";
 
 import { CardDialog } from "./CardDialog";
 
@@ -269,5 +282,151 @@ describe("CardDialog assignee picker", () => {
     renderDialog({ card: makeCard(), readOnly: true, labelOptions: ["release"] });
     expect(screen.getByRole("combobox", { name: "Labels" })).toBeDisabled();
     expect(screen.getByRole("combobox", { name: "Assignees" })).toBeDisabled();
+  });
+});
+
+const ME = "a".repeat(63) + "1";
+const SOMEONE = "b".repeat(63) + "2";
+
+function makeBoard(overrides: Partial<KanbanBoard> = {}): KanbanBoard {
+  return {
+    id: "board-1",
+    pubkey: ME,
+    eventId: "evt",
+    title: "Board",
+    description: "",
+    columns: [{ id: "todo", name: "To Do", order: 0 }],
+    maintainers: [],
+    members: [],
+    noZap: false,
+    createdAt: 1,
+    isPrivate: false,
+    legacy: false,
+    rawTags: [],
+    ...overrides,
+  };
+}
+
+function makeComment(overrides: Partial<KanbanComment> = {}): KanbanComment {
+  return {
+    id: "c1",
+    pubkey: SOMEONE,
+    authorPubkey: SOMEONE,
+    rotated: false,
+    eventId: "evt-c1",
+    boardCoordinate: `30301:${ME}:board-1`,
+    cardId: "card-1",
+    content: "First look",
+    mentions: [],
+    createdAt: Date.now(),
+    rawTags: [],
+    ...overrides,
+  };
+}
+
+// The sdk mock types come from the real module, so vi.mocked keeps the
+// facade's signatures throughout this suite.
+const sdk = vi.mocked(kanbanSdk);
+
+beforeEach(() => {
+  // The dialog reads and writes the shared kanban store; a leftover card's
+  // comments or load flag would leak between tests. Mock call counts leak the
+  // same way — an earlier test's load would inflame this one's refetch count.
+  vi.clearAllMocks();
+  useKanbanStore.getState().reset();
+});
+
+describe("CardDialog comments", () => {
+  it("shows no comments section without a board to scope them to", () => {
+    renderDialog({ card: makeCard() });
+    expect(screen.queryByText("Comments")).not.toBeInTheDocument();
+  });
+
+  it("loads and renders the card's comments, oldest first", async () => {
+    const board = makeBoard();
+    sdk.fetchComments.mockResolvedValue([
+      makeComment({ content: "First look" }),
+      makeComment({ id: "c2", authorPubkey: ME, content: "Ship it" }),
+    ]);
+    renderDialog({ card: makeCard(), board, self: ME });
+
+    expect(await screen.findByText("First look")).toBeInTheDocument();
+    expect(screen.getByText("Ship it")).toBeInTheDocument();
+    expect(sdk.fetchComments).toHaveBeenCalledWith(board, "card-1");
+    // Somebody else's comment carries their name fallback; the signer's own
+    // comment reads as "You".
+    expect(screen.getByText("You")).toBeInTheDocument();
+  });
+
+  it("posts through the store with the card scoping and refetches", async () => {
+    const board = makeBoard();
+    const posted = makeComment({ id: "c3", authorPubkey: ME, content: "Nice progress" });
+    // First round is the load on open (nothing yet); the second is the
+    // refetch after the write comes back.
+    sdk.fetchComments.mockResolvedValueOnce([]).mockResolvedValueOnce([posted]);
+    sdk.createComment.mockResolvedValue(posted);
+    renderDialog({ card: makeCard(), board, self: ME });
+
+    await screen.findByText("No comments yet");
+    fireEvent.change(screen.getByLabelText("Comment"), {
+      target: { value: "  Nice progress  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    expect(sdk.createComment).toHaveBeenCalledWith(board, "card-1", {
+      content: "Nice progress",
+    });
+    await screen.findByText("Nice progress");
+    expect(sdk.fetchComments).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the send button idle until there is text", async () => {
+    sdk.fetchComments.mockResolvedValue([]);
+    renderDialog({ card: makeCard(), board: makeBoard(), self: ME });
+
+    await screen.findByText("No comments yet");
+    const send = screen.getByRole("button", { name: /send/i });
+    expect(send).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: " hi " } });
+    expect(send).toBeEnabled();
+
+    // Whitespace alone is still nothing to say.
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "   " } });
+    expect(send).toBeDisabled();
+  });
+
+  it("lets a read-only viewer read comments but not write or delete", async () => {
+    sdk.fetchComments.mockResolvedValue([makeComment()]);
+    renderDialog({ card: makeCard(), board: makeBoard(), self: ME, readOnly: true });
+
+    expect(await screen.findByText("First look")).toBeInTheDocument();
+    expect(screen.getByLabelText("Comment")).toBeDisabled();
+    expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /delete comment/i })).not.toBeInTheDocument();
+  });
+
+  it("offers deletion only on own comments and removes it through the store", async () => {
+    const mine = makeComment({ id: "mine", authorPubkey: ME, content: "my note" });
+    const theirs = makeComment({ id: "theirs", content: "their note" });
+    sdk.fetchComments.mockResolvedValue([mine, theirs]);
+    renderDialog({ card: makeCard(), board: makeBoard(), self: ME });
+
+    expect(await screen.findByText("their note")).toBeInTheDocument();
+    const deletes = screen.getAllByRole("button", { name: /delete comment/i });
+    expect(deletes).toHaveLength(1);
+
+    fireEvent.click(deletes[0]);
+    await waitFor(() => expect(sdk.deleteComment).toHaveBeenCalledWith(mine));
+    await waitFor(() => expect(screen.queryByText("my note")).not.toBeInTheDocument());
+    // The other author's comment is untouched.
+    expect(screen.getByText("their note")).toBeInTheDocument();
+  });
+
+  it("reports the comment load failure through the store's error", async () => {
+    sdk.fetchComments.mockRejectedValue(new Error("relay down"));
+    renderDialog({ card: makeCard(), board: makeBoard(), self: ME });
+
+    await waitFor(() => expect(useKanbanStore.getState().error).toBe("relay down"));
   });
 });
