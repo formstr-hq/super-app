@@ -475,6 +475,8 @@ export function KanbanPage() {
         columnName={dialog.kind === "card" ? dialog.column.name : ""}
         labelOptions={boardLabels}
         assigneeOptions={boardAssignees}
+        board={dialog.kind === "card" ? board : undefined}
+        self={pubkey}
         saving={saving}
         readOnly={readOnly}
         onClose={() => setDialog({ kind: "none" })}
