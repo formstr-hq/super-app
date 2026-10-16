@@ -24,10 +24,9 @@ Node 20+ and pnpm 9+ required (see `.nvmrc`).
 - `packages/core/` — `@formstr/core`: signer, runtime, relay, crypto, Blossom, linking. Framework-agnostic.
 - `packages/agent/` — `@formstr/agent`: the five modules' service layer plus the shared tool registry.
 - `packages/app/` — `@formstr/app`: React 19 + Vite 6 + Tailwind 4 super-app.
-- `packages/mcp/` — `@formstr/mcp`: stdio MCP server wrapping the agent's tool registry ([npm](https://www.npmjs.com/package/@formstr/mcp)).
 - `upstream/` — read-only clones of `formstr-hq/*` modules (gitignored). Run `./scripts/sync-upstream.sh` to populate.
 
-`core`, `agent`, and `mcp` are being migrated to [formstr-hq/common-packages](https://github.com/formstr-hq/common-packages); see [docs/plans/2026-07-01-mcp-to-common-packages-migration.md](docs/plans/2026-07-01-mcp-to-common-packages-migration.md).
+`core`, `agent`, and `mcp` are being migrated to [formstr-hq/common-packages](https://github.com/formstr-hq/common-packages); see [docs/plans/2026-07-01-mcp-to-common-packages-migration.md](docs/plans/2026-07-01-mcp-to-common-packages-migration.md). `@formstr/mcp` now lives there and is no longer built in this repo.
 
 ## Contributing
 

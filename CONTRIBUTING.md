@@ -28,7 +28,7 @@ packages/
   core/   @formstr/core  — framework-agnostic: signer, runtime, relay, crypto, linking
   agent/  @formstr/agent — module services + the shared tool registry
   app/    @formstr/app   — React 19 super-app
-  mcp/    @formstr/mcp   — stdio MCP server (published to npm)
+  # @formstr/mcp now lives in formstr-hq/common-packages
 upstream/ # ignored — read-only clones of formstr-hq/* (run scripts/sync-upstream.sh)
 docs/     # architecture reference (ARCHITECTURE.md, MCP.md, sdk/) and active plans (plans/)
 ```
