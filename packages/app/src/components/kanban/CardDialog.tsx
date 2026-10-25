@@ -125,6 +125,7 @@ export function CardDialog({
   const addComment = useKanbanStore((s) => s.addComment);
   const deleteComment = useKanbanStore((s) => s.deleteComment);
   const [commentText, setCommentText] = useState("");
+  const [mentionedPubkeys, setMentionedPubkeys] = useState<string[]>([]);
   const [posting, setPosting] = useState(false);
 
   useEffect(() => {
@@ -136,6 +137,7 @@ export function CardDialog({
     // The composer starts clean for every open, even when the same card stays
     // selected — nothing half-typed survives a close.
     setCommentText("");
+    setMentionedPubkeys([]);
     setPosting(false);
   }, [open, card]);
 
@@ -153,8 +155,9 @@ export function CardDialog({
     if (!text || !board || !card || posting) return;
     setPosting(true);
     try {
-      await addComment(board, card, text);
+      await addComment(board, card, text, mentionedPubkeys.length ? mentionedPubkeys : undefined);
       setCommentText("");
+      setMentionedPubkeys([]);
       // Refetch after the write, so the list matches what the relays hold.
       await loadComments(board, card);
     } catch {
@@ -342,10 +345,78 @@ export function CardDialog({
                         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
                           {comment.content}
                         </Typography>
+                        {comment.mentions.length > 0 && (
+                          <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: "wrap" }}>
+                            {comment.mentions.map((pubkey) => (
+                              <Chip
+                                key={pubkey}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                sx={{ height: 20 }}
+                                label={
+                                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                                    <AssigneeAvatar pubkey={pubkey} size={12} />
+                                    <Typography variant="caption">
+                                      @<AssigneeName pubkey={pubkey} />
+                                    </Typography>
+                                  </Box>
+                                }
+                              />
+                            ))}
+                          </Stack>
+                        )}
                       </Box>
                     );
                   })}
                 </Stack>
+              )}
+              {!readOnly && (
+                <Autocomplete
+                  multiple
+                  size="small"
+                  disabled={posting}
+                  options={assigneeOptions}
+                  value={mentionedPubkeys}
+                  onChange={(_, next) => setMentionedPubkeys(cleanAssignees(next))}
+                  // Same hex-pubkey options as assignees, rendered the same way.
+                  getOptionLabel={(option) => profileName(option)}
+                  renderOption={({ key, ...props }, option) => (
+                    <Box component="li" key={key} {...props} sx={{ gap: 1 }}>
+                      <AssigneeAvatar pubkey={option} size={20} />
+                      <AssigneeName pubkey={option} />
+                    </Box>
+                  )}
+                  renderTags={(value, getTagProps) =>
+                    value.map((pubkey, index) => {
+                      const { key, ...tagProps } = getTagProps({ index });
+                      return (
+                        <Chip
+                          key={key}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                          label={
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.625 }}>
+                              <AssigneeAvatar pubkey={pubkey} size={14} />
+                              <AssigneeName pubkey={pubkey} />
+                            </Box>
+                          }
+                          {...tagProps}
+                        />
+                      );
+                    })
+                  }
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Mention"
+                      size="small"
+                      placeholder={mentionedPubkeys.length === 0 ? "@ a board member" : ""}
+                    />
+                  )}
+                  sx={{ mt: 1.5 }}
+                />
               )}
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
                 <TextField

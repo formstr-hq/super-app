@@ -429,4 +429,37 @@ describe("CardDialog comments", () => {
 
     await waitFor(() => expect(useKanbanStore.getState().error).toBe("relay down"));
   });
+
+  it("sends a picked mention along with the comment", async () => {
+    const board = makeBoard();
+    const posted = makeComment({
+      id: "c4",
+      authorPubkey: ME,
+      content: "cc you",
+      mentions: [ALICE],
+    });
+    sdk.fetchComments.mockResolvedValueOnce([]).mockResolvedValueOnce([posted]);
+    sdk.createComment.mockResolvedValue(posted);
+    renderDialog({ card: makeCard(), board, self: ME, assigneeOptions: [ALICE] });
+
+    await screen.findByText("No comments yet");
+    pickOption("Mention", /npub1/);
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "cc you" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() =>
+      expect(sdk.createComment).toHaveBeenCalledWith(board, "card-1", {
+        content: "cc you",
+        mentions: [ALICE],
+      }),
+    );
+  });
+
+  it("renders a comment's mentions as distinct chips", async () => {
+    sdk.fetchComments.mockResolvedValue([makeComment({ content: "cc you", mentions: [ALICE] })]);
+    renderDialog({ card: makeCard(), board: makeBoard(), self: ME });
+
+    expect(await screen.findByText("cc you")).toBeInTheDocument();
+    expect(screen.getByText(/@npub1/)).toBeInTheDocument();
+  });
 });
