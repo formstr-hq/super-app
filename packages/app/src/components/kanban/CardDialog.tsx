@@ -9,13 +9,16 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  List,
+  ListItemButton,
+  Paper,
   Stack,
   TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
 import { Send, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { npubToHex } from "../../lib/npub";
 import { profileName, useProfileName } from "../../lib/profileCache";
@@ -125,7 +128,12 @@ export function CardDialog({
   const addComment = useKanbanStore((s) => s.addComment);
   const deleteComment = useKanbanStore((s) => s.deleteComment);
   const [commentText, setCommentText] = useState("");
-  const [mentionedPubkeys, setMentionedPubkeys] = useState<string[]>([]);
+  // Pubkeys inserted via the inline "@" picker below, keyed by the display
+  // name typed into the text — so a mention the user then deletes by hand
+  // doesn't silently ride along at send time.
+  const [insertedMentions, setInsertedMentions] = useState<{ pubkey: string; name: string }[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<{ query: string; start: number } | null>(null);
+  const commentInputRef = useRef<HTMLInputElement | null>(null);
   const [posting, setPosting] = useState(false);
 
   useEffect(() => {
@@ -137,7 +145,8 @@ export function CardDialog({
     // The composer starts clean for every open, even when the same card stays
     // selected — nothing half-typed survives a close.
     setCommentText("");
-    setMentionedPubkeys([]);
+    setInsertedMentions([]);
+    setMentionQuery(null);
     setPosting(false);
   }, [open, card]);
 
@@ -153,11 +162,17 @@ export function CardDialog({
   const postComment = async () => {
     const text = commentText.trim();
     if (!text || !board || !card || posting) return;
+    // Recomputed from the live text rather than trusted from insertion time:
+    // a mention the user backspaced out of the sentence should not ship.
+    const mentionedPubkeys = cleanAssignees(
+      insertedMentions.filter((m) => commentText.includes(`@${m.name}`)).map((m) => m.pubkey),
+    );
     setPosting(true);
     try {
       await addComment(board, card, text, mentionedPubkeys.length ? mentionedPubkeys : undefined);
       setCommentText("");
-      setMentionedPubkeys([]);
+      setInsertedMentions([]);
+      setMentionQuery(null);
       // Refetch after the write, so the list matches what the relays hold.
       await loadComments(board, card);
     } catch {
@@ -166,6 +181,45 @@ export function CardDialog({
     } finally {
       setPosting(false);
     }
+  };
+
+  // "@" not preceded by another non-space character, followed by anything
+  // that isn't whitespace or another "@", up to the caret — the same shape
+  // social apps use so a mid-sentence email address doesn't trigger it.
+  const handleCommentChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setCommentText(value);
+    const caret = e.target.selectionStart ?? value.length;
+    const match = /(?:^|\s)@([^\s@]*)$/.exec(value.slice(0, caret));
+    setMentionQuery(match ? { query: match[1], start: caret - match[1].length - 1 } : null);
+  };
+
+  const mentionSuggestions = mentionQuery
+    ? assigneeOptions
+        .filter((pubkey) =>
+          profileName(pubkey).toLowerCase().includes(mentionQuery.query.toLowerCase()),
+        )
+        .slice(0, 5)
+    : [];
+
+  const selectMention = (pubkey: string) => {
+    if (!mentionQuery) return;
+    const name = profileName(pubkey);
+    const before = commentText.slice(0, mentionQuery.start);
+    const after = commentText.slice(mentionQuery.start + 1 + mentionQuery.query.length);
+    const insertion = `@${name} `;
+    setCommentText(`${before}${insertion}${after}`);
+    setInsertedMentions((prev) => [...prev.filter((m) => m.pubkey !== pubkey), { pubkey, name }]);
+    setMentionQuery(null);
+    // Picking a suggestion blurs the field (it's a click elsewhere); hand
+    // focus back so typing can continue right after the inserted name.
+    const caretPos = before.length + insertion.length;
+    requestAnimationFrame(() => {
+      const el = commentInputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(caretPos, caretPos);
+    });
   };
 
   const removeComment = async (comment: KanbanComment) => {
@@ -371,53 +425,6 @@ export function CardDialog({
                   })}
                 </Stack>
               )}
-              {!readOnly && (
-                <Autocomplete
-                  multiple
-                  size="small"
-                  disabled={posting}
-                  options={assigneeOptions}
-                  value={mentionedPubkeys}
-                  onChange={(_, next) => setMentionedPubkeys(cleanAssignees(next))}
-                  // Same hex-pubkey options as assignees, rendered the same way.
-                  getOptionLabel={(option) => profileName(option)}
-                  renderOption={({ key, ...props }, option) => (
-                    <Box component="li" key={key} {...props} sx={{ gap: 1 }}>
-                      <AssigneeAvatar pubkey={option} size={20} />
-                      <AssigneeName pubkey={option} />
-                    </Box>
-                  )}
-                  renderTags={(value, getTagProps) =>
-                    value.map((pubkey, index) => {
-                      const { key, ...tagProps } = getTagProps({ index });
-                      return (
-                        <Chip
-                          key={key}
-                          size="small"
-                          color="primary"
-                          variant="outlined"
-                          label={
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.625 }}>
-                              <AssigneeAvatar pubkey={pubkey} size={14} />
-                              <AssigneeName pubkey={pubkey} />
-                            </Box>
-                          }
-                          {...tagProps}
-                        />
-                      );
-                    })
-                  }
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Mention"
-                      size="small"
-                      placeholder={mentionedPubkeys.length === 0 ? "@ a board member" : ""}
-                    />
-                  )}
-                  sx={{ mt: 1.5 }}
-                />
-              )}
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
                 <TextField
                   label="Comment"
@@ -427,8 +434,16 @@ export function CardDialog({
                   maxRows={4}
                   disabled={readOnly || posting}
                   value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  helperText="Encrypted for this board's members"
+                  onChange={handleCommentChange}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape" && mentionQuery) setMentionQuery(null);
+                  }}
+                  inputRef={commentInputRef}
+                  helperText={
+                    readOnly
+                      ? " "
+                      : 'Encrypted for this board\'s members. Type "@" to mention someone.'
+                  }
                 />
                 <Button
                   size="small"
@@ -440,6 +455,27 @@ export function CardDialog({
                   {posting ? "Sending…" : "Send"}
                 </Button>
               </Stack>
+              {!readOnly && mentionQuery && mentionSuggestions.length > 0 && (
+                <Paper variant="outlined" sx={{ mt: 0.5, maxHeight: 160, overflowY: "auto" }}>
+                  <List dense disablePadding>
+                    {mentionSuggestions.map((pubkey) => (
+                      <ListItemButton
+                        key={pubkey}
+                        // Prevented on mousedown rather than left to click: a
+                        // default mousedown blurs the textfield first, which
+                        // would otherwise clear mentionQuery before the click
+                        // that should act on it ever fires.
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectMention(pubkey)}
+                        sx={{ gap: 1 }}
+                      >
+                        <AssigneeAvatar pubkey={pubkey} size={20} />
+                        <AssigneeName pubkey={pubkey} />
+                      </ListItemButton>
+                    ))}
+                  </List>
+                </Paper>
+              )}
             </Box>
           )}
         </Stack>

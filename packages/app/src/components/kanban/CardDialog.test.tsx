@@ -21,6 +21,7 @@ vi.mock("../../kanban/sdk", () => ({
 }));
 
 import { kanbanSdk } from "../../kanban/sdk";
+import { formatNpub } from "../../lib/npub";
 import { resetProfileCache } from "../../lib/profileCache";
 import { useKanbanStore } from "../../stores";
 
@@ -430,12 +431,32 @@ describe("CardDialog comments", () => {
     await waitFor(() => expect(useKanbanStore.getState().error).toBe("relay down"));
   });
 
-  it("sends a picked mention along with the comment", async () => {
+  it("suggests board members when typing @ in the comment", async () => {
+    sdk.fetchComments.mockResolvedValue([]);
+    renderDialog({ card: makeCard(), board: makeBoard(), self: ME, assigneeOptions: [ALICE] });
+
+    await screen.findByText("No comments yet");
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "cc @" } });
+
+    expect(await screen.findByText(formatNpub(ALICE))).toBeInTheDocument();
+  });
+
+  it("does not suggest anyone once the @ is followed by whitespace", async () => {
+    sdk.fetchComments.mockResolvedValue([]);
+    renderDialog({ card: makeCard(), board: makeBoard(), self: ME, assigneeOptions: [ALICE] });
+
+    await screen.findByText("No comments yet");
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "cc @ " } });
+
+    expect(screen.queryByText(formatNpub(ALICE))).not.toBeInTheDocument();
+  });
+
+  it("inserts a picked mention inline and sends it along with the comment", async () => {
     const board = makeBoard();
     const posted = makeComment({
       id: "c4",
       authorPubkey: ME,
-      content: "cc you",
+      content: `cc @${formatNpub(ALICE)}`,
       mentions: [ALICE],
     });
     sdk.fetchComments.mockResolvedValueOnce([]).mockResolvedValueOnce([posted]);
@@ -443,15 +464,41 @@ describe("CardDialog comments", () => {
     renderDialog({ card: makeCard(), board, self: ME, assigneeOptions: [ALICE] });
 
     await screen.findByText("No comments yet");
-    pickOption("Mention", /npub1/);
-    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "cc you" } });
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "cc @" } });
+    fireEvent.click(await screen.findByText(formatNpub(ALICE)));
+
+    // Picking the suggestion wrote the name into the text itself — no
+    // separate "Mention" field left to find.
+    expect(screen.getByLabelText("Comment")).toHaveValue(`cc @${formatNpub(ALICE)} `);
+    expect(screen.queryByText(formatNpub(ALICE))).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() =>
       expect(sdk.createComment).toHaveBeenCalledWith(board, "card-1", {
-        content: "cc you",
+        content: `cc @${formatNpub(ALICE)}`,
         mentions: [ALICE],
       }),
+    );
+  });
+
+  it("drops a mention from the send if its @name is deleted from the text", async () => {
+    const board = makeBoard();
+    sdk.fetchComments
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([makeComment({ id: "c5", authorPubkey: ME, content: "cc" })]);
+    sdk.createComment.mockResolvedValue(makeComment({ id: "c5", authorPubkey: ME, content: "cc" }));
+    renderDialog({ card: makeCard(), board, self: ME, assigneeOptions: [ALICE] });
+
+    await screen.findByText("No comments yet");
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "cc @" } });
+    fireEvent.click(await screen.findByText(formatNpub(ALICE)));
+    // Backspace the inserted name back out by hand.
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "cc " } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() =>
+      expect(sdk.createComment).toHaveBeenCalledWith(board, "card-1", { content: "cc" }),
     );
   });
 
