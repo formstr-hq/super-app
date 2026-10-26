@@ -98,6 +98,19 @@ describe("BoardView", () => {
     expect(onAddCard).toHaveBeenCalledWith(expect.objectContaining({ id: "todo" }));
   });
 
+  it("renders the add-card button above the column's cards, not below", () => {
+    // Regression test: the button used to sit after the scrollable card
+    // list, which put it at the bottom of the column. It belongs just under
+    // the sticky header so it stays reachable without scrolling.
+    renderBoard({ cards: [makeCard("first", "To Do", 10)] });
+    const button = screen.getAllByRole("button", { name: /add card/i })[0];
+    const cardTitle = screen.getByText("first", { selector: "p" });
+    // DOCUMENT_POSITION_FOLLOWING on the card means the button precedes it.
+    expect(
+      button.compareDocumentPosition(cardTitle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("opens the card that was clicked", () => {
     const onOpenCard = vi.fn();
     const card = makeCard("a", "To Do", 10);

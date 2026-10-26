@@ -94,6 +94,24 @@ export function KanbanColumn({
         </Typography>
       </Box>
 
+      {!readOnly && (
+        <Button
+          size="small"
+          startIcon={<Plus size={13} />}
+          onClick={onAddCard}
+          sx={{
+            mx: 1,
+            mb: 0.875,
+            borderRadius: 1,
+            justifyContent: "flex-start",
+            color: "text.secondary",
+            flexShrink: 0,
+          }}
+        >
+          Add card
+        </Button>
+      )}
+
       <Box
         ref={setNodeRef}
         sx={{
@@ -118,23 +136,6 @@ export function KanbanColumn({
           ))}
         </SortableContext>
       </Box>
-
-      {!readOnly && (
-        <Button
-          size="small"
-          startIcon={<Plus size={13} />}
-          onClick={onAddCard}
-          sx={{
-            m: 1,
-            mt: 0,
-            borderRadius: 1,
-            justifyContent: "flex-start",
-            color: "text.secondary",
-          }}
-        >
-          Add card
-        </Button>
-      )}
     </Paper>
   );
 }
