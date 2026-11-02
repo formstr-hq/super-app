@@ -109,7 +109,12 @@ interface KanbanStore {
   deleteCard(board: KanbanBoard, card: KanbanCard): Promise<void>;
   binCard(board: KanbanBoard, card: KanbanCard, binned?: boolean): Promise<void>;
   loadComments(board: KanbanBoard, card: KanbanCard): Promise<void>;
-  addComment(board: KanbanBoard, card: KanbanCard, text: string): Promise<void>;
+  addComment(
+    board: KanbanBoard,
+    card: KanbanCard,
+    text: string,
+    mentions?: string[],
+  ): Promise<void>;
   deleteComment(comment: KanbanComment): Promise<void>;
   moveCard(
     board: KanbanBoard,
@@ -419,10 +424,13 @@ export const useKanbanStore = create<KanbanStore>((set, get) => ({
    * No optimistic insert: an encrypted write the relays refuse has no local
    * shadow worth showing, and the dialog refetches once this resolves anyway.
    */
-  async addComment(board, card, text) {
+  async addComment(board, card, text, mentions) {
     set({ error: null });
     try {
-      const comment = await kanbanSdk.createComment(board, card.id, { content: text });
+      const comment = await kanbanSdk.createComment(board, card.id, {
+        content: text,
+        mentions,
+      });
       const key = card.id;
       set((s) => ({
         // Same relay-echo race as createBoard/createCard: the local relay can
