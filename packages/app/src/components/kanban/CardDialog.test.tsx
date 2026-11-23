@@ -319,7 +319,8 @@ function makeComment(overrides: Partial<KanbanComment> = {}): KanbanComment {
     cardId: "card-1",
     content: "First look",
     mentions: [],
-    createdAt: Date.now(),
+    // Unix seconds, as the SDK hands it over (`event.created_at`).
+    createdAt: Math.floor(Date.now() / 1000),
     rawTags: [],
     ...overrides,
   };
@@ -335,6 +336,41 @@ beforeEach(() => {
   // same way — an earlier test's load would inflame this one's refetch count.
   vi.clearAllMocks();
   useKanbanStore.getState().reset();
+});
+
+describe("CardDialog comment timestamps", () => {
+  // A fixed clock, faking Date alone so the store's promises still settle.
+  const NOW = new Date("2026-11-24T12:00:00Z");
+  const nowSeconds = Math.floor(NOW.getTime() / 1000);
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function stampFor(createdAt: number) {
+    sdk.fetchComments.mockResolvedValue([makeComment({ createdAt })]);
+    renderDialog({ card: makeCard(), board: makeBoard(), self: ME });
+    await screen.findByText("First look");
+  }
+
+  it("reads created_at as seconds for a recent comment", async () => {
+    await stampFor(nowSeconds - 120);
+    expect(screen.getByText("2m ago")).toBeInTheDocument();
+  });
+
+  it("counts hours and days the same way", async () => {
+    await stampFor(nowSeconds - 3 * 3600);
+    expect(screen.getByText("3h ago")).toBeInTheDocument();
+  });
+
+  it("shows an old comment's real date, not one in 1970", async () => {
+    const createdAt = Math.floor(new Date("2026-08-01T12:00:00Z").getTime() / 1000);
+    await stampFor(createdAt);
+    expect(screen.getByText(new Date(createdAt * 1000).toLocaleDateString())).toBeInTheDocument();
+    expect(screen.queryByText(/1970/)).not.toBeInTheDocument();
+  });
 });
 
 describe("CardDialog comments", () => {

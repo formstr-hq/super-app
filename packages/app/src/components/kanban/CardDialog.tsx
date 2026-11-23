@@ -65,9 +65,12 @@ function cleanLabels(values: string[]): string[] {
   return [...seen];
 }
 
-/** `2m ago` stamps; minute granularity is plenty for board chatter. */
+/**
+ * `2m ago` stamps; minute granularity is plenty for board chatter. `ts` is unix
+ * seconds — a comment's `createdAt` is its event's `created_at`.
+ */
 function relativeTime(ts: number): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000 - ts));
   if (seconds < 60) return "just now";
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
@@ -75,7 +78,7 @@ function relativeTime(ts: number): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString();
+  return new Date(ts * 1000).toLocaleDateString();
 }
 
 /**
