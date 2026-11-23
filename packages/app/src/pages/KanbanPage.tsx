@@ -1,4 +1,5 @@
 import {
+  canComment,
   canEditCards,
   KANBAN_KINDS,
   type BoardDraft,
@@ -152,6 +153,9 @@ export function KanbanPage() {
   // pasting a pubkey. Derived from the board's own tags, so it costs no network.
   const boardAssignees = board ? boardMembers(board).map((m) => m.pubkey) : [];
   const readOnly = !board || !pubkey || !canEditCards(board, pubkey);
+  // Wider than card edits: a viewer holds the board key and may comment even
+  // though they cannot change a card. The SDK enforces the same rule on write.
+  const mayComment = Boolean(board && pubkey && canComment(board, pubkey));
   // Maintainers may write cards, but a NIP-09 tombstone is only honored from
   // the event's own author — a maintainer's deletion would be signed by the
   // wrong key and silently ignored by relays. Offer it to the owner alone.
@@ -479,6 +483,7 @@ export function KanbanPage() {
         self={pubkey}
         saving={saving}
         readOnly={readOnly}
+        canComment={mayComment}
         onClose={() => setDialog({ kind: "none" })}
         onSubmit={(draft) => void submitCard(draft)}
         onDelete={canDeleteOpenCard ? () => void removeCard() : undefined}

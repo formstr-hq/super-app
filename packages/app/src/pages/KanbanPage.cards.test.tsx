@@ -200,3 +200,61 @@ describe("KanbanPage card pickers", () => {
     expect(screen.queryAllByRole("option")).toHaveLength(0);
   });
 });
+
+describe("KanbanPage comment permissions", () => {
+  // Viewer exists on private boards only, so these run on one. Its cards carry
+  // the column id as status, not the name.
+  const VIEWER = "c".repeat(64);
+  const PRIVATE_KEY = `32301:${OWNER}:board-1`;
+
+  function renderPrivate(pubkey: string) {
+    const board = makeBoard({
+      isPrivate: true,
+      viewKey: "nsec-view-key",
+      maintainers: [],
+      members: [VIEWER],
+    });
+    const card = {
+      ...makeCard(OWNER),
+      boardCoordinate: PRIVATE_KEY,
+      status: "todo",
+      isPrivate: true,
+    };
+    useAuthStore.setState({ pubkey, openAuthModal: vi.fn() } as never);
+    useKanbanStore.setState({
+      boards: [board],
+      cardsByBoard: { [PRIVATE_KEY]: [card] },
+      commentsByCard: { [card.id]: [] },
+      isLoadingBoards: false,
+      isLoadingCards: false,
+      error: null,
+      fetchBoards,
+      fetchCards,
+      loadComments: vi.fn(async () => {}),
+    } as never);
+
+    return render(
+      <MemoryRouter initialEntries={[`/kanban/${naddrForCoordinate(PRIVATE_KEY)}`]}>
+        <Routes>
+          <Route path="/kanban/*" element={<KanbanPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it("lets a viewer comment on a card they cannot edit", () => {
+    renderPrivate(VIEWER);
+    openTheCard();
+
+    expect(screen.getByLabelText("Title")).toBeDisabled();
+    expect(screen.getByLabelText("Comment")).toBeEnabled();
+  });
+
+  it("keeps the comment box closed to someone the board does not list", () => {
+    // A removed member can still hold a cached copy and its key until rotation.
+    renderPrivate("stranger-pk");
+    openTheCard();
+
+    expect(screen.getByLabelText("Comment")).toBeDisabled();
+  });
+});
