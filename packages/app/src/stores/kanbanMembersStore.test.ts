@@ -13,6 +13,7 @@ vi.mock("../kanban/sdk", () => ({
     fetchBoards: vi.fn(),
     fetchPrivateBoards: vi.fn(),
     fetchCards: vi.fn(),
+    fetchBoardByCoordinate: vi.fn(),
   },
 }));
 
@@ -184,6 +185,60 @@ describe("invitations", () => {
 
     expect(sdk.dismissInvitation).toHaveBeenCalledWith(invitation);
     expect(useKanbanMembersStore.getState().invitations).toEqual([]);
+  });
+});
+
+describe("invitation board titles", () => {
+  it("decrypts each invited board with its own invitation's key and keys the title by wrap", async () => {
+    const one = makeInvitation({ wrapId: "wrap-1", viewKey: "nsec1one" });
+    const two = makeInvitation({
+      wrapId: "wrap-2",
+      coordinate: "32301:owner:board-2",
+      viewKey: "nsec1two",
+    });
+    sdk.fetchInvitations.mockResolvedValue([one, two]);
+    sdk.fetchBoardByCoordinate.mockImplementation(async (coordinate) =>
+      makeBoard({ isPrivate: true, title: coordinate.endsWith("board-1") ? "Roadmap" : "Launch" }),
+    );
+
+    await useKanbanMembersStore.getState().loadInvitations();
+
+    await vi.waitFor(() =>
+      expect(useKanbanMembersStore.getState().invitationTitles).toEqual({
+        "wrap-1": "Roadmap",
+        "wrap-2": "Launch",
+      }),
+    );
+    expect(sdk.fetchBoardByCoordinate).toHaveBeenCalledWith("32301:owner:board-1", "nsec1one");
+    expect(sdk.fetchBoardByCoordinate).toHaveBeenCalledWith("32301:owner:board-2", "nsec1two");
+  });
+
+  it("lists invitations before the titles arrive", async () => {
+    sdk.fetchInvitations.mockResolvedValue([makeInvitation()]);
+    sdk.fetchBoardByCoordinate.mockReturnValue(new Promise(() => {}));
+
+    await useKanbanMembersStore.getState().loadInvitations();
+
+    expect(useKanbanMembersStore.getState().invitations).toHaveLength(1);
+    expect(useKanbanMembersStore.getState().invitationTitles).toEqual({});
+  });
+
+  it("records no title for a board the key cannot open, without raising an error", async () => {
+    sdk.fetchInvitations.mockResolvedValue([
+      makeInvitation({ wrapId: "gone" }),
+      makeInvitation({ wrapId: "broken", coordinate: "32301:owner:board-2" }),
+    ]);
+    sdk.fetchBoardByCoordinate.mockImplementation(async (coordinate) => {
+      if (coordinate.endsWith("board-1")) return null; // not on the relays, or will not decrypt
+      throw new Error("relay timeout");
+    });
+
+    await useKanbanMembersStore.getState().loadInvitations();
+
+    await vi.waitFor(() => expect(sdk.fetchBoardByCoordinate).toHaveBeenCalledTimes(2));
+    await Promise.resolve();
+    expect(useKanbanMembersStore.getState().invitationTitles).toEqual({});
+    expect(useKanbanMembersStore.getState().error).toBeNull();
   });
 });
 
