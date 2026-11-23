@@ -9,6 +9,7 @@ vi.mock("@formstr/agent/services/profile", () => ({
 
 const state = {
   invitations: [] as BoardInvitation[],
+  invitationTitles: {} as Record<string, string>,
   isLoadingInvitations: false,
   busy: null as string | null,
   error: null as string | null,
@@ -56,6 +57,7 @@ function renderView() {
 beforeEach(() => {
   vi.clearAllMocks();
   state.invitations = [];
+  state.invitationTitles = {};
   state.busy = null;
   state.error = null;
   state.isLoadingInvitations = false;
@@ -78,8 +80,24 @@ describe("InvitationsView", () => {
 
     expect(screen.getByText("Board invitations · 1")).toBeInTheDocument();
     expect(screen.getByText("Viewer")).toBeInTheDocument();
-    expect(screen.getByText(/invited you to board board-1/)).toBeInTheDocument();
     expect(screen.getByText("“come help”")).toBeInTheDocument();
+  });
+
+  it("names the board by its title once the invitation's key has opened it", () => {
+    state.invitations = [makeInvitation()];
+    state.invitationTitles = { "wrap-1": "Q3 Roadmap" };
+    renderView();
+
+    expect(screen.getByText(/invited you to “Q3 Roadmap”/)).toBeInTheDocument();
+    expect(screen.queryByText(/board-1/)).not.toBeInTheDocument();
+  });
+
+  it("says a private board, not its raw id, until the title is known", () => {
+    state.invitations = [makeInvitation()];
+    renderView();
+
+    expect(screen.getByText(/invited you to a private board/)).toBeInTheDocument();
+    expect(screen.queryByText(/board-1/)).not.toBeInTheDocument();
   });
 
   it("opens the board after accepting it", async () => {

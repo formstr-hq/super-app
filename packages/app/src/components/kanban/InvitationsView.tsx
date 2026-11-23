@@ -116,9 +116,11 @@ interface InvitationRowProps {
 function InvitationRow({ invitation, busy, onAccept, onDismiss }: InvitationRowProps) {
   const theme = useTheme();
   const inviter = useProfileName(invitation.inviterPubkey);
-  // The board's title lives inside the encrypted event, which cannot be read
-  // until the key in this invitation is used — so identify it by its `d` tag.
-  const boardId = invitation.coordinate.split(":")[2] ?? invitation.coordinate;
+  // The title is inside the encrypted board, read with this invitation's own
+  // key once the inbox loads. Until then, or if the key opens nothing, say what
+  // kind of board it is: its `d` tag is a random id that means nothing to a person.
+  const title = useKanbanMembersStore((s) => s.invitationTitles[invitation.wrapId]);
+  const boardLabel = title ? `“${title}”` : "a private board";
 
   return (
     <Box
@@ -144,7 +146,7 @@ function InvitationRow({ invitation, busy, onAccept, onDismiss }: InvitationRowP
           />
         </Box>
         <Typography variant="caption" color="text.secondary" noWrap display="block">
-          invited you to board {boardId} · {formatNpub(invitation.inviterPubkey)}
+          invited you to {boardLabel} · {formatNpub(invitation.inviterPubkey)}
         </Typography>
         {invitation.message && (
           <Typography variant="caption" sx={{ display: "block", mt: 0.25 }}>

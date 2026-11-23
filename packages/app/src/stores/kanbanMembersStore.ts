@@ -35,6 +35,14 @@ function message(e: unknown, fallback: string): string {
 interface KanbanMembersStore {
   /** Pending board invitations addressed to the signed-in user. */
   invitations: BoardInvitation[];
+  /**
+   * Each invited board's title, keyed by the invitation's wrap id. The title is
+   * inside the encrypted board, so it is read with the key the invitation
+   * carries. Keyed by wrap rather than coordinate because two invitations to
+   * one board can carry different keys, and only that wrap's key vouches for
+   * what it opens. Missing until resolved, and for a board the key cannot open.
+   */
+  invitationTitles: Record<string, string>;
   /** Coordinates of boards whose owner has published a removal notice for us. */
   removedCoordinates: string[];
   isLoadingInvitations: boolean;
@@ -60,6 +68,7 @@ interface KanbanMembersStore {
 
 export const useKanbanMembersStore = create<KanbanMembersStore>((set, get) => ({
   invitations: [],
+  invitationTitles: {},
   removedCoordinates: [],
   isLoadingInvitations: false,
   busy: null,
@@ -70,7 +79,13 @@ export const useKanbanMembersStore = create<KanbanMembersStore>((set, get) => ({
   },
 
   reset() {
-    set({ invitations: [], removedCoordinates: [], busy: null, error: null });
+    set({
+      invitations: [],
+      invitationTitles: {},
+      removedCoordinates: [],
+      busy: null,
+      error: null,
+    });
   },
 
   async loadInvitations() {
@@ -81,6 +96,9 @@ export const useKanbanMembersStore = create<KanbanMembersStore>((set, get) => ({
         invitations: invitations.sort((a, b) => b.createdAt - a.createdAt),
         isLoadingInvitations: false,
       });
+      // Not awaited: the inbox lists what it has now and names boards as their
+      // titles decrypt, rather than holding every row for the slowest relay.
+      for (const invitation of invitations) void resolveTitle(invitation);
     } catch (e) {
       set({ error: message(e, "Failed to load invitations"), isLoadingInvitations: false });
     }
@@ -203,3 +221,28 @@ export const useKanbanMembersStore = create<KanbanMembersStore>((set, get) => ({
     }
   },
 }));
+
+/**
+ * Read an invited board's title with the key its invitation carries.
+ *
+ * Best effort and silent: a board that is gone, not on these relays, or that
+ * the key does not open just keeps its fallback label. Accepting is where a
+ * bad key is reported (`InvitationVerificationError`), not the preview.
+ */
+async function resolveTitle(invitation: BoardInvitation): Promise<void> {
+  let title: string | undefined;
+  try {
+    const board = await kanbanSdk.fetchBoardByCoordinate(invitation.coordinate, invitation.viewKey);
+    title = board?.title.trim() || undefined;
+  } catch {
+    return;
+  }
+  if (!title) return;
+  useKanbanMembersStore.setState((s) =>
+    // Dropped if the invitation is gone by now: accepted, dismissed, or the
+    // inbox belongs to a different account after a switch.
+    s.invitations.some((i) => i.wrapId === invitation.wrapId)
+      ? { invitationTitles: { ...s.invitationTitles, [invitation.wrapId]: title } }
+      : {},
+  );
+}
