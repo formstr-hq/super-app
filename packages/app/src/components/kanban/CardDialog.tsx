@@ -47,6 +47,12 @@ interface CardDialogProps {
   saving: boolean;
   /** Viewers can open a card to read it, but every field and control is off. */
   readOnly?: boolean;
+  /**
+   * May this signer write comments? Separate from `readOnly` because the SDK's
+   * rule is wider: a viewer cannot change cards but may comment. Defaults to
+   * `!readOnly` for callers that do not distinguish the two.
+   */
+  canComment?: boolean;
   onClose: () => void;
   onSubmit: (draft: CardDraft) => void;
   /** Offered only to the signer of this version — NIP-09 honours nobody else. */
@@ -109,6 +115,7 @@ export function CardDialog({
   self,
   saving,
   readOnly = false,
+  canComment = !readOnly,
   onClose,
   onSubmit,
   onDelete,
@@ -233,7 +240,7 @@ export function CardDialog({
   };
 
   // Whitespace alone is not a comment.
-  const canPost = commentText.trim().length > 0 && !posting && !readOnly;
+  const canPost = commentText.trim().length > 0 && !posting && canComment;
 
   const submit = () => {
     if (!canSubmit) return;
@@ -397,7 +404,7 @@ export function CardDialog({
                           </Typography>
                           {/* A comment's author is the only identity kind-32304
                               deletion honours, so the affordance is own-only. */}
-                          {own && !readOnly && (
+                          {own && canComment && (
                             <Tooltip describeChild title="Delete comment">
                               <IconButton
                                 size="small"
@@ -445,7 +452,7 @@ export function CardDialog({
                   fullWidth
                   multiline
                   maxRows={4}
-                  disabled={readOnly || posting}
+                  disabled={!canComment || posting}
                   value={commentText}
                   onChange={handleCommentChange}
                   onKeyDown={(e) => {
@@ -453,7 +460,7 @@ export function CardDialog({
                   }}
                   inputRef={commentInputRef}
                   helperText={
-                    readOnly
+                    !canComment
                       ? " "
                       : 'Encrypted for this board\'s members. Type "@" to mention someone.'
                   }
@@ -468,7 +475,7 @@ export function CardDialog({
                   {posting ? "Sending…" : "Send"}
                 </Button>
               </Stack>
-              {!readOnly && mentionQuery && mentionSuggestions.length > 0 && (
+              {canComment && mentionQuery && mentionSuggestions.length > 0 && (
                 <Paper variant="outlined" sx={{ mt: 0.5, maxHeight: 160, overflowY: "auto" }}>
                   <List dense disablePadding>
                     {mentionSuggestions.map((pubkey) => (

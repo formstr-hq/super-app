@@ -437,6 +437,46 @@ describe("CardDialog comments", () => {
     expect(screen.queryByRole("button", { name: /delete comment/i })).not.toBeInTheDocument();
   });
 
+  it("lets a viewer who may comment write and delete their own, with the card still read-only", async () => {
+    const mine = makeComment({ id: "mine", authorPubkey: ME, content: "my note" });
+    sdk.fetchComments.mockResolvedValue([mine]);
+    renderDialog({
+      card: makeCard(),
+      board: makeBoard(),
+      self: ME,
+      readOnly: true,
+      canComment: true,
+    });
+
+    expect(await screen.findByText("my note")).toBeInTheDocument();
+    // The card itself stays out of reach.
+    expect(screen.getByLabelText("Title")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+
+    const box = screen.getByLabelText("Comment");
+    expect(box).toBeEnabled();
+    fireEvent.change(box, { target: { value: "looks good" } });
+    expect(screen.getByRole("button", { name: /send/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /delete comment/i })).toBeInTheDocument();
+  });
+
+  it("offers @ suggestions to a viewer who may comment", async () => {
+    sdk.fetchComments.mockResolvedValue([]);
+    renderDialog({
+      card: makeCard(),
+      board: makeBoard(),
+      self: ME,
+      readOnly: true,
+      canComment: true,
+      assigneeOptions: [ALICE],
+    });
+
+    await screen.findByText("No comments yet");
+    fireEvent.change(screen.getByLabelText("Comment"), { target: { value: "cc @" } });
+
+    expect(await screen.findByText(formatNpub(ALICE))).toBeInTheDocument();
+  });
+
   it("offers deletion only on own comments and removes it through the store", async () => {
     const mine = makeComment({ id: "mine", authorPubkey: ME, content: "my note" });
     const theirs = makeComment({ id: "theirs", content: "their note" });
