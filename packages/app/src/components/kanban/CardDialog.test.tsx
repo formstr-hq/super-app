@@ -289,6 +289,8 @@ describe("CardDialog assignee picker", () => {
 const ME = "a".repeat(63) + "1";
 const SOMEONE = "b".repeat(63) + "2";
 
+// Private by default: comments are kind 32304, encrypted under the board's view
+// key, and the SDK has no comment format for a public board at all.
 function makeBoard(overrides: Partial<KanbanBoard> = {}): KanbanBoard {
   return {
     id: "board-1",
@@ -301,7 +303,8 @@ function makeBoard(overrides: Partial<KanbanBoard> = {}): KanbanBoard {
     members: [],
     noZap: false,
     createdAt: 1,
-    isPrivate: false,
+    isPrivate: true,
+    viewKey: "nsec-view-key",
     legacy: false,
     rawTags: [],
     ...overrides,
@@ -315,7 +318,7 @@ function makeComment(overrides: Partial<KanbanComment> = {}): KanbanComment {
     authorPubkey: SOMEONE,
     rotated: false,
     eventId: "evt-c1",
-    boardCoordinate: `30301:${ME}:board-1`,
+    boardCoordinate: `32301:${ME}:board-1`,
     cardId: "card-1",
     content: "First look",
     mentions: [],
@@ -335,6 +338,33 @@ beforeEach(() => {
   // same way — an earlier test's load would inflame this one's refetch count.
   vi.clearAllMocks();
   useKanbanStore.getState().reset();
+});
+
+describe("CardDialog comments on a public board", () => {
+  // The SDK throws ViewKeyRequiredError for both calls on a public board, so
+  // asking it at all is what surfaced an error on every card opened there.
+  it("never asks the SDK for comments", () => {
+    renderDialog({
+      card: makeCard(),
+      board: makeBoard({ isPrivate: false, viewKey: undefined }),
+      self: ME,
+    });
+
+    expect(sdk.fetchComments).not.toHaveBeenCalled();
+    expect(useKanbanStore.getState().error).toBeNull();
+  });
+
+  it("says comments need a private board instead of offering a comment box", () => {
+    renderDialog({
+      card: makeCard(),
+      board: makeBoard({ isPrivate: false, viewKey: undefined }),
+      self: ME,
+    });
+
+    expect(screen.getByText(/comments are available on private boards/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Comment")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /send/i })).not.toBeInTheDocument();
+  });
 });
 
 describe("CardDialog comments", () => {

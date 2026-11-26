@@ -153,7 +153,9 @@ export function CardDialog({
   // Same guard shape as the field reset above: comments belong to the card
   // this dialog is showing, so the read runs on open (and re-runs per card).
   useEffect(() => {
-    if (!open || !board || !card) return;
+    // Comments are kind 32304, encrypted under the board's view key. A public
+    // board has no key, and the SDK throws for one rather than returning none.
+    if (!open || !board || !card || !board.isPrivate) return;
     void loadComments(board, card);
   }, [open, board, card, loadComments]);
 
@@ -341,7 +343,18 @@ export function CardDialog({
               />
             )}
           />
-          {board && card && (
+          {board && card && !board.isPrivate && (
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Comments
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Comments are available on private boards. They are encrypted under the board&apos;s
+                key, and a public board has none.
+              </Typography>
+            </Box>
+          )}
+          {board && card && board.isPrivate && (
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 Comments
